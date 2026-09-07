@@ -8,10 +8,21 @@ import (
 	"strings"
 	"time"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
 const queryIndexMigrationLockName = "data_gin_query_indexes_v1"
+
+func queryIndexMigrationRetrySchedule() []time.Duration {
+	return []time.Duration{
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		16 * time.Second,
+		30 * time.Second,
+	}
+}
 
 type queryIndexColumn struct {
 	Name string
@@ -88,7 +99,7 @@ func queryIndexSpecs() []queryIndexSpec {
 
 // ApplyQueryIndexes performs the one-shot online index migration. Callers must
 // run this from a single migration process, never from the service startup path.
-func ApplyQueryIndexes(ctx context.Context, db *gorm.DB) (resultErr error) {
+func ApplyQueryIndexes(ctx context.Context, db *gorm.DB) error {
 	if ctx == nil || db == nil {
 		return fmt.Errorf("query index migration: database is unavailable")
 	}
@@ -96,6 +107,12 @@ func ApplyQueryIndexes(ctx context.Context, db *gorm.DB) (resultErr error) {
 	if err != nil {
 		return fmt.Errorf("query index migration: get sql database: %w", err)
 	}
+	return retryQueryIndexMigration(ctx, queryIndexMigrationRetrySchedule(), func(ctx context.Context) error {
+		return applyQueryIndexesOnce(ctx, sqlDB)
+	})
+}
+
+func applyQueryIndexesOnce(ctx context.Context, sqlDB *sql.DB) (resultErr error) {
 	conn, err := sqlDB.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("query index migration: acquire connection: %w", err)
@@ -126,6 +143,48 @@ func ApplyQueryIndexes(ctx context.Context, db *gorm.DB) (resultErr error) {
 		}
 	}
 	return nil
+}
+
+func retryQueryIndexMigration(
+	ctx context.Context,
+	retryDelays []time.Duration,
+	migrate func(context.Context) error,
+) error {
+	for attempt := 0; ; attempt++ {
+		err := migrate(ctx)
+		if err == nil || !isMetadataLockTimeout(err) {
+			return err
+		}
+		if attempt >= len(retryDelays) {
+			return fmt.Errorf(
+				"query index migration: metadata lock retry exhausted after %d attempts: %w",
+				attempt+1,
+				err,
+			)
+		}
+		if err := waitQueryIndexMigrationRetry(ctx, retryDelays[attempt]); err != nil {
+			return fmt.Errorf("query index migration: metadata lock retry canceled: %w", err)
+		}
+	}
+}
+
+func isMetadataLockTimeout(err error) bool {
+	var mysqlErr *mysqlDriver.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1205
+}
+
+func waitQueryIndexMigrationRetry(ctx context.Context, delay time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func acquireQueryIndexMigrationLock(ctx context.Context, conn *sql.Conn) (bool, error) {

@@ -1,8 +1,14 @@
 package bootstrap
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 func TestQueryIndexSpecsCoverOpenQueryPaths(t *testing.T) {
@@ -92,5 +98,80 @@ func TestQueryIndexSpecsUseSafeIdentifiers(t *testing.T) {
 		if !strings.Contains(statement, "ALGORITHM=INPLACE, LOCK=NONE") {
 			t.Fatalf("index %s is not online DDL: %s", spec.IndexName, statement)
 		}
+	}
+}
+
+func TestIsMetadataLockTimeoutRecognizesWrappedMySQLError(t *testing.T) {
+	lockTimeout := &mysqlDriver.MySQLError{Number: 1205, Message: "lock wait timeout"}
+	if !isMetadataLockTimeout(errors.Join(errors.New("release failed"), fmt.Errorf("create index: %w", lockTimeout))) {
+		t.Fatal("isMetadataLockTimeout() did not recognize wrapped error 1205")
+	}
+	if isMetadataLockTimeout(&mysqlDriver.MySQLError{Number: 1213, Message: "deadlock"}) {
+		t.Fatal("isMetadataLockTimeout() accepted non-1205 MySQL error")
+	}
+	if isMetadataLockTimeout(errors.New("Error 1205: lock wait timeout")) {
+		t.Fatal("isMetadataLockTimeout() accepted untyped error text")
+	}
+}
+
+func TestRetryQueryIndexMigrationRetriesMetadataLockTimeout(t *testing.T) {
+	callCount := 0
+	err := retryQueryIndexMigration(t.Context(), []time.Duration{0, 0}, func(context.Context) error {
+		callCount++
+		if callCount < 3 {
+			return fmt.Errorf("create index: %w", &mysqlDriver.MySQLError{Number: 1205})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("retryQueryIndexMigration() error=%v", err)
+	}
+	if callCount != 3 {
+		t.Fatalf("retryQueryIndexMigration() calls=%d want=3", callCount)
+	}
+}
+
+func TestRetryQueryIndexMigrationDoesNotRetryOtherErrors(t *testing.T) {
+	wantErr := &mysqlDriver.MySQLError{Number: 1142, Message: "permission denied"}
+	callCount := 0
+	err := retryQueryIndexMigration(t.Context(), []time.Duration{0, 0}, func(context.Context) error {
+		callCount++
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("retryQueryIndexMigration() error=%v want=%v", err, wantErr)
+	}
+	if callCount != 1 {
+		t.Fatalf("retryQueryIndexMigration() calls=%d want=1", callCount)
+	}
+}
+
+func TestRetryQueryIndexMigrationStopsAfterRetryBudget(t *testing.T) {
+	callCount := 0
+	err := retryQueryIndexMigration(t.Context(), []time.Duration{0, 0}, func(context.Context) error {
+		callCount++
+		return &mysqlDriver.MySQLError{Number: 1205, Message: "lock wait timeout"}
+	})
+	if !isMetadataLockTimeout(err) || !strings.Contains(err.Error(), "after 3 attempts") {
+		t.Fatalf("retryQueryIndexMigration() error=%v", err)
+	}
+	if callCount != 3 {
+		t.Fatalf("retryQueryIndexMigration() calls=%d want=3", callCount)
+	}
+}
+
+func TestRetryQueryIndexMigrationHonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	callCount := 0
+	err := retryQueryIndexMigration(ctx, []time.Duration{time.Hour}, func(context.Context) error {
+		callCount++
+		return &mysqlDriver.MySQLError{Number: 1205, Message: "lock wait timeout"}
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("retryQueryIndexMigration() error=%v want context.Canceled", err)
+	}
+	if callCount != 1 {
+		t.Fatalf("retryQueryIndexMigration() calls=%d want=1", callCount)
 	}
 }
