@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 
 	"github.com/hibiken/asynq"
 )
@@ -146,6 +147,20 @@ func TestOutboxDispatcherDispatchOncePublishesTask(t *testing.T) {
 	}
 	if len(store.failed) != 0 {
 		t.Fatalf("failed rows = %+v", store.failed)
+	}
+}
+
+func TestOutboxDispatcherSkipsDatabaseClaimWhileUnavailable(t *testing.T) {
+	store := &fakeOutboxStore{}
+	dispatcher := newTestOutboxDispatcher(t, store, &fakeMallWeatherPublisher{}, time.Now())
+	dispatcher.databaseAvailable = func(context.Context) bool { return false }
+
+	err := dispatcher.DispatchOnce(t.Context())
+	if !errors.Is(err, database.ErrUnavailable) {
+		t.Fatalf("DispatchOnce() error = %v, want ErrUnavailable", err)
+	}
+	if store.claimCalls != 0 {
+		t.Fatalf("claim calls = %d, want 0", store.claimCalls)
 	}
 }
 

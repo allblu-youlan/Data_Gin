@@ -90,6 +90,7 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 			OnCycleError: func(err error) {
 				logger.Error("Outbox dispatch cycle failed", zap.Error(err))
 			},
+			DatabaseAvailable: database.CanServe,
 		},
 	)
 	if err != nil {

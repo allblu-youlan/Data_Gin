@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -9,8 +10,10 @@ import (
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/console"
 	"gin-biz-web-api/pkg/crontab"
+	"gin-biz-web-api/pkg/database"
 	"gin-biz-web-api/pkg/logger"
 
+	robfigcron "github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )
 
@@ -35,13 +38,29 @@ func addScheduleTask() {
 	ifError(err, int(clearLogsCrontabEntryID), "ClearLogsCrontab")
 
 	// 每30分钟执行数据采集
-	dataCollectCrontabEntryID, err := global.Crontab.AddJob("0 */30 * * * *", crontabTask.DataCollectCrontab{})
+	dataCollectCrontabEntryID, err := global.Crontab.AddJob("0 */30 * * * *", databaseBackedCronJob(crontabTask.DataCollectCrontab{}))
 	ifError(err, int(dataCollectCrontabEntryID), "DataCollectCrontab")
 
 	bojunOrderCronExpr := resolveBojunOrderCronExpr()
-	bojunOrderCrontabEntryID, err := global.Crontab.AddJob(bojunOrderCronExpr, crontabTask.BojunOrderCrontab{})
+	bojunOrderCrontabEntryID, err := global.Crontab.AddJob(bojunOrderCronExpr, databaseBackedCronJob(crontabTask.BojunOrderCrontab{}))
 	ifError(err, int(bojunOrderCrontabEntryID), "BojunOrderCrontab")
 
+}
+
+type guardedDatabaseCronJob struct {
+	next      robfigcron.Job
+	available func(context.Context) bool
+}
+
+func databaseBackedCronJob(next robfigcron.Job) robfigcron.Job {
+	return guardedDatabaseCronJob{next: next, available: database.CanServe}
+}
+
+func (job guardedDatabaseCronJob) Run() {
+	if job.next == nil || job.available == nil || !job.available(context.Background()) {
+		return
+	}
+	job.next.Run()
 }
 
 func resolveBojunOrderCronExpr() string {

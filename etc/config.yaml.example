@@ -28,6 +28,7 @@ Email:
   FromName: ${EMAIL_FROM_NAME:-}
 DB:
   Driver: mysql
+  # Production: use a private, highly available MySQL cluster DNS endpoint.
   Host: ${DB_HOST:-127.0.0.1}
   Port: ${DB_PORT:-3306}
   Database: ${DB_DATABASE:-your_database}

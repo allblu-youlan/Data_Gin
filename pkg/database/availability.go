@@ -110,6 +110,15 @@ func CanServe(ctx context.Context) bool {
 	return applicationAvailability.CanServe(ctx, PingContext)
 }
 
+// RequireAvailable lets non-HTTP workloads share the application availability
+// gate without duplicating probe and cooldown logic.
+func RequireAvailable(ctx context.Context) error {
+	if CanServe(ctx) {
+		return nil
+	}
+	return ErrUnavailable
+}
+
 // PingContext checks the shared application pool and synchronizes the
 // availability gate with the result.
 func PingContext(ctx context.Context) error {

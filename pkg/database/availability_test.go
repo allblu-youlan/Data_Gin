@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 )
@@ -59,5 +60,20 @@ func TestAvailabilityGateRejectsConcurrentRequestsAfterFailedProbe(t *testing.T)
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("probe calls=%d, want 1", calls.Load())
+	}
+}
+
+func TestRequireAvailableUsesApplicationGate(t *testing.T) {
+	original := applicationAvailability
+	applicationAvailability = newAvailabilityGate()
+	t.Cleanup(func() { applicationAvailability = original })
+
+	if err := RequireAvailable(t.Context()); err != nil {
+		t.Fatalf("RequireAvailable() error = %v", err)
+	}
+	applicationAvailability.RecordResult(mysqlDriver.ErrInvalidConn)
+	applicationAvailability.nextProbeUnixNS.Store(time.Now().Add(time.Minute).UnixNano())
+	if err := RequireAvailable(t.Context()); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("RequireAvailable() error = %v, want ErrUnavailable", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/service/data_svc"
+	"gin-biz-web-api/pkg/database"
 	"gin-biz-web-api/pkg/logger"
 
 	"go.uber.org/zap"
@@ -44,6 +45,9 @@ func (d DataCollectCrontab) Run() {
 			result, err := collectService.CollectFromSource(ctx, source.ID)
 			if err != nil {
 				logger.Error("数据采集失败", zap.Uint("source_id", source.ID), zap.Error(err))
+				if !database.CanServe(ctx) {
+					return
+				}
 				continue
 			}
 

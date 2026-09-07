@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 
 	"github.com/hibiken/asynq"
 )
@@ -184,31 +185,33 @@ func MallWeatherOutboxTaskDefinitions(maxRetry int, fetchTimeout time.Duration) 
 }
 
 type OutboxDispatcherConfig struct {
-	WorkerID     string
-	PollInterval time.Duration
-	LockTimeout  time.Duration
-	BatchSize    int
-	RetryBase    time.Duration
-	RetryMax     time.Duration
-	Now          func() time.Time
-	OnPublished  func(model.AsyncJobOutbox, time.Time)
-	OnCycleError func(error)
+	WorkerID          string
+	PollInterval      time.Duration
+	LockTimeout       time.Duration
+	BatchSize         int
+	RetryBase         time.Duration
+	RetryMax          time.Duration
+	Now               func() time.Time
+	OnPublished       func(model.AsyncJobOutbox, time.Time)
+	OnCycleError      func(error)
+	DatabaseAvailable func(context.Context) bool
 }
 
 type OutboxDispatcher struct {
-	store        OutboxStore
-	publisher    TaskPublisher
-	registry     *OutboxTaskRegistry
-	taskTypes    []string
-	workerID     string
-	pollInterval time.Duration
-	lockTimeout  time.Duration
-	batchSize    int
-	retryBase    time.Duration
-	retryMax     time.Duration
-	now          func() time.Time
-	onPublished  func(model.AsyncJobOutbox, time.Time)
-	onCycleError func(error)
+	store             OutboxStore
+	publisher         TaskPublisher
+	registry          *OutboxTaskRegistry
+	taskTypes         []string
+	workerID          string
+	pollInterval      time.Duration
+	lockTimeout       time.Duration
+	batchSize         int
+	retryBase         time.Duration
+	retryMax          time.Duration
+	now               func() time.Time
+	onPublished       func(model.AsyncJobOutbox, time.Time)
+	onCycleError      func(error)
+	databaseAvailable func(context.Context) bool
 }
 
 func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *OutboxTaskRegistry, cfg OutboxDispatcherConfig) (*OutboxDispatcher, error) {
@@ -245,21 +248,25 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	if cfg.DatabaseAvailable == nil {
+		cfg.DatabaseAvailable = func(context.Context) bool { return true }
+	}
 
 	return &OutboxDispatcher{
-		store:        store,
-		publisher:    publisher,
-		registry:     registry,
-		taskTypes:    registry.TaskTypes(),
-		workerID:     cfg.WorkerID,
-		pollInterval: cfg.PollInterval,
-		lockTimeout:  cfg.LockTimeout,
-		batchSize:    cfg.BatchSize,
-		retryBase:    cfg.RetryBase,
-		retryMax:     cfg.RetryMax,
-		now:          cfg.Now,
-		onPublished:  cfg.OnPublished,
-		onCycleError: cfg.OnCycleError,
+		store:             store,
+		publisher:         publisher,
+		registry:          registry,
+		taskTypes:         registry.TaskTypes(),
+		workerID:          cfg.WorkerID,
+		pollInterval:      cfg.PollInterval,
+		lockTimeout:       cfg.LockTimeout,
+		batchSize:         cfg.BatchSize,
+		retryBase:         cfg.RetryBase,
+		retryMax:          cfg.RetryMax,
+		now:               cfg.Now,
+		onPublished:       cfg.OnPublished,
+		onCycleError:      cfg.OnCycleError,
+		databaseAvailable: cfg.DatabaseAvailable,
 	}, nil
 }
 
@@ -299,6 +306,9 @@ func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if !dispatcher.databaseAvailable(ctx) {
+		return fmt.Errorf("outbox dispatcher: %w", database.ErrUnavailable)
 	}
 	now := dispatcher.now().UTC()
 	rows, err := dispatcher.store.ClaimBatch(ctx, dispatcher.workerID, dispatcher.taskTypes, now, dispatcher.lockTimeout, dispatcher.batchSize)

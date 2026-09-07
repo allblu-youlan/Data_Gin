@@ -12,6 +12,7 @@ import (
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/console"
+	"gin-biz-web-api/pkg/database"
 	jobPkg "gin-biz-web-api/pkg/job"
 	"gin-biz-web-api/pkg/logger"
 
@@ -56,7 +57,7 @@ func setupQueueJob() {
 	}
 
 	mux := asynq.NewServeMux()
-	mux.Use(jobLoggingMiddleware)
+	mux.Use(requireQueueDatabaseAvailability(database.RequireAvailable), jobLoggingMiddleware)
 
 	addQueueJob(mux)
 	officePushProcessor := data_svc.NewOfficePushProcessor()
@@ -671,4 +672,33 @@ func jobLoggingMiddleware(h asynq.Handler) asynq.Handler {
 		)
 		return nil
 	})
+}
+
+const queueDatabaseUnavailableRetryDelay = 30 * time.Second
+
+type queueDatabaseUnavailableError struct{ cause error }
+
+func (queueDatabaseUnavailableError) Error() string { return "queue job: database unavailable" }
+
+func (err queueDatabaseUnavailableError) Unwrap() error { return err.cause }
+
+func (queueDatabaseUnavailableError) RetryDelay() time.Duration {
+	return queueDatabaseUnavailableRetryDelay
+}
+
+func requireQueueDatabaseAvailability(check func(context.Context) error) asynq.MiddlewareFunc {
+	return func(next asynq.Handler) asynq.Handler {
+		return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
+			if task != nil && task.Type() == job.TypeFoo {
+				return next.ProcessTask(ctx, task)
+			}
+			if check == nil {
+				return queueDatabaseUnavailableError{cause: database.ErrUnavailable}
+			}
+			if err := check(ctx); err != nil {
+				return queueDatabaseUnavailableError{cause: err}
+			}
+			return next.ProcessTask(ctx, task)
+		})
+	}
 }

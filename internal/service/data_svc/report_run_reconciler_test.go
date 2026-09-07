@@ -9,6 +9,7 @@ import (
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 )
 
 func TestReportRunReconcilerFailsExpiredQueuedRunsBeforeDeliveryRecovery(t *testing.T) {
@@ -22,6 +23,48 @@ func TestReportRunReconcilerFailsExpiredQueuedRunsBeforeDeliveryRecovery(t *test
 	}
 	if !store.expiredCutoff.Equal(now.Add(-job.ReportRunSnapshotWaitLimit)) || store.queuedFailed != 1 || store.queuedFailedID != 31 {
 		t.Fatalf("cutoff=%v failed=%d failedID=%d", store.expiredCutoff, store.queuedFailed, store.queuedFailedID)
+	}
+}
+
+func TestReportRunReconcilerSkipsCycleWhileDatabaseUnavailable(t *testing.T) {
+	store := &fakeReconciliationStore{}
+	reconciler := NewReportRunReconcilerWithDependencies(store, fakeReportCredentialDecryptor{}, &fakeResultEvidenceReader{})
+	reconciler.available = func(context.Context) bool { return false }
+
+	reconciler.reconcileCycle(t.Context())
+
+	if store.legacyRecoveryCalls != 0 {
+		t.Fatalf("legacy recovery calls = %d, want 0", store.legacyRecoveryCalls)
+	}
+}
+
+func TestReportRunReconcilerStopsCycleAfterConnectivityFailure(t *testing.T) {
+	store := &fakeReconciliationStore{legacyRecoveryErr: database.ErrUnavailable}
+	reconciler := NewReportRunReconcilerWithDependencies(store, fakeReportCredentialDecryptor{}, &fakeResultEvidenceReader{})
+
+	err := reconciler.Reconcile(t.Context())
+	if !errors.Is(err, database.ErrUnavailable) {
+		t.Fatalf("Reconcile() error = %v, want ErrUnavailable", err)
+	}
+	if store.supersededRecoveryCalls != 0 {
+		t.Fatalf("superseded recovery calls = %d, want 0", store.supersededRecoveryCalls)
+	}
+}
+
+func TestReportRunReconcilerStopsCandidateLoopWhenDatabaseGateOpens(t *testing.T) {
+	store := &fakeReconciliationStore{
+		reconciliationCandidateIDs: []uint{31, 32},
+		beginReconciliationErr:     database.ErrUnavailable,
+	}
+	reconciler := NewReportRunReconcilerWithDependencies(store, fakeReportCredentialDecryptor{}, &fakeResultEvidenceReader{})
+	reconciler.available = func(context.Context) bool { return false }
+
+	err := reconciler.Reconcile(t.Context())
+	if !errors.Is(err, database.ErrUnavailable) {
+		t.Fatalf("Reconcile() error = %v, want ErrUnavailable", err)
+	}
+	if store.beginReconciliationCalls != 1 {
+		t.Fatalf("begin reconciliation calls = %d, want 1", store.beginReconciliationCalls)
 	}
 }
 
@@ -188,16 +231,20 @@ type fakeReconciliationStore struct {
 	terminalCleanupCalls        int
 	legacyRecoveryCount         int64
 	legacyRecoveryCalls         int
+	legacyRecoveryErr           error
 	supersededRecoveryCount     int64
 	supersededRecoveryCalls     int
 	queuedRecoveryIDs           []uint
 	ensureRunQueuedErr          error
 	runQueuedCalls              int
+	reconciliationCandidateIDs  []uint
+	beginReconciliationErr      error
+	beginReconciliationCalls    int
 }
 
 func (store *fakeReconciliationStore) RecoverLegacySnapshotStates(context.Context, time.Time, int) (int64, error) {
 	store.legacyRecoveryCalls++
-	return store.legacyRecoveryCount, nil
+	return store.legacyRecoveryCount, store.legacyRecoveryErr
 }
 func (store *fakeReconciliationStore) RecoverLegacySupersededSnapshots(context.Context, time.Time, int) (int64, error) {
 	store.supersededRecoveryCalls++
@@ -205,9 +252,13 @@ func (store *fakeReconciliationStore) RecoverLegacySupersededSnapshots(context.C
 }
 
 func (store *fakeReconciliationStore) ListReconciliationCandidates(context.Context, time.Time, int) ([]uint, error) {
-	return nil, nil
+	return store.reconciliationCandidateIDs, nil
 }
 func (store *fakeReconciliationStore) BeginReconciliation(context.Context, uint, string, string, time.Time, time.Duration) (*reportrepo.RunLease, error) {
+	store.beginReconciliationCalls++
+	if store.beginReconciliationErr != nil {
+		return nil, store.beginReconciliationErr
+	}
 	return &reportrepo.RunLease{Disposition: reportrepo.RunDispositionAcquired}, nil
 }
 func (store *fakeReconciliationStore) LoadRuntimeContract(context.Context, uint, string) (*reportrepo.RuntimeContract, error) {

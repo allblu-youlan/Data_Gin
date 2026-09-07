@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"gin-biz-web-api/pkg/database"
+
 	"github.com/hibiken/asynq"
 )
 
@@ -29,9 +31,14 @@ func NewAsynqServer(
 			Concurrency:    configConcurrency,
 			Queues:         configQueues,
 			RetryDelayFunc: retryDelay,
+			IsFailure:      isTaskFailure,
 		})
 
 	return Server
+}
+
+func isTaskFailure(err error) bool {
+	return err != nil && !errors.Is(err, database.ErrUnavailable)
 }
 
 type retryDelayHint interface {
