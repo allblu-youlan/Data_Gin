@@ -20,6 +20,7 @@ DB:
   ConnectTimeoutSeconds: 4
   ReadTimeoutSeconds: 45
   WriteTimeoutSeconds: 50
+  MigrationIOTimeoutSeconds: 900
   RejectReadOnly: false
 `)
 	if err := os.WriteFile(configFile, contents, 0o600); err != nil {
@@ -44,6 +45,9 @@ DB:
 	}
 	if pkgConfig.GetBool(prefix + "reject_read_only") {
 		t.Fatal("reject_read_only = true, want false")
+	}
+	if got := pkgConfig.GetInt("cfg.database.migration_io_timeout_seconds"); got != 900 {
+		t.Fatalf("migration_io_timeout_seconds = %d, want 900", got)
 	}
 }
 

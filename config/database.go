@@ -9,7 +9,8 @@ func init() {
 		return map[string]interface{}{
 
 			// 默认数据库
-			"driver": config.Get("DB.Driver", "mysql"),
+			"driver":                       config.Get("DB.Driver", "mysql"),
+			"migration_io_timeout_seconds": config.Get("DB.MigrationIOTimeoutSeconds", 30*60),
 
 			"mysql": map[string]interface{}{
 				"default": map[string]interface{}{

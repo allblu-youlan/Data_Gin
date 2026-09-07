@@ -266,12 +266,16 @@ func releaseSchemaMigrationLock(ctx context.Context, conn *sql.Conn) error {
 }
 
 func setupDBConnection() {
+	setupDBConnectionWithIOTimeout(0)
+}
+
+func setupDBConnectionWithIOTimeout(ioTimeout time.Duration) {
 
 	console.Info("init database ...")
 
 	switch config.GetString("cfg.database.driver") {
 	case "mysql":
-		if err := setupDBMySQL(); err != nil {
+		if err := setupDBMySQL(ioTimeout); err != nil {
 			console.Exit("database initialization failed: %v", err)
 		}
 	default:
@@ -280,7 +284,7 @@ func setupDBConnection() {
 
 }
 
-func setupDBMySQL() error {
+func setupDBMySQL(ioTimeout time.Duration) error {
 
 	configs := config.Get("cfg.database.mysql")
 
@@ -305,6 +309,10 @@ func setupDBMySQL() error {
 		connectTimeout := time.Duration(config.GetInt(cfgPrefix+"connect_timeout_seconds")) * time.Second
 		readTimeout := time.Duration(config.GetInt(cfgPrefix+"read_timeout_seconds")) * time.Second
 		writeTimeout := time.Duration(config.GetInt(cfgPrefix+"write_timeout_seconds")) * time.Second
+		if ioTimeout > 0 {
+			readTimeout = ioTimeout
+			writeTimeout = ioTimeout
+		}
 
 		driverConfig := mysqlDriver.NewConfig()
 		driverConfig.User = username

@@ -3,6 +3,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"time"
 
 	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/global"
@@ -89,5 +90,17 @@ func InitializeMigration() {
 
 	setupConfig()
 	setupLogger()
-	setupDBConnection()
+	migrationIOTimeout, err := migrationDatabaseIOTimeout()
+	if err != nil {
+		console.Exit("invalid migration database configuration: %v", err)
+	}
+	setupDBConnectionWithIOTimeout(migrationIOTimeout)
+}
+
+func migrationDatabaseIOTimeout() (time.Duration, error) {
+	seconds := config.GetInt("cfg.database.migration_io_timeout_seconds")
+	if seconds < 60 || seconds > 24*60*60 {
+		return 0, fmt.Errorf("migration I/O timeout seconds must be between 60 and 86400")
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
