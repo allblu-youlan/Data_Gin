@@ -3,9 +3,8 @@ FROM golang:1.24-bullseye AS builder
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libc6-dev && \
-    rm -rf /var/lib/apt/lists/*
+# The official Debian-based Go image already includes GCC and glibc headers.
+# Avoid an unnecessary APT refresh so builds do not depend on mirror index sync.
 
 COPY go.mod go.sum ./
 # 使用 BuildKit 缓存模块与编译产物，依赖未变化时不重复下载和全量编译。
