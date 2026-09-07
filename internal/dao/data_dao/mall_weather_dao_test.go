@@ -181,9 +181,16 @@ func TestBuildHourlyQuery(t *testing.T) {
 		wantError    bool
 	}{
 		{
-			name:         "latest versions use window function",
-			query:        HourlyQuery{MallID: 1, StartUTC: start, EndUTC: end, Latest: true, Limit: 200},
-			contains:     []string{"ROW_NUMBER() OVER", "PARTITION BY w.forecast_time_utc", "version_rank = 1", "LIMIT ?"},
+			name:  "latest versions use window function",
+			query: HourlyQuery{MallID: 1, StartUTC: start, EndUTC: end, Latest: true, Limit: 200},
+			contains: []string{
+				"SELECT weather.*",
+				"SELECT w.id, w.forecast_time_utc, ROW_NUMBER() OVER",
+				"PARTITION BY w.forecast_time_utc",
+				"INNER JOIN mall_weather_hourly AS weather ON weather.id = ranked.id",
+				"version_rank = 1",
+				"LIMIT ?",
+			},
 			wantArgCount: 4,
 		},
 		{
@@ -247,6 +254,9 @@ func TestBuildHourlyQuery(t *testing.T) {
 			}
 			if strings.Contains(statement, "valid") || strings.Contains(statement, "2026-") {
 				t.Fatalf("query interpolated a caller value:\n%s", statement)
+			}
+			if (tt.query.Latest || tt.query.AsOfUTC != nil) && strings.Contains(statement, "SELECT w.*") {
+				t.Fatalf("ranked subquery projects the full weather row:\n%s", statement)
 			}
 		})
 	}

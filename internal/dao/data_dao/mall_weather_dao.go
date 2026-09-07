@@ -711,17 +711,18 @@ func buildHourlyQuery(query HourlyQuery) (string, []interface{}, error) {
 			cursor := query.AfterForecastTime.UTC()
 			args = append(args[:len(args)-1], cursor, cursor, query.AfterID, limit)
 		}
-		return `SELECT ranked.* FROM (
-	SELECT w.*, ROW_NUMBER() OVER (
+		return `SELECT weather.* FROM (
+	SELECT w.id, w.forecast_time_utc, ROW_NUMBER() OVER (
 	  PARTITION BY w.forecast_time_utc
 	  ORDER BY ` + versionOrder + `
 	) AS version_rank
-FROM mall_weather_hourly AS w
-WHERE ` + strings.Join(where, " AND ") + `
+	FROM mall_weather_hourly AS w
+	WHERE ` + strings.Join(where, " AND ") + `
 ) AS ranked
-WHERE ` + strings.Join(outerWhere, " AND ") + `
-ORDER BY ranked.forecast_time_utc ASC, ranked.id ASC
-LIMIT ?`, args, nil
+	INNER JOIN mall_weather_hourly AS weather ON weather.id = ranked.id
+	WHERE ` + strings.Join(outerWhere, " AND ") + `
+	ORDER BY ranked.forecast_time_utc ASC, ranked.id ASC
+	LIMIT ?`, args, nil
 	}
 	if query.AfterForecastTime != nil {
 		if query.AfterIssuedAtUTC == nil {
