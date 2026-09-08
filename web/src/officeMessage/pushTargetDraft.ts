@@ -2,6 +2,18 @@ import type { OfficeFeishuBot, OfficeMessage, OfficePushChannel, OfficePushTarge
 
 export const DEFAULT_WEBDAV_URL = 'https://dav.jianguoyun.com/dav'
 
+function isValidWebDAVPath(value: string) {
+  const path = value.trim()
+  const hasControlCharacter = Array.from(path).some((character) => {
+    const code = character.charCodeAt(0)
+    return code <= 0x1f || (code >= 0x7f && code <= 0x9f)
+  })
+  return path.startsWith('/')
+    && !path.includes('\\')
+    && !hasControlCharacter
+    && !path.split('/').some((segment) => segment === '.' || segment === '..')
+}
+
 export type PushTargetDraft = {
   id: number | null
   name: string
@@ -56,6 +68,7 @@ export function buildPushTargetPayload(draft: PushTargetDraft, messages: OfficeM
   } else {
     if (message.sourceType === 'EDITED') throw new Error('WebDAV 只能推送 Excel 消息。')
     if (!draft.webdavUrl.trim() || !draft.webdavUsername.trim() || !draft.webdavPath.trim()) throw new Error('请完整填写 WebDAV URL、账号和固定目录。')
+    if (!isValidWebDAVPath(draft.webdavPath)) throw new Error('固定目录必须以 / 开头，且不能包含反斜杠、控制字符或 .、.. 路径段，例如 /商业分析部/测试文件夹。')
     if (!draft.webdavPassword && (!draft.id || !draft.hasWebdavPassword)) throw new Error('请填写 WebDAV 应用密码。')
   }
   return {

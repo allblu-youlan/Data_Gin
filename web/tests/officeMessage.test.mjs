@@ -87,6 +87,24 @@ test('editing a WebDAV target leaves its stored password unchanged when the pass
   assert.equal(buildPushTargetPayload(draft, messages).webdavPassword, '')
 })
 
+test('WebDAV target requires a slash-prefixed path without Windows backslashes', () => {
+  const messages = [{ id: 8, name: '销售日报', sourceType: 'ORACLE_QUERY', enabled: true }]
+  const draft = {
+    ...emptyPushTarget(messages, []),
+    name: '坚果云日报',
+    webdavUsername: 'report@example.com',
+    webdavPassword: 'secret',
+  }
+
+  assert.throws(() => buildPushTargetPayload({ ...draft, webdavPath: '/商业分析部\\测试文件夹' }, messages), /不能包含反斜杠/)
+  assert.throws(() => buildPushTargetPayload({ ...draft, webdavPath: '商业分析部/测试文件夹' }, messages), /必须以 \/ 开头/)
+  assert.throws(() => buildPushTargetPayload({ ...draft, webdavPath: '/商业分析部/./测试文件夹' }, messages), /\.、\.\./)
+  assert.throws(() => buildPushTargetPayload({ ...draft, webdavPath: '/商业分析部/../测试文件夹' }, messages), /\.、\.\./)
+  assert.throws(() => buildPushTargetPayload({ ...draft, webdavPath: '/商业分析部\n/测试文件夹' }, messages), /控制字符/)
+  assert.equal(buildPushTargetPayload({ ...draft, webdavPath: '/' }, messages).webdavPath, '/')
+  assert.equal(buildPushTargetPayload({ ...draft, webdavPath: '/商业分析部/测试文件夹' }, messages).webdavPath, '/商业分析部/测试文件夹')
+})
+
 test('office push schedule contract keeps Cron, time zone and scheduled date parameters', () => {
   const [schedule] = parseOfficeSchedules({ data: { items: [{
     id: 12, name: '每日销售日报', targetId: 3, cronExpr: '0 9 * * *', timeZone: 'Asia/Shanghai',
