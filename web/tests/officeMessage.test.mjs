@@ -11,6 +11,12 @@ import {
   parseOfficeSchedules,
   parseOfficeTargets,
 } from '../.test-dist/officeMessage/contracts.js'
+import {
+  DEFAULT_WEBDAV_URL,
+  buildPushTargetPayload,
+  emptyPushTarget,
+  targetDraftFrom,
+} from '../.test-dist/officeMessage/pushTargetDraft.js'
 
 test('office Feishu bot contract projects public App ID metadata', () => {
   const [bot] = parseOfficeFeishuBots({ data: { items: [{ id: 'cli_office', name: '办公消息机器人', source: 'ENVIRONMENT' }] } })
@@ -21,6 +27,64 @@ test('office Feishu bot contract projects public App ID metadata', () => {
     receiveIdType: 'chat_id', receiveId: 'oc_sales', enabled: true, lockVersion: 1, updatedAt: '2026-09-01T08:00:00Z',
   }] } })
   assert.equal(target.botAppId, 'cli_office')
+})
+
+test('legacy office target without channel remains Feishu', () => {
+  const [target] = parseOfficeTargets({ data: { items: [{
+    id: 4, name: '历史推送', messageId: 8, botAppId: 'cli_office', receiveIdType: 'chat_id', receiveId: 'oc_sales',
+    enabled: true, lockVersion: 1, updatedAt: '2026-09-01T08:00:00Z',
+  }] } })
+
+  assert.equal(target.channel, 'FEISHU')
+})
+
+test('office WebDAV target contract accepts empty Feishu fields without exposing credentials', () => {
+  const [target] = parseOfficeTargets({ data: { items: [{
+    id: 5, name: '坚果云日报', messageId: 8, channel: 'WEBDAV', botAppId: '', receiveIdType: '', receiveId: '',
+    webdavUrl: DEFAULT_WEBDAV_URL, webdavUsername: 'report@example.com', webdavPath: '/reports', hasWebdavPassword: true,
+    enabled: true, lockVersion: 2, updatedAt: '2026-09-01T08:00:00Z',
+  }] } })
+
+  assert.deepEqual({
+    channel: target.channel,
+    receiveIdType: target.receiveIdType,
+    webdavUrl: target.webdavUrl,
+    webdavUsername: target.webdavUsername,
+    webdavPath: target.webdavPath,
+    hasWebdavPassword: target.hasWebdavPassword,
+  }, {
+    channel: 'WEBDAV', receiveIdType: '', webdavUrl: DEFAULT_WEBDAV_URL,
+    webdavUsername: 'report@example.com', webdavPath: '/reports', hasWebdavPassword: true,
+  })
+  assert.throws(() => parseOfficeTargets({ data: { items: [{
+    id: 5, name: '泄漏凭据', messageId: 8, channel: 'WEBDAV', webdavPasswordCiphertext: 'ciphertext',
+    enabled: true, lockVersion: 2, updatedAt: '2026-09-01T08:00:00Z',
+  }] } }), /WebDAV 凭据/)
+})
+
+test('WebDAV target draft defaults to Jianguoyun and requires an Excel message and new password', () => {
+  const messages = [{ id: 7, name: '文本通知', sourceType: 'EDITED', enabled: true }, { id: 8, name: '销售日报', sourceType: 'ORACLE_QUERY', enabled: true }]
+  const draft = emptyPushTarget(messages, [])
+  assert.equal(draft.channel, 'WEBDAV')
+  assert.equal(draft.messageId, 8)
+  assert.equal(draft.webdavUrl, DEFAULT_WEBDAV_URL)
+
+  const configured = { ...draft, name: '坚果云日报', webdavUsername: 'report@example.com', webdavPath: '/reports' }
+  assert.throws(() => buildPushTargetPayload(configured, messages), /应用密码/)
+  assert.throws(() => buildPushTargetPayload({ ...configured, messageId: 7, webdavPassword: 'secret' }, messages), /Excel/)
+  assert.equal(buildPushTargetPayload({ ...configured, webdavPassword: 'secret' }, messages).webdavPassword, 'secret')
+})
+
+test('editing a WebDAV target leaves its stored password unchanged when the password input is empty', () => {
+  const messages = [{ id: 8, name: '销售日报', sourceType: 'ORACLE_PROCEDURE', enabled: true }]
+  const draft = targetDraftFrom({
+    id: 5, name: '坚果云日报', messageId: 8, channel: 'WEBDAV', botAppId: '', receiveIdType: '', receiveId: '',
+    webdavUrl: DEFAULT_WEBDAV_URL, webdavUsername: 'report@example.com', webdavPath: '/reports', hasWebdavPassword: true,
+    enabled: true, lockVersion: 3, updatedAt: '2026-09-01T08:00:00Z',
+  })
+
+  assert.equal(draft.webdavPassword, '')
+  assert.equal(buildPushTargetPayload(draft, messages).webdavPassword, '')
 })
 
 test('office push schedule contract keeps Cron, time zone and scheduled date parameters', () => {

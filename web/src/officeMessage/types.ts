@@ -1,4 +1,6 @@
 export type OfficeMessageSourceType = 'EDITED' | 'ORACLE_PROCEDURE' | 'ORACLE_QUERY'
+export type OfficePushChannel = 'FEISHU' | 'WEBDAV'
+export type OfficeReceiveIDType = 'chat_id' | 'open_id' | 'user_id' | 'union_id' | 'email'
 export type OfficeParameterType = 'string' | 'integer' | 'decimal' | 'date'
 export type OfficeDateFormat = 'yyyyMMdd' | 'yyyy-MM-dd' | 'yyyy-MM-dd HH:mm:ss'
 export type OfficeColumnValueType = 'string' | 'integer' | 'decimal' | 'date' | 'datetime' | 'boolean'
@@ -51,10 +53,14 @@ export type OfficePushTarget = {
   id: number
   name: string
   messageId: number
-  channel: 'FEISHU'
+  channel: OfficePushChannel
   botAppId: string
-  receiveIdType: 'chat_id' | 'open_id' | 'user_id' | 'union_id' | 'email'
+  receiveIdType: OfficeReceiveIDType | ''
   receiveId: string
+  webdavUrl: string
+  webdavUsername: string
+  webdavPath: string
+  hasWebdavPassword: boolean
   enabled: boolean
   lockVersion: number
   updatedAt: string

@@ -30,7 +30,7 @@ const titles: Record<NavKey, { title: string; subtitle: string }> = {
   report_query: { title: '报表中心', subtitle: '选择已上线且已授权的报表，生成并下载 Excel。' },
   report_exports: { title: '导出中心', subtitle: '查看 Excel 生成、下载和结果清理状态。' },
   office_messages: { title: '消息管理', subtitle: '维护文本消息和 Oracle Excel 消息来源。' },
-  office_push: { title: '推送管理', subtitle: '维护飞书机器人接收目标并查看推送运行。' },
+  office_push: { title: '推送管理', subtitle: '维护飞书与 WebDAV 推送目标并查看运行记录。' },
   access_management: { title: '账号与权限', subtitle: '管理控制台账号、角色权限矩阵、开放 API 和变更审计。' },
   sources: { title: '数据源', subtitle: '查询数据接入配置、类型和启用状态。' },
   receive: { title: '接口接收', subtitle: '查询外部系统主动推送进来的原始数据。' },

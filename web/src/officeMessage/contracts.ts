@@ -47,11 +47,15 @@ export function parseOfficeMessage(payload: unknown): OfficeMessage {
 export function parseOfficeTargets(payload: unknown): OfficePushTarget[] {
   return items(payload).map((raw) => {
     const value = record(raw)
+    if ('webdavPassword' in value || 'webdavPasswordCiphertext' in value || 'credentialKeyVersion' in value) throw new Error('WebDAV 凭据不应返回浏览器')
+    const channel = enumValue(value.channel || 'FEISHU', ['FEISHU', 'WEBDAV'] as const)
     return {
-      id: positiveInteger(value.id), name: text(value.name), messageId: positiveInteger(value.messageId), channel: 'FEISHU',
+      id: positiveInteger(value.id), name: text(value.name), messageId: positiveInteger(value.messageId), channel,
       botAppId: text(value.botAppId),
-      receiveIdType: enumValue(value.receiveIdType, ['chat_id', 'open_id', 'user_id', 'union_id', 'email'] as const),
-      receiveId: text(value.receiveId), enabled: booleanValue(value.enabled), lockVersion: positiveInteger(value.lockVersion), updatedAt: text(value.updatedAt),
+      receiveIdType: channel === 'FEISHU' ? enumValue(value.receiveIdType, ['chat_id', 'open_id', 'user_id', 'union_id', 'email'] as const) : '',
+      receiveId: text(value.receiveId), webdavUrl: text(value.webdavUrl), webdavUsername: text(value.webdavUsername),
+      webdavPath: text(value.webdavPath), hasWebdavPassword: optionalBooleanValue(value.hasWebdavPassword),
+      enabled: booleanValue(value.enabled), lockVersion: positiveInteger(value.lockVersion), updatedAt: text(value.updatedAt),
     }
   })
 }
@@ -255,6 +259,7 @@ function record(value: unknown): RecordValue { if (!value || typeof value !== 'o
 function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw new Error('办公消息列表格式无效'); return value }
 function text(value: unknown): string { return typeof value === 'string' ? value : '' }
 function booleanValue(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('办公消息布尔字段无效'); return value }
+function optionalBooleanValue(value: unknown): boolean { return value === undefined ? false : booleanValue(value) }
 function numberValue(value: unknown): number { const parsed = Number(value); if (!Number.isFinite(parsed) || parsed < 0) throw new Error('办公消息数字字段无效'); return parsed }
 function positiveInteger(value: unknown): number { const parsed = numberValue(value); if (!Number.isInteger(parsed) || parsed <= 0) throw new Error('办公消息 ID 无效'); return parsed }
 function nonNegativeInteger(value: unknown): number { const parsed = numberValue(value); if (!Number.isInteger(parsed)) throw new Error('办公消息数字字段无效'); return parsed }

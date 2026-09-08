@@ -103,7 +103,7 @@ export const navGroups: NavGroup[] = [
     label: '办公消息',
     items: [
       { key: 'office_messages', label: '消息管理', description: '文本与 Oracle Excel 来源', icon: <FileSpreadsheet aria-hidden="true" /> },
-      { key: 'office_push', label: '推送管理', description: '飞书目标与发送记录', icon: <Send aria-hidden="true" /> },
+      { key: 'office_push', label: '推送管理', description: '飞书与 WebDAV 推送记录', icon: <Send aria-hidden="true" /> },
     ],
   },
   { label: '账号与权限', items: [{ key: 'access_management', label: '账号与权限', description: '控制台账号、角色与审计', icon: <Users aria-hidden="true" /> }] },
