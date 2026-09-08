@@ -8,9 +8,11 @@ import (
 	"strings"
 	"time"
 
+	webdavconnector "gin-biz-web-api/connector/webdav"
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
+	"gin-biz-web-api/internal/reportsecret"
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/credential"
@@ -48,9 +50,14 @@ type OfficeMessageInput struct {
 type OfficePushTargetInput struct {
 	Name                string `json:"name"`
 	MessageID           uint   `json:"messageId"`
+	Channel             string `json:"channel"`
 	BotAppID            string `json:"botAppId"`
 	ReceiveIDType       string `json:"receiveIdType"`
 	ReceiveID           string `json:"receiveId"`
+	WebDAVURL           string `json:"webdavUrl"`
+	WebDAVUsername      string `json:"webdavUsername"`
+	WebDAVPassword      string `json:"webdavPassword"`
+	WebDAVPath          string `json:"webdavPath"`
 	Enabled             *bool  `json:"enabled"`
 	ExpectedLockVersion uint64 `json:"expectedLockVersion"`
 }
@@ -73,10 +80,18 @@ type officeFeishuBotConfig struct {
 	configured bool
 }
 
+const officeWebDAVCredentialPurpose = "office-webdav"
+
+type officePushCredentialCipher interface {
+	EncryptScoped(purpose, plaintext string) (string, string, error)
+	DecryptScoped(purpose, version, ciphertext string) (string, error)
+}
+
 type OfficeMessageService struct {
-	db        *gorm.DB
-	now       func() time.Time
-	feishuBot officeFeishuBotConfig
+	db         *gorm.DB
+	now        func() time.Time
+	feishuBot  officeFeishuBotConfig
+	credential officePushCredentialCipher
 }
 
 func NewOfficeMessageService() *OfficeMessageService {
@@ -95,7 +110,10 @@ func newOfficeMessageService(db *gorm.DB, botConfigs ...officeFeishuBotConfig) *
 	if len(botConfigs) > 0 {
 		botConfig = botConfigs[0]
 	}
-	return &OfficeMessageService{db: db, now: func() time.Time { return time.Now().UTC() }, feishuBot: botConfig}
+	return &OfficeMessageService{
+		db: db, now: func() time.Time { return time.Now().UTC() }, feishuBot: botConfig,
+		credential: reportsecret.EnvironmentKeyring{},
+	}
 }
 
 func (service *OfficeMessageService) ListFeishuBots(_ context.Context) []OfficeFeishuBotOption {
@@ -210,9 +228,10 @@ func (service *OfficeMessageService) ListTargets(ctx context.Context) ([]model.O
 		return nil, fmt.Errorf("office message: list push targets: %w", err)
 	}
 	for index := range targets {
-		if targets[index].BotAppID == "" && service.feishuBot.configured {
+		if effectiveOfficePushChannel(targets[index].Channel) == model.OfficePushChannelFeishu && targets[index].BotAppID == "" && service.feishuBot.configured {
 			targets[index].BotAppID = service.feishuBot.appID
 		}
+		sanitizeOfficePushTarget(&targets[index])
 	}
 	return targets, nil
 }
@@ -222,8 +241,7 @@ func (service *OfficeMessageService) CreateTarget(ctx context.Context, actorID u
 	if err != nil {
 		return nil, err
 	}
-	target.BotAppID, err = service.resolveOfficeFeishuBot(target.BotAppID)
-	if err != nil {
+	if err := service.prepareOfficePushTargetCredential(&target, input, nil); err != nil {
 		return nil, err
 	}
 	target.CreatedBy = actorID
@@ -235,10 +253,14 @@ func (service *OfficeMessageService) CreateTarget(ctx context.Context, actorID u
 		} else if err != nil {
 			return fmt.Errorf("office message: lock target message: %w", err)
 		}
+		if err := validateOfficePushTargetMessage(target, message); err != nil {
+			return err
+		}
 		return tx.Create(&target).Error
 	}); err != nil {
 		return nil, fmt.Errorf("office message: create push target: %w", err)
 	}
+	sanitizeOfficePushTarget(&target)
 	return &target, nil
 }
 
@@ -250,10 +272,6 @@ func (service *OfficeMessageService) UpdateTarget(ctx context.Context, actorID, 
 	if err != nil {
 		return nil, err
 	}
-	target.BotAppID, err = service.resolveOfficeFeishuBot(target.BotAppID)
-	if err != nil {
-		return nil, err
-	}
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var message model.OfficeMessage
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", target.MessageID).First(&message).Error; errors.Is(err, gorm.ErrRecordNotFound) {
@@ -261,10 +279,24 @@ func (service *OfficeMessageService) UpdateTarget(ctx context.Context, actorID, 
 		} else if err != nil {
 			return fmt.Errorf("office message: lock target message: %w", err)
 		}
+		var existing model.OfficePushTarget
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", targetID).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrOfficeMessageNotFound
+		} else if err != nil {
+			return fmt.Errorf("office message: lock push target: %w", err)
+		}
+		if err := service.prepareOfficePushTargetCredential(&target, input, &existing); err != nil {
+			return err
+		}
+		if err := validateOfficePushTargetMessage(target, message); err != nil {
+			return err
+		}
 		result := tx.Model(&model.OfficePushTarget{}).Where("id = ? AND lock_version = ?", targetID, input.ExpectedLockVersion).Updates(map[string]interface{}{
-			"name": target.Name, "message_id": target.MessageID, "channel": model.OfficePushChannelFeishu,
-			"bot_app_id":      target.BotAppID,
-			"receive_id_type": target.ReceiveIDType, "receive_id": target.ReceiveID, "enabled": target.Enabled,
+			"name": target.Name, "message_id": target.MessageID, "channel": target.Channel,
+			"bot_app_id": target.BotAppID, "receive_id_type": target.ReceiveIDType, "receive_id": target.ReceiveID,
+			"webdav_url": target.WebDAVURL, "webdav_username": target.WebDAVUsername, "webdav_path": target.WebDAVPath,
+			"webdav_password_ciphertext": target.WebDAVPasswordCiphertext, "credential_key_version": target.CredentialKeyVersion,
+			"enabled":    target.Enabled,
 			"updated_by": actorID, "lock_version": gorm.Expr("lock_version + 1"), "updated_at": service.now().UTC(),
 		})
 		if result.Error != nil {
@@ -332,13 +364,12 @@ func (service *OfficeMessageService) CreateRun(ctx context.Context, actorID, tar
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND enabled = ?", targetID, true).First(&target).Error; err != nil {
 			return fmt.Errorf("%w: push target is unavailable", ErrOfficeMessageNotFound)
 		}
-		target.BotAppID, err = service.resolveOfficeFeishuBot(target.BotAppID)
-		if err != nil {
-			return err
-		}
 		var message model.OfficeMessage
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND enabled = ?", target.MessageID, true).First(&message).Error; err != nil {
 			return fmt.Errorf("%w: message is unavailable", ErrOfficeMessageNotFound)
+		}
+		if err := service.preparePersistedOfficePushTarget(&target, message); err != nil {
+			return err
 		}
 		parameters, err := normalizeOfficeRunParameters(message, input.Parameters)
 		if err != nil {
@@ -456,6 +487,7 @@ func (service *OfficeMessageService) getTarget(ctx context.Context, id uint) (*m
 	} else if err != nil {
 		return nil, fmt.Errorf("office message: get push target: %w", err)
 	}
+	sanitizeOfficePushTarget(&target)
 	return &target, nil
 }
 
@@ -546,22 +578,129 @@ func normalizeOfficeInputMappings(mappings []OfficeColumnMapping, sourceType str
 
 func normalizeOfficePushTargetInput(input OfficePushTargetInput) (model.OfficePushTarget, error) {
 	input.Name = strings.TrimSpace(input.Name)
+	input.Channel = strings.ToUpper(strings.TrimSpace(input.Channel))
+	if input.Channel == "" {
+		input.Channel = model.OfficePushChannelFeishu
+	}
 	input.BotAppID = strings.TrimSpace(input.BotAppID)
 	input.ReceiveIDType = strings.ToLower(strings.TrimSpace(input.ReceiveIDType))
 	input.ReceiveID = strings.TrimSpace(input.ReceiveID)
-	if input.Name == "" || len(input.Name) > 128 || input.MessageID == 0 || !validOfficeReceiveIDType(input.ReceiveIDType) ||
-		input.ReceiveID == "" || len(input.ReceiveID) > 255 || strings.ContainsAny(input.ReceiveID, "\r\n\t ") {
+	if input.Name == "" || len(input.Name) > 128 || input.MessageID == 0 {
 		return model.OfficePushTarget{}, fmt.Errorf("%w: push target is invalid", ErrOfficeMessageInvalid)
 	}
 	enabled := true
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
-	return model.OfficePushTarget{
-		Name: input.Name, MessageID: input.MessageID, Channel: model.OfficePushChannelFeishu,
-		BotAppID:      input.BotAppID,
-		ReceiveIDType: input.ReceiveIDType, ReceiveID: input.ReceiveID, Enabled: enabled, LockVersion: 1,
-	}, nil
+	target := model.OfficePushTarget{Name: input.Name, MessageID: input.MessageID, Channel: input.Channel, Enabled: enabled, LockVersion: 1}
+	switch input.Channel {
+	case model.OfficePushChannelFeishu:
+		if !validOfficeReceiveIDType(input.ReceiveIDType) || input.ReceiveID == "" || len(input.ReceiveID) > 255 || strings.ContainsAny(input.ReceiveID, "\r\n\t ") {
+			return model.OfficePushTarget{}, fmt.Errorf("%w: Feishu push target is invalid", ErrOfficeMessageInvalid)
+		}
+		target.BotAppID, target.ReceiveIDType, target.ReceiveID = input.BotAppID, input.ReceiveIDType, input.ReceiveID
+	case model.OfficePushChannelWebDAV:
+		baseURL, err := webdavconnector.NormalizeBaseURL(input.WebDAVURL)
+		if err != nil {
+			return model.OfficePushTarget{}, fmt.Errorf("%w: WebDAV URL is invalid", ErrOfficeMessageInvalid)
+		}
+		directory, err := webdavconnector.NormalizeDirectory(input.WebDAVPath)
+		input.WebDAVUsername = strings.TrimSpace(input.WebDAVUsername)
+		if err != nil || input.WebDAVUsername == "" || len(input.WebDAVUsername) > 255 || len(directory) > 1024 {
+			return model.OfficePushTarget{}, fmt.Errorf("%w: WebDAV push target is invalid", ErrOfficeMessageInvalid)
+		}
+		target.WebDAVURL, target.WebDAVUsername, target.WebDAVPath = baseURL, input.WebDAVUsername, directory
+	default:
+		return model.OfficePushTarget{}, fmt.Errorf("%w: push target channel is unsupported", ErrOfficeMessageInvalid)
+	}
+	return target, nil
+}
+
+func (service *OfficeMessageService) prepareOfficePushTargetCredential(target *model.OfficePushTarget, input OfficePushTargetInput, existing *model.OfficePushTarget) error {
+	if target == nil {
+		return fmt.Errorf("%w: push target is invalid", ErrOfficeMessageInvalid)
+	}
+	if target.Channel == model.OfficePushChannelFeishu {
+		appID, err := service.resolveOfficeFeishuBot(target.BotAppID)
+		if err != nil {
+			return err
+		}
+		target.BotAppID = appID
+		return nil
+	}
+	if service == nil || service.credential == nil {
+		return fmt.Errorf("%w: WebDAV credential encryption is unavailable", ErrOfficeMessageInvalid)
+	}
+	if input.WebDAVPassword == "" {
+		if existing == nil || effectiveOfficePushChannel(existing.Channel) != model.OfficePushChannelWebDAV ||
+			existing.WebDAVPasswordCiphertext == "" || existing.CredentialKeyVersion == "" {
+			return fmt.Errorf("%w: WebDAV application password is required", ErrOfficeMessageInvalid)
+		}
+		target.WebDAVPasswordCiphertext = existing.WebDAVPasswordCiphertext
+		target.CredentialKeyVersion = existing.CredentialKeyVersion
+		return nil
+	}
+	if len(input.WebDAVPassword) > 512 {
+		return fmt.Errorf("%w: WebDAV application password is invalid", ErrOfficeMessageInvalid)
+	}
+	version, ciphertext, err := service.credential.EncryptScoped(officeWebDAVCredentialPurpose, input.WebDAVPassword)
+	if err != nil {
+		return fmt.Errorf("office message: encrypt WebDAV credential: %w", err)
+	}
+	target.WebDAVPasswordCiphertext, target.CredentialKeyVersion = ciphertext, version
+	return nil
+}
+
+func (service *OfficeMessageService) preparePersistedOfficePushTarget(target *model.OfficePushTarget, message model.OfficeMessage) error {
+	if target == nil {
+		return fmt.Errorf("%w: push target is unavailable", ErrOfficeMessageNotFound)
+	}
+	target.Channel = effectiveOfficePushChannel(target.Channel)
+	if target.Channel == model.OfficePushChannelFeishu {
+		appID, err := service.resolveOfficeFeishuBot(target.BotAppID)
+		if err != nil {
+			return err
+		}
+		target.BotAppID = appID
+	}
+	return validateOfficePushTargetMessage(*target, message)
+}
+
+func validateOfficePushTargetMessage(target model.OfficePushTarget, message model.OfficeMessage) error {
+	switch effectiveOfficePushChannel(target.Channel) {
+	case model.OfficePushChannelFeishu:
+		return nil
+	case model.OfficePushChannelWebDAV:
+		if message.SourceType == model.OfficeMessageSourceEdited || !validOfficeWebDAVTarget(target) {
+			return fmt.Errorf("%w: WebDAV push requires an Excel message and complete credentials", ErrOfficeMessageInvalid)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: push target channel is unsupported", ErrOfficeMessageInvalid)
+	}
+}
+
+func validOfficeWebDAVTarget(target model.OfficePushTarget) bool {
+	_, urlErr := webdavconnector.NormalizeBaseURL(target.WebDAVURL)
+	_, pathErr := webdavconnector.NormalizeDirectory(target.WebDAVPath)
+	return urlErr == nil && pathErr == nil && strings.TrimSpace(target.WebDAVUsername) != "" &&
+		target.WebDAVPasswordCiphertext != "" && strings.TrimSpace(target.CredentialKeyVersion) != ""
+}
+
+func effectiveOfficePushChannel(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value == "" {
+		return model.OfficePushChannelFeishu
+	}
+	return value
+}
+
+func sanitizeOfficePushTarget(target *model.OfficePushTarget) {
+	if target == nil {
+		return
+	}
+	target.Channel = effectiveOfficePushChannel(target.Channel)
+	target.HasWebDAVPassword = target.WebDAVPasswordCiphertext != ""
 }
 
 func validOfficeReceiveIDType(value string) bool {

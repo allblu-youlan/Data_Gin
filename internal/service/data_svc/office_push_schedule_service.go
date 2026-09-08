@@ -156,6 +156,9 @@ func (service *OfficeMessageService) normalizeScheduleInput(tx *gorm.DB, input O
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", target.MessageID).First(&message).Error; err != nil {
 		return normalizedOfficePushSchedule{}, fmt.Errorf("%w: message is unavailable", ErrOfficeMessageNotFound)
 	}
+	if err := service.preparePersistedOfficePushTarget(&target, message); err != nil {
+		return normalizedOfficePushSchedule{}, err
+	}
 	parameters, err := normalizeOfficeScheduleParameters(message, input.Parameters)
 	if err != nil {
 		return normalizedOfficePushSchedule{}, fmt.Errorf("%w: %v", ErrOfficeMessageInvalid, err)

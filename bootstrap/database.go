@@ -27,8 +27,9 @@ import (
 	"go.uber.org/zap"
 )
 
-const schemaMigrationVersion = "2026-09-04-report-category-access-v21"
-const previousSchemaMigrationVersion = "2026-09-01-access-permission-v20"
+const schemaMigrationVersion = "2026-09-08-office-webdav-v22"
+const previousSchemaMigrationVersion = "2026-09-04-report-category-access-v21"
+const accessPermissionMigrationVersion = "2026-09-01-access-permission-v20"
 const officeMessageScheduleMigrationVersion = "2026-09-01-office-message-schedule-v19"
 const officeMessageFileMigrationVersion = "2026-09-01-office-message-file-v18"
 const officeMessageBotMigrationVersion = "2026-09-01-office-message-bot-v17"
@@ -187,6 +188,7 @@ func bojunOracleMigrationModels() []interface{} {
 func schemaIncrementalMigrationBaselines() []string {
 	return []string{
 		previousSchemaMigrationVersion,
+		accessPermissionMigrationVersion,
 		officeMessageScheduleMigrationVersion,
 		officeMessageFileMigrationVersion,
 		officeMessageBotMigrationVersion,

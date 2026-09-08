@@ -169,6 +169,29 @@ func TestOfficePushBotMatchesConfiguredAndLegacyTargets(t *testing.T) {
 	}
 }
 
+func TestOfficePushRetryableUsesWebDAVClassification(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		retryable bool
+	}{
+		{name: "authentication"},
+		{name: "rate limited", retryable: true},
+		{name: "server unavailable", retryable: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := &officeRetryableTestError{retryable: test.retryable}
+			if got := officePushRetryable(err); got != test.retryable {
+				t.Fatalf("officePushRetryable() = %t, want %t", got, test.retryable)
+			}
+		})
+	}
+}
+
+type officeRetryableTestError struct{ retryable bool }
+
+func (err *officeRetryableTestError) Error() string   { return "classified upload error" }
+func (err *officeRetryableTestError) Retryable() bool { return err.retryable }
+
 func TestRenderOfficeWorkbookFileNameUsesShanghaiDate(t *testing.T) {
 	name, err := renderOfficeWorkbookFileName(
 		"销售日报_{{date:yyyyMMdd}}.xlsx",

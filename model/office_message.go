@@ -8,6 +8,7 @@ const (
 	OfficeMessageSourceOracleQuery     = "ORACLE_QUERY"
 
 	OfficePushChannelFeishu = "FEISHU"
+	OfficePushChannelWebDAV = "WEBDAV"
 
 	OfficePushRunStatusQueued    = "QUEUED"
 	OfficePushRunStatusRunning   = "RUNNING"
@@ -50,21 +51,27 @@ type OfficeMessage struct {
 
 func (OfficeMessage) TableName() string { return "office_messages" }
 
-// OfficePushTarget binds one message to one Feishu bot recipient.
+// OfficePushTarget binds one message to a delivery destination.
 type OfficePushTarget struct {
 	BaseModel
-	Name          string    `gorm:"column:name;size:128;not null;index" json:"name"`
-	MessageID     uint      `gorm:"column:message_id;not null;index" json:"messageId"`
-	Channel       string    `gorm:"column:channel;size:16;not null;default:'FEISHU';index" json:"channel"`
-	BotAppID      string    `gorm:"column:bot_app_id;size:128;not null;default:''" json:"botAppId"`
-	ReceiveIDType string    `gorm:"column:receive_id_type;size:32;not null" json:"receiveIdType"`
-	ReceiveID     string    `gorm:"column:receive_id;size:255;not null" json:"receiveId"`
-	Enabled       bool      `gorm:"column:enabled;not null;default:true;index" json:"enabled"`
-	LockVersion   uint64    `gorm:"column:lock_version;not null;default:1" json:"lockVersion"`
-	CreatedBy     uint      `gorm:"column:created_by;not null;index" json:"createdBy"`
-	UpdatedBy     uint      `gorm:"column:updated_by;not null" json:"updatedBy"`
-	CreatedAt     time.Time `gorm:"column:created_at;type:datetime(3);not null;autoCreateTime" json:"createdAt"`
-	UpdatedAt     time.Time `gorm:"column:updated_at;type:datetime(3);not null;autoUpdateTime" json:"updatedAt"`
+	Name                     string    `gorm:"column:name;size:128;not null;index" json:"name"`
+	MessageID                uint      `gorm:"column:message_id;not null;index" json:"messageId"`
+	Channel                  string    `gorm:"column:channel;size:16;not null;default:'FEISHU';index" json:"channel"`
+	BotAppID                 string    `gorm:"column:bot_app_id;size:128;not null;default:''" json:"botAppId"`
+	ReceiveIDType            string    `gorm:"column:receive_id_type;size:32;not null;default:''" json:"receiveIdType"`
+	ReceiveID                string    `gorm:"column:receive_id;size:255;not null;default:''" json:"receiveId"`
+	WebDAVURL                string    `gorm:"column:webdav_url;size:2048;not null;default:''" json:"webdavUrl"`
+	WebDAVUsername           string    `gorm:"column:webdav_username;size:255;not null;default:''" json:"webdavUsername"`
+	WebDAVPath               string    `gorm:"column:webdav_path;size:1024;not null;default:''" json:"webdavPath"`
+	WebDAVPasswordCiphertext string    `gorm:"column:webdav_password_ciphertext;size:2048;not null;default:''" json:"-"`
+	CredentialKeyVersion     string    `gorm:"column:credential_key_version;size:64;not null;default:''" json:"-"`
+	HasWebDAVPassword        bool      `gorm:"-" json:"hasWebdavPassword"`
+	Enabled                  bool      `gorm:"column:enabled;not null;default:true;index" json:"enabled"`
+	LockVersion              uint64    `gorm:"column:lock_version;not null;default:1" json:"lockVersion"`
+	CreatedBy                uint      `gorm:"column:created_by;not null;index" json:"createdBy"`
+	UpdatedBy                uint      `gorm:"column:updated_by;not null" json:"updatedBy"`
+	CreatedAt                time.Time `gorm:"column:created_at;type:datetime(3);not null;autoCreateTime" json:"createdAt"`
+	UpdatedAt                time.Time `gorm:"column:updated_at;type:datetime(3);not null;autoUpdateTime" json:"updatedAt"`
 }
 
 func (OfficePushTarget) TableName() string { return "office_push_targets" }

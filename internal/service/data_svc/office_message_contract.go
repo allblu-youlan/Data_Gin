@@ -55,9 +55,15 @@ type officePushSnapshot struct {
 }
 
 type officePushTargetSnapshot struct {
-	BotAppID      string `json:"botAppId,omitempty"`
-	ReceiveIDType string `json:"receiveIdType"`
-	ReceiveID     string `json:"receiveId"`
+	Channel                  string `json:"channel,omitempty"`
+	BotAppID                 string `json:"botAppId,omitempty"`
+	ReceiveIDType            string `json:"receiveIdType"`
+	ReceiveID                string `json:"receiveId"`
+	WebDAVURL                string `json:"webdavUrl,omitempty"`
+	WebDAVUsername           string `json:"webdavUsername,omitempty"`
+	WebDAVPath               string `json:"webdavPath,omitempty"`
+	WebDAVPasswordCiphertext string `json:"webdavPasswordCiphertext,omitempty"`
+	CredentialKeyVersion     string `json:"credentialKeyVersion,omitempty"`
 }
 
 type officePushMessageSnapshot struct {
@@ -79,7 +85,12 @@ type officePushMessageSnapshot struct {
 
 func newOfficePushSnapshot(target model.OfficePushTarget, message model.OfficeMessage) (model.JSONText, error) {
 	snapshot := officePushSnapshot{
-		Target: officePushTargetSnapshot{BotAppID: target.BotAppID, ReceiveIDType: target.ReceiveIDType, ReceiveID: target.ReceiveID},
+		Target: officePushTargetSnapshot{
+			Channel: effectiveOfficePushChannel(target.Channel), BotAppID: target.BotAppID,
+			ReceiveIDType: target.ReceiveIDType, ReceiveID: target.ReceiveID,
+			WebDAVURL: target.WebDAVURL, WebDAVUsername: target.WebDAVUsername, WebDAVPath: target.WebDAVPath,
+			WebDAVPasswordCiphertext: target.WebDAVPasswordCiphertext, CredentialKeyVersion: target.CredentialKeyVersion,
+		},
 		Message: officePushMessageSnapshot{
 			ID: message.ID, Name: message.Name, SourceType: message.SourceType, Content: message.Content,
 			ProcedureOwner: message.ProcedureOwner, PackageName: message.PackageName, ProcedureName: message.ProcedureName,
@@ -100,14 +111,34 @@ func decodeOfficePushSnapshot(raw model.JSONText) (officePushSnapshot, error) {
 	if err := decodeOfficeJSON(raw, &snapshot); err != nil {
 		return officePushSnapshot{}, fmt.Errorf("office message snapshot: decode: %w", err)
 	}
-	if !validOfficeReceiveIDType(snapshot.Target.ReceiveIDType) || strings.TrimSpace(snapshot.Target.ReceiveID) == "" || snapshot.Message.ID == 0 {
+	if snapshot.Message.ID == 0 || !validOfficePushTargetSnapshot(snapshot.Target) {
 		return officePushSnapshot{}, fmt.Errorf("office message snapshot: invalid identity")
 	}
 	return snapshot, nil
 }
 
 func (snapshot officePushSnapshot) targetModel() model.OfficePushTarget {
-	return model.OfficePushTarget{BotAppID: snapshot.Target.BotAppID, ReceiveIDType: snapshot.Target.ReceiveIDType, ReceiveID: snapshot.Target.ReceiveID}
+	return model.OfficePushTarget{
+		Channel: effectiveOfficePushChannel(snapshot.Target.Channel), BotAppID: snapshot.Target.BotAppID,
+		ReceiveIDType: snapshot.Target.ReceiveIDType, ReceiveID: snapshot.Target.ReceiveID,
+		WebDAVURL: snapshot.Target.WebDAVURL, WebDAVUsername: snapshot.Target.WebDAVUsername, WebDAVPath: snapshot.Target.WebDAVPath,
+		WebDAVPasswordCiphertext: snapshot.Target.WebDAVPasswordCiphertext, CredentialKeyVersion: snapshot.Target.CredentialKeyVersion,
+	}
+}
+
+func validOfficePushTargetSnapshot(target officePushTargetSnapshot) bool {
+	switch effectiveOfficePushChannel(target.Channel) {
+	case model.OfficePushChannelFeishu:
+		return validOfficeReceiveIDType(target.ReceiveIDType) && strings.TrimSpace(target.ReceiveID) != ""
+	case model.OfficePushChannelWebDAV:
+		return validOfficeWebDAVTarget(model.OfficePushTarget{
+			Channel: model.OfficePushChannelWebDAV, WebDAVURL: target.WebDAVURL, WebDAVUsername: target.WebDAVUsername,
+			WebDAVPath: target.WebDAVPath, WebDAVPasswordCiphertext: target.WebDAVPasswordCiphertext,
+			CredentialKeyVersion: target.CredentialKeyVersion,
+		})
+	default:
+		return false
+	}
 }
 
 func (snapshot officePushSnapshot) messageModel() model.OfficeMessage {

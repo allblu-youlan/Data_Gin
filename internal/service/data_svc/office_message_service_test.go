@@ -3,6 +3,7 @@ package data_svc
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,143 @@ func TestOfficePushSnapshotFreezesReceiverAndMessage(t *testing.T) {
 		snapshot.messageModel().SelectSQL == message.SelectSQL || snapshot.messageModel().FileNameTemplate == message.FileNameTemplate {
 		t.Fatalf("snapshot = %#v", snapshot)
 	}
+}
+
+func TestNormalizeOfficePushTargetInputSupportsWebDAV(t *testing.T) {
+	target, err := normalizeOfficePushTargetInput(OfficePushTargetInput{
+		Name: "坚果云销售日报", MessageID: 7, Channel: "webdav", WebDAVURL: "https://dav.jianguoyun.com/dav/",
+		WebDAVUsername: " account@example.com ", WebDAVPath: "/固定报表/销售/",
+	})
+	if err != nil {
+		t.Fatalf("normalizeOfficePushTargetInput() error = %v", err)
+	}
+	if target.Channel != model.OfficePushChannelWebDAV || target.WebDAVURL != "https://dav.jianguoyun.com/dav" ||
+		target.WebDAVUsername != "account@example.com" || target.WebDAVPath != "/固定报表/销售" || target.BotAppID != "" || target.ReceiveID != "" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNormalizeOfficePushTargetInputDefaultsLegacyRequestToFeishu(t *testing.T) {
+	target, err := normalizeOfficePushTargetInput(OfficePushTargetInput{
+		Name: "运营群", MessageID: 7, ReceiveIDType: "chat_id", ReceiveID: "oc_legacy",
+	})
+	if err != nil {
+		t.Fatalf("normalizeOfficePushTargetInput() error = %v", err)
+	}
+	if target.Channel != model.OfficePushChannelFeishu || target.ReceiveID != "oc_legacy" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestNormalizeOfficePushTargetInputRejectsUnsafeWebDAVDestination(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		path string
+	}{
+		{name: "plain HTTP", url: "http://dav.jianguoyun.com/dav", path: "/reports"},
+		{name: "parent path", url: "https://dav.jianguoyun.com/dav", path: "/reports/../private"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := normalizeOfficePushTargetInput(OfficePushTargetInput{
+				Name: "坚果云", MessageID: 7, Channel: model.OfficePushChannelWebDAV,
+				WebDAVURL: test.url, WebDAVUsername: "account@example.com", WebDAVPath: test.path,
+			})
+			if !errors.Is(err, ErrOfficeMessageInvalid) {
+				t.Fatalf("normalizeOfficePushTargetInput() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestOfficeWebDAVCredentialIsEncryptedAndPreservedOnBlankUpdate(t *testing.T) {
+	cipher := &fakeOfficePushCredentialCipher{}
+	service := &OfficeMessageService{credential: cipher}
+	target := model.OfficePushTarget{Channel: model.OfficePushChannelWebDAV}
+	input := OfficePushTargetInput{WebDAVPassword: "app-password"}
+	if err := service.prepareOfficePushTargetCredential(&target, input, nil); err != nil {
+		t.Fatalf("prepareOfficePushTargetCredential(create) error = %v", err)
+	}
+	if cipher.encrypted != "app-password" || cipher.purpose != officeWebDAVCredentialPurpose || target.WebDAVPasswordCiphertext != "ciphertext" || target.CredentialKeyVersion != "key-v1" {
+		t.Fatalf("credential result = cipher %#v, target %#v", cipher, target)
+	}
+	existing := target
+	preserved := model.OfficePushTarget{Channel: model.OfficePushChannelWebDAV}
+	if err := service.prepareOfficePushTargetCredential(&preserved, OfficePushTargetInput{}, &existing); err != nil {
+		t.Fatalf("prepareOfficePushTargetCredential(update) error = %v", err)
+	}
+	if preserved.WebDAVPasswordCiphertext != "ciphertext" || preserved.CredentialKeyVersion != "key-v1" {
+		t.Fatalf("preserved target = %#v", preserved)
+	}
+}
+
+func TestOfficeWebDAVTargetRequiresExcelMessage(t *testing.T) {
+	target := model.OfficePushTarget{
+		Channel: model.OfficePushChannelWebDAV, WebDAVURL: "https://dav.jianguoyun.com/dav", WebDAVUsername: "account@example.com",
+		WebDAVPath: "/reports", WebDAVPasswordCiphertext: "ciphertext", CredentialKeyVersion: "key-v1",
+	}
+	if err := validateOfficePushTargetMessage(target, model.OfficeMessage{SourceType: model.OfficeMessageSourceEdited}); !errors.Is(err, ErrOfficeMessageInvalid) {
+		t.Fatalf("validateOfficePushTargetMessage(edited) error = %v", err)
+	}
+	if err := validateOfficePushTargetMessage(target, model.OfficeMessage{SourceType: model.OfficeMessageSourceOracleQuery}); err != nil {
+		t.Fatalf("validateOfficePushTargetMessage(query) error = %v", err)
+	}
+}
+
+func TestOfficeWebDAVTargetJSONRedactsCredential(t *testing.T) {
+	target := model.OfficePushTarget{
+		Channel: model.OfficePushChannelWebDAV, WebDAVURL: "https://dav.jianguoyun.com/dav", WebDAVUsername: "account@example.com",
+		WebDAVPath: "/reports", WebDAVPasswordCiphertext: "ciphertext-secret", CredentialKeyVersion: "key-v1",
+	}
+	sanitizeOfficePushTarget(&target)
+	payload, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("marshal target: %v", err)
+	}
+	if strings.Contains(string(payload), "ciphertext-secret") || strings.Contains(string(payload), "key-v1") || !strings.Contains(string(payload), `"hasWebdavPassword":true`) {
+		t.Fatalf("target JSON = %s", payload)
+	}
+}
+
+func TestOfficeWebDAVSnapshotContainsCiphertextWithoutPlaintext(t *testing.T) {
+	target := model.OfficePushTarget{
+		Channel: model.OfficePushChannelWebDAV, WebDAVURL: "https://dav.jianguoyun.com/dav", WebDAVUsername: "account@example.com",
+		WebDAVPath: "/reports", WebDAVPasswordCiphertext: "encrypted-value", CredentialKeyVersion: "key-v1",
+	}
+	message := model.OfficeMessage{
+		BaseModel: model.BaseModel{ID: 7}, SourceType: model.OfficeMessageSourceOracleQuery,
+		ParameterSchemaJSON: model.JSONText("[]"), ColumnMappingJSON: model.JSONText("[]"),
+	}
+	raw, err := newOfficePushSnapshot(target, message)
+	if err != nil {
+		t.Fatalf("newOfficePushSnapshot() error = %v", err)
+	}
+	if strings.Contains(string(raw), "app-password") || !strings.Contains(string(raw), "encrypted-value") {
+		t.Fatalf("snapshot = %s", raw)
+	}
+	snapshot, err := decodeOfficePushSnapshot(raw)
+	if err != nil || snapshot.targetModel().Channel != model.OfficePushChannelWebDAV {
+		t.Fatalf("decodeOfficePushSnapshot() = %#v, %v", snapshot, err)
+	}
+}
+
+type fakeOfficePushCredentialCipher struct {
+	purpose   string
+	encrypted string
+	err       error
+}
+
+func (cipher *fakeOfficePushCredentialCipher) EncryptScoped(purpose, plaintext string) (string, string, error) {
+	cipher.purpose, cipher.encrypted = purpose, plaintext
+	return "key-v1", "ciphertext", cipher.err
+}
+
+func (*fakeOfficePushCredentialCipher) DecryptScoped(purpose, version, ciphertext string) (string, error) {
+	if purpose != officeWebDAVCredentialPurpose || version == "" || ciphertext == "" {
+		return "", fmt.Errorf("invalid scoped credential")
+	}
+	return "app-password", nil
 }
 
 func TestOfficeMessageServiceListsOnlyConfiguredFeishuBot(t *testing.T) {

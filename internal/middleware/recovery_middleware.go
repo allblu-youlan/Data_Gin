@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/http/httputil"
 	"os"
 	"strings"
@@ -23,8 +24,8 @@ func Recovery() gin.HandlerFunc {
 		defer func() {
 			if err := recover(); err != nil {
 
-				// 获取用户的请求信息
-				httpRequest, _ := httputil.DumpRequest(c.Request, true)
+				// 仅记录脱敏后的请求行和请求头，禁止 panic 日志读取请求体。
+				httpRequest := recoveryRequestSummary(c.Request)
 
 				// 链接中断，客户端中断连接为正常行为，不需要记录堆栈信息
 				var brokenPipe bool
@@ -67,4 +68,25 @@ func Recovery() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func recoveryRequestSummary(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	cloned := request.Clone(request.Context())
+	cloned.Body = nil
+	cloned.GetBody = nil
+	cloned.Header = sanitizedAccessLogHeaders(request.Header)
+	if request.URL != nil {
+		requestURL := *request.URL
+		requestURL.RawQuery = sanitizedAccessLogValues(request.URL.Query()).Encode()
+		cloned.URL = &requestURL
+		cloned.RequestURI = requestURL.RequestURI()
+	}
+	dump, err := httputil.DumpRequest(cloned, false)
+	if err != nil {
+		return "[request metadata unavailable]"
+	}
+	return string(dump)
 }

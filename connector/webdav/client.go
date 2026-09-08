@@ -44,6 +44,8 @@ func (err *UploadError) Error() string {
 
 func (err *UploadError) Unwrap() error { return err.cause }
 
+func (err *UploadError) Retryable() bool { return err != nil && err.retryable }
+
 func NewClient(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		var err error
@@ -100,14 +102,15 @@ func (client *Client) UploadFile(ctx context.Context, config Config, localPath, 
 
 func Retryable(err error) bool {
 	var uploadError *UploadError
-	return !errors.As(err, &uploadError) || uploadError.retryable
+	return !errors.As(err, &uploadError) || uploadError.Retryable()
 }
 
 func destinationURL(baseURL, directory, fileName string) (string, error) {
-	parsed, err := url.ParseRequestURI(strings.TrimSpace(baseURL))
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errors.New("webdav upload: invalid base URL")
+	baseURL, err := NormalizeBaseURL(baseURL)
+	if err != nil {
+		return "", err
 	}
+	parsed, _ := url.ParseRequestURI(baseURL)
 	directory, err = NormalizeDirectory(directory)
 	if err != nil {
 		return "", err
@@ -118,6 +121,19 @@ func destinationURL(baseURL, directory, fileName string) (string, error) {
 	parsed.Path = path.Join(parsed.Path, strings.TrimPrefix(directory, "/"), fileName)
 	parsed.RawPath = ""
 	return parsed.String(), nil
+}
+
+func NormalizeBaseURL(value string) (string, error) {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("webdav upload: invalid base URL")
+	}
+	parsed.Path = path.Clean(parsed.Path)
+	if parsed.Path == "." {
+		parsed.Path = "/"
+	}
+	parsed.RawPath = ""
+	return strings.TrimSuffix(parsed.String(), "/"), nil
 }
 
 func NormalizeDirectory(value string) (string, error) {

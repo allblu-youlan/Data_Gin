@@ -89,15 +89,14 @@ func (planner *OfficePushSchedulePlanner) planLocked(ctx context.Context, tx *go
 	} else if err != nil {
 		return fmt.Errorf("office message schedule planner: read push target: %w", err)
 	}
-	target.BotAppID, err = planner.service.resolveOfficeFeishuBot(target.BotAppID)
-	if err != nil {
-		return planner.advanceInvalidSchedule(tx, schedule, scheduledFor, nextRunAt, "飞书机器人未配置或已失效")
-	}
 	var message model.OfficeMessage
 	if err := tx.Where("id = ? AND enabled = ?", target.MessageID, true).First(&message).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return planner.advanceInvalidSchedule(tx, schedule, scheduledFor, nextRunAt, "消息已停用或不存在")
 	} else if err != nil {
 		return fmt.Errorf("office message schedule planner: read message: %w", err)
+	}
+	if err := planner.service.preparePersistedOfficePushTarget(&target, message); err != nil {
+		return planner.advanceInvalidSchedule(tx, schedule, scheduledFor, nextRunAt, "推送配置凭据未配置或已失效")
 	}
 	parameterValues, err := renderOfficeScheduleParameters(message, schedule.ParametersJSON, scheduledFor)
 	if err != nil {

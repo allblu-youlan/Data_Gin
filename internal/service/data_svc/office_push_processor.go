@@ -15,8 +15,10 @@ import (
 
 	appconfig "gin-biz-web-api/config"
 	"gin-biz-web-api/connector/feishu"
+	webdavconnector "gin-biz-web-api/connector/webdav"
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/reportoracle"
+	"gin-biz-web-api/internal/reportsecret"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/database"
 	projectredis "gin-biz-web-api/pkg/redis"
@@ -55,6 +57,10 @@ type officeOracleConnection interface {
 	Close() error
 }
 
+type officeWebDAVUploader interface {
+	UploadFile(context.Context, webdavconnector.Config, string, string) error
+}
+
 type officeBotFactory func() (officeBot, error)
 type officeOracleOpener func(context.Context, reportoracle.Config) (officeOracleConnection, error)
 
@@ -62,6 +68,8 @@ type OfficePushProcessor struct {
 	db         *gorm.DB
 	newBot     officeBotFactory
 	botAppID   string
+	webDAV     officeWebDAVUploader
+	credential officePushCredentialCipher
 	openOracle officeOracleOpener
 	now        func() time.Time
 	newToken   func() string
@@ -100,7 +108,8 @@ func newOfficePushProcessor(db *gorm.DB, newBot officeBotFactory, openOracle off
 		panic("office push processor: dependencies are required")
 	}
 	processor := &OfficePushProcessor{
-		db: db, newBot: newBot, openOracle: openOracle, now: func() time.Time { return time.Now().UTC() }, newToken: uuid.NewString,
+		db: db, newBot: newBot, webDAV: webdavconnector.NewClient(nil), credential: reportsecret.EnvironmentKeyring{},
+		openOracle: openOracle, now: func() time.Time { return time.Now().UTC() }, newToken: uuid.NewString,
 		leaseTTL: officePushLeaseTTL, heartbeat: officePushHeartbeat, stateLimit: officePushStateTimeout,
 	}
 	if len(botAppIDs) > 0 {
@@ -110,7 +119,7 @@ func newOfficePushProcessor(db *gorm.DB, newBot officeBotFactory, openOracle off
 }
 
 func (processor *OfficePushProcessor) Process(ctx context.Context, runID uint, retryAllowed bool) error {
-	if processor == nil || processor.db == nil || processor.newBot == nil || processor.openOracle == nil || processor.newToken == nil ||
+	if processor == nil || processor.db == nil || processor.newBot == nil || processor.webDAV == nil || processor.credential == nil || processor.openOracle == nil || processor.newToken == nil ||
 		processor.now == nil || processor.leaseTTL <= 0 || processor.heartbeat <= 0 || processor.stateLimit <= 0 || ctx == nil || runID == 0 {
 		return fmt.Errorf("%w: invalid processor request", ErrOfficePushProcessNonRetryable)
 	}
@@ -132,19 +141,21 @@ func (processor *OfficePushProcessor) Process(ctx context.Context, runID uint, r
 		cancelExecution()
 		<-monitorDone
 	}()
-	if !officePushBotMatches(target.BotAppID, processor.botAppID) {
-		return processor.fail(ctx, run.ID, leaseToken, false, "FEISHU_BOT_MISMATCH", "飞书机器人配置已变更，请重新创建推送任务", ErrOfficePushProcessNonRetryable)
-	}
-	bot, err := processor.newBot()
-	if err != nil {
-		return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "FEISHU_CONFIGURATION_INVALID", "飞书机器人配置不可用", err)
-	}
-
 	var messageID string
 	var rowCount int64
-	if message.SourceType == model.OfficeMessageSourceEdited {
-		messageID, err = bot.SendText(executionCtx, target.ReceiveIDType, target.ReceiveID, message.Content, run.RunUUID)
-	} else {
+	switch effectiveOfficePushChannel(target.Channel) {
+	case model.OfficePushChannelFeishu:
+		if !officePushBotMatches(target.BotAppID, processor.botAppID) {
+			return processor.fail(ctx, run.ID, leaseToken, false, "FEISHU_BOT_MISMATCH", "飞书机器人配置已变更，请重新创建推送任务", ErrOfficePushProcessNonRetryable)
+		}
+		bot, botErr := processor.newBot()
+		if botErr != nil {
+			return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "FEISHU_CONFIGURATION_INVALID", "飞书机器人配置不可用", botErr)
+		}
+		if message.SourceType == model.OfficeMessageSourceEdited {
+			messageID, err = bot.SendText(executionCtx, target.ReceiveIDType, target.ReceiveID, message.Content, run.RunUUID)
+			break
+		}
 		path, fileName, exportedRows, exportErr := processor.exportWorkbook(executionCtx, message, run.ParametersJSON, leaseToken)
 		if exportErr != nil {
 			return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "ORACLE_EXPORT_FAILED", "Oracle 数据导出失败", exportErr)
@@ -156,9 +167,32 @@ func (processor *OfficePushProcessor) Process(ctx context.Context, runID uint, r
 			return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "FEISHU_FILE_UPLOAD_FAILED", "飞书文件上传失败", uploadErr)
 		}
 		messageID, err = bot.SendFile(executionCtx, target.ReceiveIDType, target.ReceiveID, fileKey, run.RunUUID)
+	case model.OfficePushChannelWebDAV:
+		if message.SourceType == model.OfficeMessageSourceEdited {
+			return processor.fail(ctx, run.ID, leaseToken, false, "WEBDAV_MESSAGE_INVALID", "WebDAV 推送仅支持 Excel 消息", ErrOfficePushProcessNonRetryable)
+		}
+		path, fileName, exportedRows, exportErr := processor.exportWorkbook(executionCtx, message, run.ParametersJSON, leaseToken)
+		if exportErr != nil {
+			return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "ORACLE_EXPORT_FAILED", "Oracle 数据导出失败", exportErr)
+		}
+		defer os.Remove(path)
+		rowCount = exportedRows
+		password, decryptErr := processor.credential.DecryptScoped(officeWebDAVCredentialPurpose, target.CredentialKeyVersion, target.WebDAVPasswordCiphertext)
+		if decryptErr != nil {
+			return processor.fail(ctx, run.ID, leaseToken, false, "WEBDAV_CREDENTIAL_INVALID", "WebDAV 应用密码不可用", decryptErr)
+		}
+		err = processor.webDAV.UploadFile(executionCtx, webdavconnector.Config{
+			BaseURL: target.WebDAVURL, Username: target.WebDAVUsername, Password: password, Directory: target.WebDAVPath,
+		}, path, fileName)
+	default:
+		return processor.fail(ctx, run.ID, leaseToken, false, "DELIVERY_CHANNEL_INVALID", "推送方式不受支持", ErrOfficePushProcessNonRetryable)
 	}
 	if err != nil {
-		return processor.fail(ctx, run.ID, leaseToken, retryAllowed, "FEISHU_MESSAGE_FAILED", "飞书消息发送失败", err)
+		code, safeMessage := "FEISHU_MESSAGE_FAILED", "飞书消息发送失败"
+		if effectiveOfficePushChannel(target.Channel) == model.OfficePushChannelWebDAV {
+			code, safeMessage = "WEBDAV_UPLOAD_FAILED", "WebDAV 文件上传失败"
+		}
+		return processor.fail(ctx, run.ID, leaseToken, retryAllowed, code, safeMessage, err)
 	}
 	finishedAt := processor.now().UTC()
 	stateCtx, cancelState := processor.stateContext(ctx)
@@ -333,6 +367,10 @@ func officePushRetryable(err error) bool {
 	var botError *feishu.BotError
 	if errors.As(err, &botError) {
 		return botError.Retryable
+	}
+	var retryableError interface{ Retryable() bool }
+	if errors.As(err, &retryableError) {
+		return retryableError.Retryable()
 	}
 	return true
 }

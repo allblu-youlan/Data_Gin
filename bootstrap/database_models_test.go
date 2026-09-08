@@ -39,12 +39,15 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 	}
 }
 
-func TestSchemaMigrationVersionIncludesReportCategoryAccess(t *testing.T) {
-	if schemaMigrationVersion != "2026-09-04-report-category-access-v21" {
+func TestSchemaMigrationVersionIncludesOfficeWebDAV(t *testing.T) {
+	if schemaMigrationVersion != "2026-09-08-office-webdav-v22" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
 	}
-	if previousSchemaMigrationVersion != "2026-09-01-access-permission-v20" {
+	if previousSchemaMigrationVersion != "2026-09-04-report-category-access-v21" {
 		t.Fatalf("previousSchemaMigrationVersion = %q", previousSchemaMigrationVersion)
+	}
+	if accessPermissionMigrationVersion != "2026-09-01-access-permission-v20" {
+		t.Fatalf("accessPermissionMigrationVersion = %q", accessPermissionMigrationVersion)
 	}
 	if officeMessageScheduleMigrationVersion != "2026-09-01-office-message-schedule-v19" {
 		t.Fatalf("officeMessageScheduleMigrationVersion = %q", officeMessageScheduleMigrationVersion)
@@ -76,6 +79,12 @@ func TestOfficeMessagePreferredMigrationBaseline(t *testing.T) {
 		wantVersion     string
 		wantApplied     bool
 	}{
+		{
+			name:            "v21 direct upgrade",
+			appliedVersions: []string{"2026-09-04-report-category-access-v21"},
+			wantVersion:     "2026-09-04-report-category-access-v21",
+			wantApplied:     true,
+		},
 		{
 			name:            "v20 direct upgrade",
 			appliedVersions: []string{"2026-09-01-access-permission-v20"},
@@ -135,8 +144,9 @@ func TestOfficeMessagePreferredMigrationBaseline(t *testing.T) {
 				"2026-09-01-office-message-file-v18",
 				"2026-09-01-office-message-schedule-v19",
 				"2026-09-01-access-permission-v20",
+				"2026-09-04-report-category-access-v21",
 			},
-			wantVersion: "2026-09-01-access-permission-v20",
+			wantVersion: "2026-09-04-report-category-access-v21",
 			wantApplied: true,
 		},
 		{
