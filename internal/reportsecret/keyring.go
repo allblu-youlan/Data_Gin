@@ -52,6 +52,10 @@ func (environment EnvironmentKeyring) Validate() error {
 }
 
 func (environment EnvironmentKeyring) Encrypt(plaintext string) (string, string, error) {
+	return environment.EncryptScoped("report-datasource", plaintext)
+}
+
+func (environment EnvironmentKeyring) EncryptScoped(purpose, plaintext string) (string, string, error) {
 	variable := strings.TrimSpace(environment.Variable)
 	if variable == "" {
 		variable = "REPORT_CREDENTIAL_KEYS_JSON"
@@ -68,7 +72,7 @@ func (environment EnvironmentKeyring) Encrypt(plaintext string) (string, string,
 	if err != nil {
 		return "", "", fmt.Errorf("load report credential keyring: %w", err)
 	}
-	ciphertext, err := keyring.Encrypt(version, plaintext)
+	ciphertext, err := keyring.EncryptScoped(version, purpose, plaintext)
 	if err != nil {
 		return "", "", err
 	}
@@ -76,6 +80,10 @@ func (environment EnvironmentKeyring) Encrypt(plaintext string) (string, string,
 }
 
 func (environment EnvironmentKeyring) Decrypt(version, ciphertext string) (string, error) {
+	return environment.DecryptScoped("report-datasource", version, ciphertext)
+}
+
+func (environment EnvironmentKeyring) DecryptScoped(purpose, version, ciphertext string) (string, error) {
 	variable := strings.TrimSpace(environment.Variable)
 	if variable == "" {
 		variable = "REPORT_CREDENTIAL_KEYS_JSON"
@@ -84,7 +92,7 @@ func (environment EnvironmentKeyring) Decrypt(version, ciphertext string) (strin
 	if err != nil {
 		return "", fmt.Errorf("load report credential keyring: %w", err)
 	}
-	return keyring.Decrypt(version, ciphertext)
+	return keyring.DecryptScoped(version, purpose, ciphertext)
 }
 
 func ParseKeyring(raw string) (*Keyring, error) {

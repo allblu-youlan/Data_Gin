@@ -79,6 +79,24 @@ func TestEnvironmentKeyringEncryptsWithConfiguredCurrentVersion(t *testing.T) {
 	}
 }
 
+func TestEnvironmentKeyringScopesCredentialsByPurpose(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	t.Setenv("TEST_REPORT_KEYS", `{"key-v2":"`+key+`"}`)
+	t.Setenv("TEST_REPORT_KEY_VERSION", "key-v2")
+	environment := EnvironmentKeyring{Variable: "TEST_REPORT_KEYS", VersionVariable: "TEST_REPORT_KEY_VERSION"}
+	version, ciphertext, err := environment.EncryptScoped("office-webdav", "app-password")
+	if err != nil {
+		t.Fatalf("EncryptScoped() error = %v", err)
+	}
+	plaintext, err := environment.DecryptScoped("office-webdav", version, ciphertext)
+	if err != nil || plaintext != "app-password" {
+		t.Fatalf("DecryptScoped() = %q, %v", plaintext, err)
+	}
+	if _, err := environment.Decrypt(version, ciphertext); !errors.Is(err, ErrInvalidCredential) {
+		t.Fatalf("Decrypt() cross-purpose error = %v, want ErrInvalidCredential", err)
+	}
+}
+
 func TestEnvironmentKeyringValidateRejectsMissingCurrentVersion(t *testing.T) {
 	key := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 	t.Setenv("TEST_REPORT_KEYS", `{"key-v1":"`+key+`"}`)
