@@ -51,6 +51,48 @@ func TestReportExportRendererWritesFrozenHeadersTypesAndSafeText(t *testing.T) {
 	}
 }
 
+func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
+	tests := []struct {
+		name          string
+		value         string
+		numberFormat  string
+		wantFormatted string
+	}{
+		{name: "default keeps available decimal places", value: "12.3456", wantFormatted: "12.3456"},
+		{name: "requested format displays two decimal places", value: "12.5", numberFormat: "0.00", wantFormatted: "12.50"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pager := &fakeReportExportPager{pages: []reportoracle.ResultPage{{
+				Columns: []string{"AMOUNT"},
+				Rows:    []reportoracle.ResultRow{{Key: "ROW-A", Values: []interface{}{test.value}}},
+				NextKey: "ROW-A",
+			}}}
+			output := filepath.Join(t.TempDir(), "decimal.xlsx")
+			renderer := NewReportExportRenderer(pager)
+			_, err := renderer.Render(t.Context(), ReportExportRenderRequest{
+				OutputPath: output, decimalNumberFormat: test.numberFormat,
+				Columns: []frozenResultColumn{{
+					FieldID: "1", LogicalCode: "amount", DatabaseColumn: "AMOUNT", ExcelHeader: "金额",
+					ValueType: "decimal", ExportVisible: true, ExportAllowed: true,
+				}},
+			}, nil)
+			if err != nil {
+				t.Fatalf("Render() error=%v", err)
+			}
+			workbook, err := excelize.OpenFile(output)
+			if err != nil {
+				t.Fatalf("OpenFile() error=%v", err)
+			}
+			defer workbook.Close()
+			formatted, err := workbook.GetCellValue("数据", "A2")
+			if err != nil || formatted != test.wantFormatted {
+				t.Fatalf("GetCellValue()=%q error=%v, want %q", formatted, err, test.wantFormatted)
+			}
+		})
+	}
+}
+
 func TestReportExportRendererRejectsNonAdvancingCursor(t *testing.T) {
 	pager := &fakeReportExportPager{pages: []reportoracle.ResultPage{{
 		Columns: []string{"CODE"}, Rows: []reportoracle.ResultRow{{Key: "ROW-A", Values: []interface{}{"a"}}}, NextKey: "ROW-A", HasNext: true,

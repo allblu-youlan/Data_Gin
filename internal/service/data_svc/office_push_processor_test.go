@@ -207,6 +207,15 @@ func TestRenderOfficeWorkbookFileNameUsesShanghaiDate(t *testing.T) {
 	}
 }
 
+func TestOfficeWorkbookRenderRequestUsesTwoDecimalPlaces(t *testing.T) {
+	request := officeWorkbookRenderRequest([]OfficeColumnMapping{{
+		SourceColumn: "AMOUNT", Header: "金额", ValueType: "decimal", Width: 18,
+	}}, "report.xlsx")
+	if request.decimalNumberFormat != "0.00" || len(request.Columns) != 1 || request.Columns[0].ValueType != "decimal" {
+		t.Fatalf("officeWorkbookRenderRequest()=%#v", request)
+	}
+}
+
 func TestRenderOfficeWorkbookFileNameSupportsLegacyFallback(t *testing.T) {
 	name, err := renderOfficeWorkbookFileName("", "线下/销售", time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil || name != "线下-销售.xlsx" {

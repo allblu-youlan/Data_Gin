@@ -23,14 +23,15 @@ import (
 )
 
 const (
-	reportExportPageSize     = 1000
-	reportExportProgressRows = int64(1000)
-	reportExcelMaxRows       = 1_048_576
-	reportExcelMaxDataRows   = reportExcelMaxRows - 1
-	reportExcelMaxSheets     = 256
-	reportExcelMaxCellRunes  = 32_767
-	reportExcelDefaultWidth  = 18
-	reportExcelMaximumWidth  = 80
+	reportExportPageSize           = 1000
+	reportExportProgressRows       = int64(1000)
+	reportExcelMaxRows             = 1_048_576
+	reportExcelMaxDataRows         = reportExcelMaxRows - 1
+	reportExcelMaxSheets           = 256
+	reportExcelMaxCellRunes        = 32_767
+	reportExcelDefaultWidth        = 18
+	reportExcelMaximumWidth        = 80
+	reportExcelDecimalNumberFormat = "0.################"
 )
 
 type reportExportPageReader interface {
@@ -38,8 +39,9 @@ type reportExportPageReader interface {
 }
 
 type ReportExportRenderRequest struct {
-	Columns    []frozenResultColumn
-	OutputPath string
+	Columns             []frozenResultColumn
+	OutputPath          string
+	decimalNumberFormat string
 }
 
 type ReportExportRenderProgress struct {
@@ -139,7 +141,7 @@ func (renderer *ReportExportRenderer) Render(
 		}
 	}()
 
-	styles, err := newReportExportStyles(file)
+	styles, err := newReportExportStyles(file, request.decimalNumberFormat)
 	if err != nil {
 		return result, err
 	}
@@ -294,7 +296,10 @@ type reportExportStyles struct {
 	datetime int
 }
 
-func newReportExportStyles(file *excelize.File) (reportExportStyles, error) {
+func newReportExportStyles(file *excelize.File, decimalNumberFormat string) (reportExportStyles, error) {
+	if decimalNumberFormat == "" {
+		decimalNumberFormat = reportExcelDecimalNumberFormat
+	}
 	styles := reportExportStyles{}
 	definitions := []struct {
 		destination *int
@@ -303,7 +308,7 @@ func newReportExportStyles(file *excelize.File) (reportExportStyles, error) {
 		{&styles.header, &excelize.Style{Font: &excelize.Font{Bold: true, Color: "#FFFFFF"}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#FF9D0A"}, Pattern: 1}, Alignment: &excelize.Alignment{Vertical: "center", WrapText: true}}},
 		{&styles.text, &excelize.Style{NumFmt: 49}},
 		{&styles.integer, &excelize.Style{CustomNumFmt: stringPointer("0")}},
-		{&styles.decimal, &excelize.Style{CustomNumFmt: stringPointer("0.################")}},
+		{&styles.decimal, &excelize.Style{CustomNumFmt: stringPointer(decimalNumberFormat)}},
 		{&styles.date, &excelize.Style{CustomNumFmt: stringPointer("yyyy-mm-dd")}},
 		{&styles.datetime, &excelize.Style{CustomNumFmt: stringPointer("yyyy-mm-dd hh:mm:ss")}},
 	}

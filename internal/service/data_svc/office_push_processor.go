@@ -29,11 +29,12 @@ import (
 )
 
 const (
-	officePushMaximumRows  = int64(100_000)
-	officePushLeaseTTL     = 5 * time.Minute
-	officePushHeartbeat    = time.Minute
-	officePushStateTimeout = 5 * time.Second
-	officeProcedureLockTTL = 2 * officePushLeaseTTL
+	officePushMaximumRows     = int64(100_000)
+	officePushLeaseTTL        = 5 * time.Minute
+	officePushHeartbeat       = time.Minute
+	officePushStateTimeout    = 5 * time.Second
+	officeProcedureLockTTL    = 2 * officePushLeaseTTL
+	officeDecimalNumberFormat = "0.00"
 )
 
 var ErrOfficePushProcessNonRetryable = errors.New("office push processor: non-retryable")
@@ -444,8 +445,7 @@ func (processor *OfficePushProcessor) exportWorkbook(ctx context.Context, messag
 	outputPath := filepath.Join(tempDir, fileName)
 	renderer := NewReportExportRenderer(pager)
 	renderer.maxSheets = 1
-	columns := officeFrozenColumns(mappings)
-	result, err := renderer.Render(queryCtx, ReportExportRenderRequest{Columns: columns, OutputPath: outputPath}, nil)
+	result, err := renderer.Render(queryCtx, officeWorkbookRenderRequest(mappings, outputPath), nil)
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -751,6 +751,14 @@ func officeFrozenColumns(mappings []OfficeColumnMapping) []frozenResultColumn {
 		}
 	}
 	return columns
+}
+
+func officeWorkbookRenderRequest(mappings []OfficeColumnMapping, outputPath string) ReportExportRenderRequest {
+	return ReportExportRenderRequest{
+		Columns:             officeFrozenColumns(mappings),
+		OutputPath:          outputPath,
+		decimalNumberFormat: officeDecimalNumberFormat,
+	}
 }
 
 func officeSourceColumns(mappings []OfficeColumnMapping) []string {
