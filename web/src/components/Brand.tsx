@@ -25,8 +25,7 @@ export function Brand({
 
   return (
     <div className={classes} data-compact={compact || undefined} {...props}>
-      <img className={styles.logo} src="/logo.jpg" alt={logoAlt} />
-      <span className={styles.name}>Allblu</span>
+      <img className={styles.logo} src="/allblu-logo-9772212d.jpg" alt={logoAlt} />
     </div>
   )
 }

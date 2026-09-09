@@ -1,47 +1,24 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   color: var(--color-text);
 }
 
 .logo {
-  width: 32px;
+  width: 76px;
   height: 32px;
-  flex: 0 0 32px;
+  flex: 0 0 76px;
   object-fit: cover;
 }
 
-.name {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.small {
-  gap: var(--space-2);
-}
-
 .small .logo {
-  width: 26px;
+  width: 62px;
   height: 26px;
-  flex-basis: 26px;
-}
-
-.small .name {
-  font-size: 16px;
+  flex-basis: 62px;
 }
 
 .large .logo {
-  width: 42px;
+  width: 100px;
   height: 42px;
-  flex-basis: 42px;
-}
-
-.large .name {
-  font-size: 28px;
-}
-
-.compact .name {
-  display: none;
+  flex-basis: 100px;
 }
