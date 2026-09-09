@@ -43,7 +43,7 @@ export function ConsoleNavigation({
 
   return (
     <>
-      <Brand className={styles.brand} size="large" />
+      <Brand className={styles.brand} size="medium" />
       <button
         className={styles.mobileToggle}
         type="button"

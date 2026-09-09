@@ -9,8 +9,8 @@ import { Brand } from '../.test-dist/Brand.js'
 test('renders the accessible Allblu wordmark', () => {
   const markup = renderToStaticMarkup(createElement(Brand, { size: 'large' }))
 
-  assert.match(markup, /src="\/allblu-logo-9772212d\.jpg"/)
+  assert.match(markup, /src="\/allblu-logo-33c47dd4\.png"/)
   assert.match(markup, /alt="Allblu Logo"/)
   assert.equal((markup.match(/Allblu/g) ?? []).length, 1)
-  assert.equal(existsSync(new URL('../public/allblu-logo-9772212d.jpg', import.meta.url)), true)
+  assert.equal(existsSync(new URL('../public/allblu-logo-33c47dd4.png', import.meta.url)), true)
 })
