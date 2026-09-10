@@ -19,6 +19,10 @@ import (
 
 // setupCrontab 启动定时任务
 func setupCrontab() {
+	if !config.GetBool("cfg.queue_job.crontab_enabled") {
+		console.Info("Crontab disabled for this process role")
+		return
+	}
 
 	console.Info("Crontab Start ...")
 

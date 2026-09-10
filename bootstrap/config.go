@@ -31,6 +31,9 @@ func setupConfig() {
 	// 加载配置文件
 	pkgConfig.NewConfig(global.Env, strings.Split(global.ConfigPath, ",")...)
 
+	if err := validateQueueRuntimeFlags(); err != nil {
+		console.Exit("invalid queue runtime configuration: %v", err)
+	}
 	if err := validateMallWeatherConfig(); err != nil {
 		console.Exit("invalid mall weather configuration: %v", err)
 	}
@@ -51,6 +54,23 @@ func setupConfig() {
 	global.Credentials = credentials
 	logCredentialStatus(credentials)
 
+}
+
+func validateQueueRuntimeFlags() error {
+	for _, name := range []string{
+		appConfig.EnvQueueWorkerEnabled,
+		appConfig.EnvQueueSchedulerEnabled,
+		appConfig.EnvCrontabEnabled,
+	} {
+		raw, exists := os.LookupEnv(name)
+		if !exists || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		if _, err := strconv.ParseBool(strings.TrimSpace(raw)); err != nil {
+			return fmt.Errorf("%s must be a boolean", name)
+		}
+	}
+	return nil
 }
 
 func validateReportCenterFlags() error {

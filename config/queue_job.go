@@ -10,7 +10,12 @@ import (
 	"github.com/spf13/cast"
 )
 
-const EnvReportWorkerEnabled = "REPORT_WORKER_ENABLED"
+const (
+	EnvReportWorkerEnabled   = "REPORT_WORKER_ENABLED"
+	EnvQueueWorkerEnabled    = "QUEUE_WORKER_ENABLED"
+	EnvQueueSchedulerEnabled = "QUEUE_SCHEDULER_ENABLED"
+	EnvCrontabEnabled        = "CRONTAB_ENABLED"
+)
 
 func init() {
 
@@ -25,6 +30,9 @@ func init() {
 			"delivery":        2,
 		}
 		return map[string]interface{}{
+			"worker_enabled":    queueRuntimeEnabled(EnvQueueWorkerEnabled, "QueueJob.WorkerEnabled", true),
+			"scheduler_enabled": queueRuntimeEnabled(EnvQueueSchedulerEnabled, "QueueJob.SchedulerEnabled", true),
+			"crontab_enabled":   queueRuntimeEnabled(EnvCrontabEnabled, "QueueJob.CrontabEnabled", true),
 			"redis": map[string]interface{}{
 				"host":     config.Get("QueueJob.Redis.Host", "127.0.0.1"),
 				"port":     config.Get("QueueJob.Redis.Port", 6379),
@@ -71,6 +79,21 @@ func init() {
 		}
 	})
 
+}
+
+func queueRuntimeEnabled(environmentName, configPath string, fallback bool) bool {
+	raw, exists := os.LookupEnv(environmentName)
+	if exists && strings.TrimSpace(raw) != "" {
+		enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
+		if err != nil {
+			return false
+		}
+		return enabled
+	}
+	if instance := config.Instance(); instance != nil && instance.IsSet(configPath) {
+		return instance.GetBool(configPath)
+	}
+	return fallback
 }
 
 func reportWorkerEnabled() bool {

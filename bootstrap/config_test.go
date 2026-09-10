@@ -177,3 +177,21 @@ func TestValidateMallWeatherConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateQueueRuntimeFlags(t *testing.T) {
+	for _, name := range []string{
+		appConfig.EnvQueueWorkerEnabled,
+		appConfig.EnvQueueSchedulerEnabled,
+		appConfig.EnvCrontabEnabled,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(appConfig.EnvQueueWorkerEnabled, "")
+			t.Setenv(appConfig.EnvQueueSchedulerEnabled, "")
+			t.Setenv(appConfig.EnvCrontabEnabled, "")
+			t.Setenv(name, "sometimes")
+			if err := validateQueueRuntimeFlags(); err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("validateQueueRuntimeFlags() error=%v want=%s", err, name)
+			}
+		})
+	}
+}

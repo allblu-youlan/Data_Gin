@@ -34,6 +34,10 @@ func setupQueueJob() {
 
 	client := jobPkg.NewAsynqClient(redisAddr, redisUsername, redisPassword, redisDB)
 	global.QueueJobClient = client
+	if !config.GetBool("cfg.queue_job.worker_enabled") {
+		console.Info("Queue Job workers disabled for this process role")
+		return
+	}
 
 	reportWorkerEnabled := global.ReportCenterEnabledAtStartup
 	serverSpecs := queueJobServerSpecs(

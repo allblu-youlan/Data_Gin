@@ -22,12 +22,19 @@ func NewTask(timezone string) *cron.Cron {
 		cron.WithLocation(chinaTimezone), // 设置时区
 		cron.WithSeconds(),               // 支持秒级颗粒度
 		cron.WithChain( // job 中间件
-			cron.Recover(l), // 捕捉内部 job 产生的 panic
+			cronJobChain(l)...,
 		),
 		cron.WithLogger(l), // 自定义日志
 	)
 
 	return Task
+}
+
+func cronJobChain(logger cron.Logger) []cron.JobWrapper {
+	return []cron.JobWrapper{
+		cron.Recover(logger),
+		cron.SkipIfStillRunning(logger),
+	}
 }
 
 type lg struct {

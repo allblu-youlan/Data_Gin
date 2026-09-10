@@ -14,6 +14,10 @@ import (
 )
 
 func setupScheduler() {
+	if !config.GetBool("cfg.queue_job.scheduler_enabled") {
+		console.Info("Scheduler disabled for this process role")
+		return
+	}
 	console.Info("Scheduler Start ...")
 
 	redisHost := config.GetString("cfg.queue_job.redis.host")
