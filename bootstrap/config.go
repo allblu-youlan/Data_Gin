@@ -72,6 +72,11 @@ func validateMallWeatherConfig() error {
 			return fmt.Errorf("%s must be a boolean", appConfig.EnvMallWeatherEnabled)
 		}
 	}
+	if raw, exists := os.LookupEnv(appConfig.EnvMallWeatherRepairEnabled); exists && strings.TrimSpace(raw) != "" {
+		if _, err := strconv.ParseBool(strings.TrimSpace(raw)); err != nil {
+			return fmt.Errorf("%s must be a boolean", appConfig.EnvMallWeatherRepairEnabled)
+		}
+	}
 	if raw, exists := os.LookupEnv(appConfig.EnvCaiyunQPS); exists && strings.TrimSpace(raw) != "" {
 		qps, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
 		if err != nil || math.IsNaN(qps) || math.IsInf(qps, 0) {

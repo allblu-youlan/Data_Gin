@@ -63,7 +63,7 @@ func TestMallWeatherTaskConstructorsUseNonSensitivePayloads(t *testing.T) {
 }
 
 func TestMallWeatherScheduleDefinitionsCoverProfiles(t *testing.T) {
-	definitions, err := MallWeatherScheduleDefinitions("*/10 * * * *", "7 * * * *")
+	definitions, err := MallWeatherScheduleDefinitions("*/10 * * * *", "7 * * * *", true)
 	if err != nil {
 		t.Fatalf("MallWeatherScheduleDefinitions() error=%v", err)
 	}
@@ -86,6 +86,21 @@ func TestMallWeatherScheduleDefinitionsCoverProfiles(t *testing.T) {
 	}
 	if definitions[len(definitions)-1].Payload.TaskType != TypeMallWeatherRepair || definitions[len(definitions)-1].CronExpr != "*/15 * * * *" {
 		t.Fatalf("repair definition=%+v", definitions[len(definitions)-1])
+	}
+}
+
+func TestMallWeatherScheduleDefinitionsOmitRepairWhenDisabled(t *testing.T) {
+	definitions, err := MallWeatherScheduleDefinitions("*/10 * * * *", "7 * * * *", false)
+	if err != nil {
+		t.Fatalf("MallWeatherScheduleDefinitions() error=%v", err)
+	}
+	if len(definitions) != 6 {
+		t.Fatalf("definitions=%v", definitions)
+	}
+	for _, definition := range definitions {
+		if definition.Payload.TaskType == TypeMallWeatherRepair {
+			t.Fatalf("disabled repair schedule was registered: %+v", definition)
+		}
 	}
 }
 

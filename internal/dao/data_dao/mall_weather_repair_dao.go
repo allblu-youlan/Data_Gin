@@ -9,7 +9,7 @@ import (
 	"gin-biz-web-api/model"
 )
 
-const weatherRepairCandidateQuery = `SELECT runs.*
+const weatherRepairCandidateQuery = `SELECT /*+ MAX_EXECUTION_TIME(5000) */ runs.*
 FROM mall_weather_fetch_runs AS runs
 INNER JOIN malls AS mall ON mall.id = runs.mall_id AND mall.deleted_at IS NULL
 WHERE runs.id > ?

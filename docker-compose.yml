@@ -69,6 +69,7 @@ services:
       - REPORT_WORKER_ENABLED=${REPORT_WORKER_ENABLED:-true}
       - REPORT_RUN_WORKER_CONCURRENCY=${REPORT_RUN_WORKER_CONCURRENCY:-4}
       - REPORT_EXPORT_WORKER_CONCURRENCY=${REPORT_EXPORT_WORKER_CONCURRENCY:-2}
+      - MALL_WEATHER_REPAIR_ENABLED=${MALL_WEATHER_REPAIR_ENABLED:-false}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8501/api/ready"]
       interval: 3s

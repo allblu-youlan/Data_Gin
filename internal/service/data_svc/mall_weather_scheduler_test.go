@@ -95,6 +95,24 @@ func TestMallWeatherSchedulePlannerCreatesBoundedRepairOutboxes(t *testing.T) {
 	}
 }
 
+func TestMallWeatherSchedulePlannerSkipsDisabledRepairWithoutDatabaseWork(t *testing.T) {
+	store := &fakeMallWeatherScheduleStore{
+		repairListErr: errors.New("repair query must not run"),
+		reconcileErr:  errors.New("freshness reconciliation must not run"),
+	}
+	planner, err := newMallWeatherSchedulePlanner(store, time.Now, time.UTC)
+	if err != nil {
+		t.Fatalf("newMallWeatherSchedulePlanner() error=%v", err)
+	}
+	planner.repairEnabled = false
+	if err := planner.Plan(t.Context(), job.MallWeatherSchedulePayload{TaskType: job.TypeMallWeatherRepair}); err != nil {
+		t.Fatalf("Plan(disabled repair) error=%v", err)
+	}
+	if !store.reconciledAt.IsZero() || len(store.rows) != 0 {
+		t.Fatalf("disabled repair touched store: reconciled=%s rows=%+v", store.reconciledAt, store.rows)
+	}
+}
+
 func TestMallWeatherSchedulePlannerTimesOutRepairCandidateQuery(t *testing.T) {
 	store := &fakeMallWeatherScheduleStore{
 		repairList: func(ctx context.Context, _ uint, _ int) ([]model.MallWeatherFetchRun, error) {

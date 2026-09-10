@@ -15,6 +15,7 @@ func TestValidateMallWeatherConfig(t *testing.T) {
 		name         string
 		yaml         string
 		enabledEnv   string
+		repairEnv    string
 		qpsEnv       string
 		checkEnabled bool
 		wantEnabled  bool
@@ -93,6 +94,11 @@ func TestValidateMallWeatherConfig(t *testing.T) {
 			enabledEnv: "sometimes", wantError: "MALL_WEATHER_ENABLED",
 		},
 		{
+			name:      "invalid repair environment flag fails closed",
+			yaml:      "App:\n  Env: local\n",
+			repairEnv: "sometimes", wantError: "MALL_WEATHER_REPAIR_ENABLED",
+		},
+		{
 			name:      "task timeout must exceed fetch timeout",
 			yaml:      "MallWeather:\n  Enabled: true\n  FetchTimeoutSeconds: 30\n  TaskTimeoutSeconds: 30\nCaiyun:\n  QPS: 2\n",
 			wantError: "task timeout",
@@ -137,6 +143,7 @@ func TestValidateMallWeatherConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(appConfig.EnvMallWeatherEnabled, tt.enabledEnv)
+			t.Setenv(appConfig.EnvMallWeatherRepairEnabled, tt.repairEnv)
 			t.Setenv(appConfig.EnvCaiyunQPS, tt.qpsEnv)
 			configDir := t.TempDir()
 			configFile := filepath.Join(configDir, "config.yaml")

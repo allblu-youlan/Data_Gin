@@ -54,6 +54,7 @@ type MallWeatherSchedulePlanner struct {
 	repairMaxRounds int
 	repairSpread    time.Duration
 	databaseTimeout time.Duration
+	repairEnabled   bool
 }
 
 func NewMallWeatherSchedulePlanner() (*MallWeatherSchedulePlanner, error) {
@@ -71,6 +72,7 @@ func NewMallWeatherSchedulePlanner() (*MallWeatherSchedulePlanner, error) {
 	planner.repairMaxRounds = config.GetInt("cfg.mall_weather.repair_max_rounds")
 	planner.repairSpread = time.Duration(config.GetInt("cfg.mall_weather.repair_spread_seconds")) * time.Second
 	planner.databaseTimeout = time.Duration(config.GetInt("cfg.mall_weather.schedule_db_timeout_seconds")) * time.Second
+	planner.repairEnabled = config.GetBool("cfg.mall_weather.repair_enabled")
 	if planner.repairMaxRounds < 1 || planner.repairMaxRounds > 10 || planner.repairSpread < 0 || planner.repairSpread > time.Hour ||
 		planner.databaseTimeout < time.Second || planner.databaseTimeout > time.Minute {
 		return nil, fmt.Errorf("mall weather scheduler: invalid repair configuration")
@@ -84,7 +86,7 @@ func newMallWeatherSchedulePlanner(store mallWeatherScheduleStore, now func() ti
 	}
 	return &MallWeatherSchedulePlanner{
 		store: store, now: now, location: location,
-		repairMaxRounds: 3, repairSpread: 15 * time.Minute, databaseTimeout: defaultScheduleDBTimeout,
+		repairMaxRounds: 3, repairSpread: 15 * time.Minute, databaseTimeout: defaultScheduleDBTimeout, repairEnabled: true,
 	}, nil
 }
 
@@ -102,6 +104,9 @@ func (planner *MallWeatherSchedulePlanner) Plan(ctx context.Context, payload job
 	}
 	scheduledAt := planner.now().UTC()
 	if payload.TaskType == job.TypeMallWeatherRepair {
+		if !planner.repairEnabled {
+			return nil
+		}
 		return planner.planRepairs(ctx, scheduledAt)
 	}
 	var afterID uint

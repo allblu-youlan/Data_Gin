@@ -8,12 +8,16 @@ import (
 	"gin-biz-web-api/pkg/config"
 )
 
-const EnvMallWeatherEnabled = "MALL_WEATHER_ENABLED"
+const (
+	EnvMallWeatherEnabled       = "MALL_WEATHER_ENABLED"
+	EnvMallWeatherRepairEnabled = "MALL_WEATHER_REPAIR_ENABLED"
+)
 
 func init() {
 	config.Add("cfg.mall_weather", func() map[string]interface{} {
 		return map[string]interface{}{
 			"enabled":                         mallWeatherEnabled(),
+			"repair_enabled":                  mallWeatherRepairEnabled(),
 			"feishu_enabled":                  config.Get("MallWeather.FeishuEnabled", false),
 			"provider":                        config.Get("MallWeather.Provider", "caiyun"),
 			"coverage_radius_m":               config.Get("MallWeather.CoverageRadiusM", 1000),
@@ -52,6 +56,19 @@ func init() {
 func mallWeatherEnabled() bool {
 	fallback := config.GetBool("MallWeather.Enabled", false)
 	raw, exists := os.LookupEnv(EnvMallWeatherEnabled)
+	if !exists || strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+func mallWeatherRepairEnabled() bool {
+	fallback := config.GetBool("MallWeather.RepairEnabled", false)
+	raw, exists := os.LookupEnv(EnvMallWeatherRepairEnabled)
 	if !exists || strings.TrimSpace(raw) == "" {
 		return fallback
 	}

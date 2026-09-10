@@ -13,6 +13,7 @@ import (
 func TestBuildWeatherRepairCandidateQueryUsesLatestEligibleRun(t *testing.T) {
 	statement, args := buildWeatherRepairCandidateQuery(42, 900)
 	for _, required := range []string{
+		"MAX_EXECUTION_TIME(5000)",
 		"runs.id > ?",
 		"runs.id = (",
 		"SELECT MAX(newest.id)",

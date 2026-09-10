@@ -181,25 +181,30 @@ func NewMallWeatherScheduleTask(payload MallWeatherSchedulePayload) (*asynq.Task
 		TypeMallWeatherSchedule,
 		data,
 		asynq.Queue(MallWeatherQueueName),
-		asynq.MaxRetry(2),
+		asynq.MaxRetry(0),
 		asynq.Timeout(15*time.Minute),
 		asynq.Unique(30*time.Second),
 	), nil
 }
 
-func MallWeatherScheduleDefinitions(fastCron, fullCron string) ([]MallWeatherScheduleDefinition, error) {
+func MallWeatherScheduleDefinitions(fastCron, fullCron string, repairEnabled bool) ([]MallWeatherScheduleDefinition, error) {
 	if strings.TrimSpace(fastCron) == "" || strings.TrimSpace(fullCron) == "" {
 		return nil, fmt.Errorf("mall weather task: schedule cron is required")
 	}
-	return []MallWeatherScheduleDefinition{
+	definitions := []MallWeatherScheduleDefinition{
 		{CronExpr: fastCron, Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFast, DetailProfile: "full"}},
 		{CronExpr: "*/15 * * * *", Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFast, DetailProfile: "standard"}},
 		{CronExpr: "0 * * * *", Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFast, DetailProfile: "economy"}},
 		{CronExpr: fullCron, Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFull, DetailProfile: "full"}},
 		{CronExpr: fullCron, Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFull, DetailProfile: "standard"}},
 		{CronExpr: "7 */3 * * *", Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFull, DetailProfile: "economy"}},
-		{CronExpr: "*/15 * * * *", Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherRepair}},
-	}, nil
+	}
+	if repairEnabled {
+		definitions = append(definitions, MallWeatherScheduleDefinition{
+			CronExpr: "*/15 * * * *", Payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherRepair},
+		})
+	}
+	return definitions, nil
 }
 
 func DecodeMallWeatherSchedulePayload(payload []byte) (MallWeatherSchedulePayload, error) {
