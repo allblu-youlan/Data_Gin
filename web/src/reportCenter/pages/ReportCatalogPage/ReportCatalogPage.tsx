@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { FileText, Plus, RefreshCcw, Rocket, Search, Trash2, X } from 'lucide-react'
+import { FileText, GitCompareArrows, Plus, RefreshCcw, Search, Trash2, X } from 'lucide-react'
 import { Button, DataTable, Dialog, FeedbackState, FilterToolbar, MetricStrip, PageCanvas, PageHeader, Section, StatusTag, type StatusTagTone } from '../../../ui'
-import { deleteReportDraft, publishReportDraft, type ReportCenterClient } from '../../api'
+import { deleteReportDraft, type ReportCenterClient } from '../../api'
 import { ReportConfigDrawer } from '../../components/ReportConfigDrawer/ReportConfigDrawer'
 import { ReportValidationResultDrawer } from '../../components/ReportValidationResultDrawer/ReportValidationResultDrawer'
+import { ReportVersionDrawer } from '../../components/ReportVersionDrawer/ReportVersionDrawer'
 import type { ReportPublication, ReportSummary } from '../../types'
 import { useReportCatalog } from '../../useReportCatalog'
 import { useReportDatasources } from '../../useReportDatasources'
@@ -14,11 +15,10 @@ export function ReportCatalogPage({ client, canManage, navigation }: { client: R
   const [search, setSearch] = useState('')
   const [drawerState, setDrawerState] = useState<{ open: boolean; report: ReportSummary | null }>({ open: false, report: null })
   const [publication, setPublication] = useState<ReportPublication | null>(null)
+  const [versionReport, setVersionReport] = useState<ReportSummary | null>(null)
   const [pendingDelete, setPendingDelete] = useState<ReportSummary | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-  const [publishingId, setPublishingId] = useState<number | null>(null)
-  const [publishError, setPublishError] = useState('')
   const refreshButtonRef = useRef<HTMLButtonElement>(null)
   const query = useMemo(() => ({ search, limit: 50 }), [search])
   const { items, loading, loadingMore, error, hasMore, reload, loadMore } = useReportCatalog(client, query)
@@ -36,21 +36,6 @@ export function ReportCatalogPage({ client, canManage, navigation }: { client: R
     }
     setPendingDelete(null)
     setDeleting(false)
-    reload()
-  }
-
-  async function publish(report: ReportSummary) {
-    if (publishingId !== null || report.status !== 'DRAFT' || !report.isOwner) return
-    setPublishingId(report.id)
-    setPublishError('')
-    const result = await publishReportDraft(client, report.id, report.lockVersion)
-    if (!result.ok) {
-      setPublishError(result.error)
-      setPublishingId(null)
-      return
-    }
-    setPublication(result.data)
-    setPublishingId(null)
     reload()
   }
 
@@ -74,12 +59,12 @@ export function ReportCatalogPage({ client, canManage, navigation }: { client: R
       <Section title="已登记报表" description="目录只展示后端真实返回的数据，不创建演示记录。" flush>
         {loading && items.length === 0 ? <FeedbackState kind="loading" title="正在加载报表目录" description="正在请求 GET /v1/reports。" /> : null}
         {error ? <FeedbackState kind="error" title="报表目录加载失败" description={error} action={<button type="button" onClick={reload}>重试</button>} /> : null}
-        {publishError ? <FeedbackState kind="error" title="报表上线失败" description={publishError} /> : null}
         {!loading && !error && items.length === 0 ? <FeedbackState kind="empty" title="暂无报表" description="后端尚未返回可查看的报表定义。" action={canManage ? <button type="button" onClick={() => setDrawerState({ open: true, report: null })}>创建第一份报表</button> : null} /> : null}
-        {items.length > 0 ? <ReportTable reports={items} publishingId={publishingId} onPublish={canManage ? (report) => void publish(report) : undefined} onEdit={canManage ? (report) => setDrawerState({ open: true, report }) : undefined} onDelete={canManage ? (report) => { setDeleteError(''); setPendingDelete(report) } : undefined} /> : null}
+        {items.length > 0 ? <ReportTable reports={items} onVersions={canManage ? setVersionReport : undefined} onEdit={canManage ? (report) => setDrawerState({ open: true, report }) : undefined} onDelete={canManage ? (report) => { setDeleteError(''); setPendingDelete(report) } : undefined} /> : null}
         {items.length > 0 && hasMore ? <div className={styles.pagination}><button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '正在加载…' : '加载更多报表'}</button></div> : null}
       </Section>
       {drawerState.open ? <ReportConfigDrawer client={client} report={drawerState.report} datasources={datasources.items} datasourcesLoading={datasources.loading} datasourcesError={datasources.error} onPublished={setPublication} onSaved={reload} onClose={() => setDrawerState({ open: false, report: null })} /> : null}
+      <ReportVersionDrawer client={client} report={versionReport} onPublished={setPublication} onChanged={reload} onClose={() => setVersionReport(null)} />
       <ReportValidationResultDrawer publication={publication} onClose={() => setPublication(null)} />
       <Dialog open={Boolean(pendingDelete)} role="alertdialog" title="删除报表模板" description={pendingDelete ? `确认删除“${pendingDelete.name}”？` : undefined} closeDisabled={deleting} returnFocus={refreshButtonRef.current} onClose={() => { setDeleteError(''); setPendingDelete(null) }} footer={<><button type="button" disabled={deleting} onClick={() => { setDeleteError(''); setPendingDelete(null) }}>取消</button><Button variant="danger" disabled={deleting} onClick={() => void confirmDelete()}>{deleting ? '删除中…' : '确认删除'}</Button></>}>
         <p className={styles.dangerNotice}>仅未发布且从未运行的草稿模板可以删除。删除后无法恢复，已发布报表及运行历史不会被删除。</p>
@@ -89,8 +74,8 @@ export function ReportCatalogPage({ client, canManage, navigation }: { client: R
   )
 }
 
-function ReportTable({ reports, publishingId, onPublish, onEdit, onDelete }: { reports: ReportSummary[]; publishingId: number | null; onPublish?: (report: ReportSummary) => void; onEdit?: (report: ReportSummary) => void; onDelete?: (report: ReportSummary) => void }) {
-  return <DataTable minWidth={1040} scrollLabel="报表目录列表"><thead><tr><th scope="col">报表</th><th scope="col">分类</th><th scope="col">数据源</th><th scope="col">版本</th><th scope="col">状态</th><th scope="col">更新时间</th><th scope="col">操作</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><span className={styles.reportName}><FileText aria-hidden="true" /><span><strong>{report.name}</strong><code>{report.code}</code></span></span></td><td>{report.category || '未分类'}</td><td>{report.datasourceId ? <span className={styles.datasource}>Oracle <code>#{report.datasourceId}</code></span> : report.isOwner ? '-' : <StatusTag tone="info">共享</StatusTag>}</td><td>{report.currentPublishedVersionId ? `已发布 #${report.currentPublishedVersionId}` : report.lockVersion ? `草稿 v${report.lockVersion}` : report.currentDraftVersionId ? `草稿 #${report.currentDraftVersionId}` : '-'}</td><td><StatusTag tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusTag></td><td>{formatDate(report.updatedAt)}</td><td><div className={styles.actions}>{report.isOwner && report.status === 'DRAFT' && onPublish ? <Button variant="primary" type="button" onClick={() => onPublish(report)} disabled={publishingId !== null}><Rocket aria-hidden="true" />{publishingId === report.id ? '上线中…' : '上线'}</Button> : null}{report.isOwner ? <button type="button" onClick={() => onEdit?.(report)} disabled={!onEdit || publishingId !== null}>编辑配置</button> : <span className={styles.readOnly}>只读</span>}{report.isOwner && onDelete ? <Button variant="danger" title={report.status === 'DRAFT' ? '删除报表模板' : '已发布报表不能删除'} type="button" onClick={() => onDelete(report)} disabled={report.status !== 'DRAFT' || publishingId !== null}><Trash2 aria-hidden="true" />删除模板</Button> : null}</div></td></tr>)}</tbody></DataTable>
+function ReportTable({ reports, onVersions, onEdit, onDelete }: { reports: ReportSummary[]; onVersions?: (report: ReportSummary) => void; onEdit?: (report: ReportSummary) => void; onDelete?: (report: ReportSummary) => void }) {
+  return <DataTable minWidth={1040} scrollLabel="报表目录列表"><thead><tr><th scope="col">报表</th><th scope="col">分类</th><th scope="col">数据源</th><th scope="col">版本</th><th scope="col">状态</th><th scope="col">更新时间</th><th scope="col">操作</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><span className={styles.reportName}><FileText aria-hidden="true" /><span><strong>{report.name}</strong><code>{report.code}</code></span></span></td><td>{report.category || '未分类'}</td><td>{report.datasourceId ? <span className={styles.datasource}>Oracle <code>#{report.datasourceId}</code></span> : report.isOwner ? '-' : <StatusTag tone="info">共享</StatusTag>}</td><td>{report.currentPublishedVersionId ? `已发布 #${report.currentPublishedVersionId}` : report.lockVersion ? `草稿 v${report.lockVersion}` : report.currentDraftVersionId ? `草稿 #${report.currentDraftVersionId}` : '-'}</td><td><StatusTag tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusTag></td><td>{formatDate(report.updatedAt)}</td><td><div className={styles.actions}>{report.isOwner && onVersions ? <Button variant="primary" type="button" onClick={() => onVersions(report)}><GitCompareArrows aria-hidden="true" />{report.currentPublishedVersionId ? '上线 / 版本' : '上线'}</Button> : null}{report.isOwner ? <button type="button" onClick={() => onEdit?.(report)} disabled={!onEdit}>编辑配置</button> : <span className={styles.readOnly}>只读</span>}{report.isOwner && onDelete ? <Button variant="danger" title={report.status === 'DRAFT' ? '删除报表模板' : '已发布报表不能删除'} type="button" onClick={() => onDelete(report)} disabled={report.status !== 'DRAFT'}><Trash2 aria-hidden="true" />删除模板</Button> : null}</div></td></tr>)}</tbody></DataTable>
 }
 
 function statusTone(status: ReportSummary['status']): StatusTagTone { return status === 'ACTIVE' ? 'success' : status === 'DISABLED' ? 'danger' : 'warning' }

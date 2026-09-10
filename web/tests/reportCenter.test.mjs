@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 import ts from 'typescript'
 
-import { cancelReportRun, createReportExport, createReportInputQueryDefinition, createReportRun, deleteReportDraft, getReportAudits, getReportDownloads, getReportInputOptions, getReportInputQueries, getReportInputQueryDefinitions, getReportProcedureSignature, getReportProcedures, getReportResultTableSchema, getReportResultTables, getReportRun, isRetryableReportPollFailure, parsePublication, parseReportAuditPage, parseReportCatalogPage, parseReportDatasource, parseReportDatasources, parseReportDatasourceTest, parseReportDraft, parseReportExport, parseReportExportPage, parseReportInputQueryDefinitions, parseReportInputQueryTestResult, parseReportProcedurePage, parseReportProcedureSignature, parseReportResultPage, parseReportResultTablePage, parseReportResultTableSchema, parseReportRun, parseReportRunContract, parseReportVersionDiff, parseReportVersionPage, reportPollRetryDelay, saveAndPublishReportDraft, saveReportDraft, testReportDatasourceConnection, testReportInputQueryDefinition } from '../.test-dist/reportCenter/api.js'
+import { activateReportVersion, cancelReportRun, createReportExport, createReportInputQueryDefinition, createReportRun, deleteReportDraft, getReportAudits, getReportDownloads, getReportInputOptions, getReportInputQueries, getReportInputQueryDefinitions, getReportProcedureSignature, getReportProcedures, getReportResultTableSchema, getReportResultTables, getReportRun, getReportVersion, isRetryableReportPollFailure, parsePublication, parseReportAuditPage, parseReportCatalogPage, parseReportDatasource, parseReportDatasources, parseReportDatasourceTest, parseReportDraft, parseReportExport, parseReportExportPage, parseReportInputQueryDefinitions, parseReportInputQueryTestResult, parseReportProcedurePage, parseReportProcedureSignature, parseReportResultPage, parseReportResultTablePage, parseReportResultTableSchema, parseReportRun, parseReportRunContract, parseReportVersionDetail, parseReportVersionDiff, parseReportVersionPage, reportPollRetryDelay, saveAndPublishReportDraft, saveReportDraft, testReportDatasourceConnection, testReportInputQueryDefinition } from '../.test-dist/reportCenter/api.js'
 import { applyExcelMapping, buildReportConditions, excelMappingFromColumns, initialReportConditionValues, moveReportInputField, orderedReportInputEntries, parseExcelMappingDocument, parseReportInputSchemaDocument, parseReportInputSchemaText, reconcileReportColumnsWithResultSchema, renameExcelMappingField, reportColumnsFromResultSchema } from '../.test-dist/reportCenter/refCursorConfig.js'
 import { reportParameterControls, reportParameterFlagDisabled, updateReportParameterFlag, updateReportParameterLogicalType } from '../.test-dist/reportCenter/parameterConfig.js'
 import { buildNewReportRunState, canBindReportExport, canRetryReportExportBinding, canStartNewReportRun, initialReportParameterValues } from '../.test-dist/reportCenter/queryParameters.js'
@@ -884,6 +884,38 @@ test('version parsers enforce cursor and structured summary differences', () => 
   assert.throws(() => parseReportVersionPage({ data: { items: [{ ...version(23, 2), contractFingerprint: 'a'.repeat(64) }], hasMore: false, nextAfterId: 23 } }))
   assert.throws(() => parseReportVersionPage({ data: { items: [{ ...version(23, 2), contractFingerprint: 'a'.repeat(13) }], hasMore: false, nextAfterId: 23 } }))
   assert.throws(() => parseReportVersionPage({ data: { items: [version(11, 1), version(23, 2)], hasMore: false, nextAfterId: 23 } }))
+})
+
+test('historical version detail and activation use the selected immutable version', async () => {
+  const summary = { id: 18, version: 2, status: 'PUBLISHED', contractFingerprint: 'a'.repeat(12), parameterCount: 1, columnCount: 1, grantCount: 1 }
+  const payload = { data: { summary, configuration: {
+    datasourceId: 4,
+    executionMode: 'TABLE_SNAPSHOT',
+    procedure: { owner: 'REPORT', package: 'PKG_SALES', name: 'BUILD', overload: '' },
+    result: { tableOwner: 'REPORT', tableName: 'SALES_RESULT' },
+    callTemplate: 'BEGIN REPORT.PKG_SALES.BUILD(); END;',
+    parameters: [{ code: 'store', label: '门店', displayOrder: 1, position: 1, procedureArgName: 'P_STORE', oracleType: 'VARCHAR2' }],
+    columns: [{ fieldId: '11111111-1111-4111-8111-111111111111', logicalCode: 'amount', databaseColumn: 'AMOUNT', excelHeader: '金额', exportOrder: 1, exportVisible: true, exportAllowed: true, valueType: 'decimal' }],
+    grants: [{ subjectType: 'ROLE', subjectId: 2, actions: ['QUERY', 'EXPORT'] }],
+  } } }
+  const detail = parseReportVersionDetail(payload)
+  assert.equal(detail.summary.id, 18)
+  assert.equal(detail.configuration.procedure.name, 'BUILD')
+  assert.equal(detail.configuration.columns[0].valueType, 'decimal')
+
+  const requests = []
+  const hash = 'b'.repeat(64)
+  const client = async (path, options) => {
+    requests.push({ path, options })
+    if (options.method === 'GET') return { ok: true, data: payload }
+    return { ok: true, data: { data: { definitionId: 9, versionId: 18, version: 2, status: 'PUBLISHED', contractHash: hash } } }
+  }
+  assert.equal((await getReportVersion(client, 9, 18)).ok, true)
+  assert.equal((await activateReportVersion(client, 9, 18, 4)).ok, true)
+  assert.equal(requests[0].path, '/v1/reports/9/versions/18')
+  assert.equal(requests[1].path, '/v1/reports/9/active-version')
+  assert.equal(requests[1].options.method, 'PUT')
+  assert.deepEqual(requests[1].options.body, { versionId: 18, expectedLockVersion: 4 })
 })
 
 test('version request guard invalidates superseded and cancelled responses', () => {

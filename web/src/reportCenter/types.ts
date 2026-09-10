@@ -326,6 +326,8 @@ export type ReportVersionPage = { items: ReportVersionSummary[]; hasMore: boolea
 export type ReportVersionChange = { kind: 'CHANGED'; key: string; label: string; before: string | number; after: string | number }
 export type ReportVersionDiffSection = { key: string; label: string; changes: ReportVersionChange[] }
 export type ReportVersionDiff = { base: ReportVersionSummary; target: ReportVersionSummary; sections: ReportVersionDiffSection[] }
+export type ReportVersionConfiguration = Pick<ReportDraft, 'datasourceId' | 'procedure' | 'executionMode' | 'inputSchema' | 'result' | 'callTemplate' | 'parameters' | 'columns' | 'grants'>
+export type ReportVersionDetail = { summary: ReportVersionSummary; configuration: ReportVersionConfiguration }
 
 export type ReportRunContract = {
   definitionId: number

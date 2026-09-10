@@ -1,7 +1,7 @@
 import type { ClientFailureKind, ClientResponse, HTTPMethod } from '../api/client'
 import { isReportInputQueryName } from './inputQueryName.js'
 import { parseReportInputSchemaDocument, reportInputSchemaDocument } from './refCursorConfig.js'
-import type { ReportAudit, ReportAuditPage, ReportAuditQuery, ReportCatalogPage, ReportCatalogQuery, ReportColumn, ReportDatasource, ReportDatasourceInput, ReportDatasourceTest, ReportDefinitionStatus, ReportDraft, ReportExport, ReportExportPage, ReportFilterOperator, ReportGrant, ReportInputOption, ReportInputQueryDefinition, ReportInputQueryDefinitionInput, ReportInputQueryTestResult, ReportParameter, ReportProcedureArgument, ReportProcedurePage, ReportProcedureRef, ReportProcedureSignature, ReportProcedureSummary, ReportPublication, ReportResultPage, ReportResultQuery, ReportResultTableColumn, ReportResultTablePage, ReportResultTableRef, ReportResultTableSchema, ReportResultTableSummary, ReportRun, ReportRunContract, ReportRunStatus, ReportSummary, ReportVersionDiff, ReportVersionPage, ReportVersionSummary } from './types'
+import type { ReportAudit, ReportAuditPage, ReportAuditQuery, ReportCatalogPage, ReportCatalogQuery, ReportColumn, ReportDatasource, ReportDatasourceInput, ReportDatasourceTest, ReportDefinitionStatus, ReportDraft, ReportExport, ReportExportPage, ReportFilterOperator, ReportGrant, ReportInputOption, ReportInputQueryDefinition, ReportInputQueryDefinitionInput, ReportInputQueryTestResult, ReportParameter, ReportProcedureArgument, ReportProcedurePage, ReportProcedureRef, ReportProcedureSignature, ReportProcedureSummary, ReportPublication, ReportResultPage, ReportResultQuery, ReportResultTableColumn, ReportResultTablePage, ReportResultTableRef, ReportResultTableSchema, ReportResultTableSummary, ReportRun, ReportRunContract, ReportRunStatus, ReportSummary, ReportVersionDetail, ReportVersionDiff, ReportVersionPage, ReportVersionSummary } from './types'
 
 type JsonRecord = Record<string, unknown>
 
@@ -389,6 +389,14 @@ export async function getReportVersions(client: ReportCenterClient, reportId: nu
   const search = new URLSearchParams({ limit: '50' })
   if (afterId > 0) search.set('afterId', String(afterId))
   return requestAndParse(client, `/v1/reports/${reportId}/versions?${search}`, { method: 'GET', signal }, parseReportVersionPage, '报表版本历史加载失败。')
+}
+
+export async function getReportVersion(client: ReportCenterClient, reportId: number, versionId: number, signal?: AbortSignal): Promise<ReportAPIResult<ReportVersionDetail>> {
+	return requestAndParse(client, `/v1/reports/${reportId}/versions/${versionId}`, { method: 'GET', signal }, parseReportVersionDetail, '报表历史版本配置加载失败。')
+}
+
+export async function activateReportVersion(client: ReportCenterClient, reportId: number, versionId: number, expectedLockVersion: number): Promise<ReportAPIResult<ReportPublication>> {
+	return requestAndParse(client, `/v1/reports/${reportId}/active-version`, { method: 'PUT', body: { versionId, expectedLockVersion } }, parsePublication, '历史版本上线与 Oracle 契约核验失败。')
 }
 
 export async function getReportVersionDiff(client: ReportCenterClient, reportId: number, baseVersionId: number, targetVersionId: number, signal?: AbortSignal): Promise<ReportAPIResult<ReportVersionDiff>> {
@@ -914,6 +922,28 @@ export function parseReportVersionDiff(payload: unknown): ReportVersionDiff {
     return { key, label: contract.label, changes }
   })
   return { base, target, sections }
+}
+
+export function parseReportVersionDetail(payload: unknown): ReportVersionDetail {
+	const data = unwrapData(payload)
+	const summary = parseReportVersionSummary(data.summary)
+	if (!isRecord(data.configuration)) throw new Error('invalid report version configuration')
+	const draft = parseReportDraft({ data: {
+		...data.configuration,
+		id: summary.id,
+		code: 'historical_version',
+		name: '历史版本',
+		status: 'DRAFT',
+		lockVersion: summary.version,
+	} })
+	return {
+		summary,
+		configuration: {
+			datasourceId: draft.datasourceId, procedure: draft.procedure, executionMode: draft.executionMode,
+			inputSchema: draft.inputSchema, result: draft.result, callTemplate: draft.callTemplate,
+			parameters: draft.parameters, columns: draft.columns, grants: draft.grants,
+		},
+	}
 }
 
 function parseReportVersionSummary(value: unknown): ReportVersionSummary {
