@@ -18,37 +18,37 @@ var ErrUnavailable = errors.New("database unavailable")
 const (
 	databaseRecoveryProbeInterval = time.Second
 	databaseRecoveryProbeTimeout  = time.Second
+	databaseCapacityCooldown      = 30 * time.Second
+)
+
+const (
+	databaseStateClosed uint32 = iota
+	databaseStateOpen
+	databaseStateHalfOpen
 )
 
 type availabilityGate struct {
-	available       atomic.Bool
+	state           atomic.Uint32
 	nextProbeUnixNS atomic.Int64
 }
 
 var applicationAvailability = newAvailabilityGate()
 
 func newAvailabilityGate() *availabilityGate {
-	gate := &availabilityGate{}
-	gate.available.Store(true)
-	return gate
+	return &availabilityGate{}
 }
 
 func (gate *availabilityGate) RecordResult(err error) {
-	if gate == nil {
-		return
-	}
-	if err == nil {
-		gate.available.Store(true)
-		gate.nextProbeUnixNS.Store(0)
+	if gate == nil || err == nil {
 		return
 	}
 	if IsConnectivityError(err) {
-		gate.available.Store(false)
+		gate.open(time.Now(), databaseRecoveryCooldown(err))
 	}
 }
 
 func (gate *availabilityGate) CanServe(ctx context.Context, ping func(context.Context) error) bool {
-	if gate == nil || gate.available.Load() {
+	if gate == nil || gate.state.Load() == databaseStateClosed {
 		return true
 	}
 	if ping == nil || !gate.claimRecoveryProbe(time.Now()) {
@@ -60,19 +60,58 @@ func (gate *availabilityGate) CanServe(ctx context.Context, ping func(context.Co
 	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), databaseRecoveryProbeTimeout)
 	defer cancel()
 	err := ping(probeCtx)
-	gate.RecordResult(err)
-	return err == nil
+	if err != nil {
+		gate.open(time.Now(), databaseRecoveryCooldown(err))
+		return false
+	}
+	if !gate.state.CompareAndSwap(databaseStateHalfOpen, databaseStateClosed) {
+		return false
+	}
+	gate.nextProbeUnixNS.Store(0)
+	return true
 }
 
 func (gate *availabilityGate) claimRecoveryProbe(now time.Time) bool {
+	if gate.state.Load() != databaseStateOpen || gate.nextProbeUnixNS.Load() > now.UnixNano() {
+		return false
+	}
+	return gate.state.CompareAndSwap(databaseStateOpen, databaseStateHalfOpen)
+}
+
+func (gate *availabilityGate) open(now time.Time, cooldown time.Duration) {
+	if cooldown <= 0 {
+		cooldown = databaseRecoveryProbeInterval
+	}
+	gate.extendProbeDeadline(now.Add(cooldown).UnixNano())
+	gate.state.Store(databaseStateOpen)
+}
+
+func (gate *availabilityGate) extendProbeDeadline(deadlineUnixNS int64) {
 	for {
-		nextProbe := gate.nextProbeUnixNS.Load()
-		if nextProbe > now.UnixNano() {
-			return false
+		current := gate.nextProbeUnixNS.Load()
+		if current >= deadlineUnixNS || gate.nextProbeUnixNS.CompareAndSwap(current, deadlineUnixNS) {
+			return
 		}
-		if gate.nextProbeUnixNS.CompareAndSwap(nextProbe, now.Add(databaseRecoveryProbeInterval).UnixNano()) {
-			return true
-		}
+	}
+}
+
+func databaseRecoveryCooldown(err error) time.Duration {
+	if isMySQLCapacityError(err) {
+		return databaseCapacityCooldown
+	}
+	return databaseRecoveryProbeInterval
+}
+
+func isMySQLCapacityError(err error) bool {
+	var mysqlError *mysqlDriver.MySQLError
+	if !errors.As(err, &mysqlError) {
+		return false
+	}
+	switch mysqlError.Number {
+	case 1040, 1203, 1226:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -93,12 +132,15 @@ func IsConnectivityError(err error) bool {
 		errors.Is(err, syscall.ECONNRESET) {
 		return true
 	}
+	if isMySQLCapacityError(err) {
+		return true
+	}
 	var networkError net.Error
 	return errors.As(err, &networkError)
 }
 
-// RecordResult records the result of a database operation. Successful queries
-// close the gate; connection-level failures open it.
+// RecordResult records the result of a database operation. Connection-level
+// and connection-capacity failures open the gate. Only a recovery probe closes it.
 func RecordResult(err error) {
 	applicationAvailability.RecordResult(err)
 }

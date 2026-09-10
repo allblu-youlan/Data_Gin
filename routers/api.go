@@ -78,7 +78,7 @@ func healthCheck(c *gin.Context) {
 type databasePing func(context.Context) error
 
 func pingApplicationDatabase(ctx context.Context) error {
-	return database.PingContext(ctx)
+	return database.RequireAvailable(ctx)
 }
 
 func databaseReadiness(ping databasePing) gin.HandlerFunc {
