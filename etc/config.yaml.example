@@ -33,6 +33,7 @@ DB:
   Port: ${DB_PORT:-3306}
   Database: ${DB_DATABASE:-your_database}
   Charset: utf8mb4
+  InterpolateParams: ${DB_INTERPOLATE_PARAMS:-true}
   MaxOpenConnections: ${DB_MAX_OPEN_CONNECTIONS:-25}
   MaxIdleConnections: ${DB_MAX_IDLE_CONNECTIONS:-10}
   MaxLifeSeconds: ${DB_MAX_LIFE_SECONDS:-300}

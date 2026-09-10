@@ -15,12 +15,13 @@ func init() {
 			"mysql": map[string]interface{}{
 				"default": map[string]interface{}{
 					// 数据库连接信息
-					"host":     config.Get("DB.Host", "127.0.0.1"),
-					"port":     config.Get("DB.Port", 3306),
-					"database": config.Get("DB.Database", "gin-biz-web-api"),
-					"username": config.Get("DB.Username"),
-					"password": config.Get("DB.Password"),
-					"charset":  config.Get("DB.Charset", "utf8mb4"),
+					"host":               config.Get("DB.Host", "127.0.0.1"),
+					"port":               config.Get("DB.Port", 3306),
+					"database":           config.Get("DB.Database", "gin-biz-web-api"),
+					"username":           config.Get("DB.Username"),
+					"password":           config.Get("DB.Password"),
+					"charset":            config.Get("DB.Charset", "utf8mb4"),
+					"interpolate_params": databaseBool("DB.InterpolateParams", true),
 
 					// 连接池配置
 					"max_open_connections":    config.Get("DB.MaxOpenConnections", 25),

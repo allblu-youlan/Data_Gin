@@ -22,6 +22,7 @@ DB:
   WriteTimeoutSeconds: 50
   MigrationIOTimeoutSeconds: 900
   RejectReadOnly: false
+  InterpolateParams: false
 `)
 	if err := os.WriteFile(configFile, contents, 0o600); err != nil {
 		t.Fatalf("write test config: %v", err)
@@ -46,8 +47,24 @@ DB:
 	if pkgConfig.GetBool(prefix + "reject_read_only") {
 		t.Fatal("reject_read_only = true, want false")
 	}
+	if pkgConfig.GetBool(prefix + "interpolate_params") {
+		t.Fatal("interpolate_params = true, want false")
+	}
 	if got := pkgConfig.GetInt("cfg.database.migration_io_timeout_seconds"); got != 900 {
 		t.Fatalf("migration_io_timeout_seconds = %d, want 900", got)
+	}
+}
+
+func TestDatabaseInterpolateParamsDefaultsToEnabled(t *testing.T) {
+	configDir := t.TempDir()
+	configFile := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configFile, []byte("DB:\n"), 0o600); err != nil {
+		t.Fatalf("write test config: %v", err)
+	}
+	pkgConfig.NewConfig("", configDir+string(os.PathSeparator))
+
+	if !pkgConfig.GetBool("cfg.database.mysql.default.interpolate_params") {
+		t.Fatal("interpolate_params = false, want true")
 	}
 }
 

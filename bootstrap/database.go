@@ -329,6 +329,13 @@ func setupDBMySQL(ioTimeout time.Duration) error {
 		driverConfig.ReadTimeout = readTimeout
 		driverConfig.WriteTimeout = writeTimeout
 		driverConfig.RejectReadOnly = config.GetBool(cfgPrefix + "reject_read_only")
+		if err := configureMySQLInterpolation(
+			driverConfig,
+			charset,
+			config.GetBool(cfgPrefix+"interpolate_params"),
+		); err != nil {
+			return fmt.Errorf("mysql group %s: %w", group, err)
+		}
 
 		var dbConfig gorm.Dialector
 		dbConfig = mysql.New(mysql.Config{
@@ -353,6 +360,22 @@ func setupDBMySQL(ioTimeout time.Duration) error {
 		return err
 	}
 	return nil
+}
+
+func configureMySQLInterpolation(driverConfig *mysqlDriver.Config, charset string, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	if driverConfig == nil {
+		return fmt.Errorf("mysql driver config is nil")
+	}
+	switch strings.ToLower(strings.TrimSpace(charset)) {
+	case "utf8", "utf8mb4":
+		driverConfig.InterpolateParams = true
+		return nil
+	default:
+		return fmt.Errorf("interpolate params requires utf8 or utf8mb4 charset")
+	}
 }
 
 // autoMigrateTables 自动迁移数据存储相关表
