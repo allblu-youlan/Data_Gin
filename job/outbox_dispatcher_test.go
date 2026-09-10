@@ -383,6 +383,41 @@ func TestOutboxDispatcherRunBacksOffAfterCycleFailureAndResetsAfterRecovery(t *t
 	}
 }
 
+func TestOutboxDispatcherRunBacksOffWhileIdleAndResetsAfterWork(t *testing.T) {
+	store := &scriptedOutboxStore{rows: [][]model.AsyncJobOutbox{
+		nil,
+		nil,
+		{weatherOutboxRow(10, 0)},
+		nil,
+	}}
+	dispatcher := newTestOutboxDispatcher(t, store, &fakeMallWeatherPublisher{}, time.Now())
+	dispatcher.pollInterval = time.Second
+	dispatcher.idlePollMax = 8 * time.Second
+
+	var delays []time.Duration
+	dispatcher.wait = func(_ context.Context, delay time.Duration) error {
+		delays = append(delays, delay)
+		if len(delays) == 4 {
+			return context.Canceled
+		}
+		return nil
+	}
+
+	err := dispatcher.Run(t.Context())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	want := []time.Duration{time.Second, 2 * time.Second, time.Second, time.Second}
+	if len(delays) != len(want) {
+		t.Fatalf("delays = %v, want %v", delays, want)
+	}
+	for index := range want {
+		if delays[index] != want[index] {
+			t.Fatalf("delays[%d] = %v, want %v", index, delays[index], want[index])
+		}
+	}
+}
+
 func TestOutboxBackoffIsBounded(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -441,6 +476,27 @@ type recoveringOutboxStore struct {
 	claimErrors []error
 	claimCalls  chan int
 	calls       int
+}
+
+type scriptedOutboxStore struct {
+	rows [][]model.AsyncJobOutbox
+}
+
+func (store *scriptedOutboxStore) ClaimBatch(context.Context, string, []string, time.Time, time.Duration, int) ([]model.AsyncJobOutbox, error) {
+	if len(store.rows) == 0 {
+		return nil, nil
+	}
+	rows := store.rows[0]
+	store.rows = store.rows[1:]
+	return rows, nil
+}
+
+func (*scriptedOutboxStore) MarkPublished(context.Context, uint, time.Time) error {
+	return nil
+}
+
+func (*scriptedOutboxStore) MarkFailed(context.Context, uint, time.Time, string) error {
+	return nil
 }
 
 func (store *recoveringOutboxStore) ClaimBatch(_ context.Context, _ string, _ []string, _ time.Time, _ time.Duration, _ int) ([]model.AsyncJobOutbox, error) {

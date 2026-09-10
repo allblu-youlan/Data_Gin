@@ -15,6 +15,7 @@ import (
 
 const (
 	defaultOutboxPollInterval  = time.Second
+	defaultOutboxIdlePollMax   = 10 * time.Second
 	defaultOutboxLockTimeout   = time.Minute
 	defaultOutboxBatchSize     = 100
 	defaultOutboxRetryBase     = 5 * time.Second
@@ -187,6 +188,7 @@ func MallWeatherOutboxTaskDefinitions(maxRetry int, fetchTimeout time.Duration) 
 type OutboxDispatcherConfig struct {
 	WorkerID          string
 	PollInterval      time.Duration
+	IdlePollMax       time.Duration
 	LockTimeout       time.Duration
 	BatchSize         int
 	RetryBase         time.Duration
@@ -204,6 +206,7 @@ type OutboxDispatcher struct {
 	taskTypes         []string
 	workerID          string
 	pollInterval      time.Duration
+	idlePollMax       time.Duration
 	lockTimeout       time.Duration
 	batchSize         int
 	retryBase         time.Duration
@@ -212,6 +215,7 @@ type OutboxDispatcher struct {
 	onPublished       func(model.AsyncJobOutbox, time.Time)
 	onCycleError      func(error)
 	databaseAvailable func(context.Context) bool
+	wait              func(context.Context, time.Duration) error
 }
 
 func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *OutboxTaskRegistry, cfg OutboxDispatcherConfig) (*OutboxDispatcher, error) {
@@ -229,6 +233,15 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = defaultOutboxPollInterval
+	}
+	if cfg.IdlePollMax <= 0 {
+		cfg.IdlePollMax = defaultOutboxIdlePollMax
+		if cfg.IdlePollMax < cfg.PollInterval {
+			cfg.IdlePollMax = cfg.PollInterval
+		}
+	}
+	if cfg.IdlePollMax < cfg.PollInterval {
+		return nil, fmt.Errorf("outbox dispatcher: idle poll max must not be less than poll interval")
 	}
 	if cfg.LockTimeout <= 0 {
 		cfg.LockTimeout = defaultOutboxLockTimeout
@@ -259,6 +272,7 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 		taskTypes:         registry.TaskTypes(),
 		workerID:          cfg.WorkerID,
 		pollInterval:      cfg.PollInterval,
+		idlePollMax:       cfg.IdlePollMax,
 		lockTimeout:       cfg.LockTimeout,
 		batchSize:         cfg.BatchSize,
 		retryBase:         cfg.RetryBase,
@@ -267,15 +281,17 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 		onPublished:       cfg.OnPublished,
 		onCycleError:      cfg.OnCycleError,
 		databaseAvailable: cfg.DatabaseAvailable,
+		wait:              waitForOutboxPoll,
 	}, nil
 }
 
 // Run dispatches immediately, then waits between cycles until ctx is cancelled.
-// Successful cycles use the normal poll interval. Consecutive cycle failures
-// use the configured retry backoff so a database outage is not polled every
-// second.
+// Empty cycles use a bounded idle backoff, while a cycle that finds work resets
+// to the normal poll interval. Consecutive failures use the separate retry
+// backoff so a database outage is not polled every second.
 func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 	consecutiveFailures := 0
+	consecutiveIdleCycles := 0
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -283,37 +299,46 @@ func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 		}
 
 		delay := dispatcher.pollInterval
-		if err := dispatcher.DispatchOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		hadWork, err := dispatcher.dispatchOnce(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
 			if dispatcher.onCycleError != nil {
 				dispatcher.onCycleError(err)
 			}
 			delay = outboxBackoff(dispatcher.retryBase, dispatcher.retryMax, consecutiveFailures)
 			consecutiveFailures++
+			consecutiveIdleCycles = 0
 		} else {
 			consecutiveFailures = 0
+			if hadWork {
+				consecutiveIdleCycles = 0
+			} else {
+				delay = outboxBackoff(dispatcher.pollInterval, dispatcher.idlePollMax, consecutiveIdleCycles)
+				consecutiveIdleCycles++
+			}
 		}
 
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
+		if err := dispatcher.wait(ctx, delay); err != nil {
+			return err
 		}
 	}
 }
 
 func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) error {
+	_, err := dispatcher.dispatchOnce(ctx)
+	return err
+}
+
+func (dispatcher *OutboxDispatcher) dispatchOnce(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	if !dispatcher.databaseAvailable(ctx) {
-		return fmt.Errorf("outbox dispatcher: %w", database.ErrUnavailable)
+		return false, fmt.Errorf("outbox dispatcher: %w", database.ErrUnavailable)
 	}
 	now := dispatcher.now().UTC()
 	rows, err := dispatcher.store.ClaimBatch(ctx, dispatcher.workerID, dispatcher.taskTypes, now, dispatcher.lockTimeout, dispatcher.batchSize)
 	if err != nil {
-		return fmt.Errorf("outbox dispatcher: claim batch: %w", err)
+		return false, fmt.Errorf("outbox dispatcher: claim batch: %w", err)
 	}
 
 	var dispatchErrors []error
@@ -326,7 +351,18 @@ func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) error {
 			dispatchErrors = append(dispatchErrors, err)
 		}
 	}
-	return errors.Join(dispatchErrors...)
+	return len(rows) > 0, errors.Join(dispatchErrors...)
+}
+
+func waitForOutboxPoll(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (dispatcher *OutboxDispatcher) dispatchRow(ctx context.Context, row model.AsyncJobOutbox) error {

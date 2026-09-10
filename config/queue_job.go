@@ -54,11 +54,12 @@ func init() {
 				"queues": cast.ToStringMapInt(config.Get("QueueJob.ConfigOpt.Queues", defaultQueues)),
 			},
 			"outbox": map[string]interface{}{
-				"poll_interval_ms":     config.Get("QueueJob.Outbox.PollIntervalMS", 1000),
-				"lock_timeout_seconds": config.Get("QueueJob.Outbox.LockTimeoutSeconds", 60),
-				"batch_size":           config.Get("QueueJob.Outbox.BatchSize", 100),
-				"retry_base_seconds":   config.Get("QueueJob.Outbox.RetryBaseSeconds", 5),
-				"retry_max_seconds":    config.Get("QueueJob.Outbox.RetryMaxSeconds", 300),
+				"poll_interval_ms":          config.Get("QueueJob.Outbox.PollIntervalMS", 1000),
+				"idle_poll_max_interval_ms": config.Get("QueueJob.Outbox.IdlePollMaxIntervalMS", 10000),
+				"lock_timeout_seconds":      config.Get("QueueJob.Outbox.LockTimeoutSeconds", 60),
+				"batch_size":                config.Get("QueueJob.Outbox.BatchSize", 100),
+				"retry_base_seconds":        config.Get("QueueJob.Outbox.RetryBaseSeconds", 5),
+				"retry_max_seconds":         config.Get("QueueJob.Outbox.RetryMaxSeconds", 300),
 			},
 			"report_worker": map[string]interface{}{
 				"enabled":             reportWorkerEnabled(),

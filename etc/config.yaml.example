@@ -61,6 +61,13 @@ QueueJob:
     QueueWeight: 2
     RunConcurrency: ${REPORT_RUN_WORKER_CONCURRENCY:-4}
     ExportConcurrency: ${REPORT_EXPORT_WORKER_CONCURRENCY:-2}
+  Outbox:
+    PollIntervalMS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+    IdlePollMaxIntervalMS: ${OUTBOX_IDLE_POLL_MAX_INTERVAL_MS:-10000}
+    LockTimeoutSeconds: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+    BatchSize: ${OUTBOX_BATCH_SIZE:-100}
+    RetryBaseSeconds: ${OUTBOX_RETRY_BASE_SECONDS:-5}
+    RetryMaxSeconds: ${OUTBOX_RETRY_MAX_SECONDS:-300}
 
 ReportCenter:
   Enabled: ${REPORT_CENTER_ENABLED:-true}
@@ -82,11 +89,6 @@ MallWeather:
   FetchTimeoutSeconds: 10
   MaxAttempts: 3
   WorkerConcurrency: 20
-  OutboxPollIntervalMS: 1000
-  OutboxLockTimeoutSeconds: 60
-  OutboxBatchSize: 100
-  OutboxRetryBaseSeconds: 5
-  OutboxRetryMaxSeconds: 300
   ScheduleDBTimeoutSeconds: ${MALL_WEATHER_SCHEDULE_DB_TIMEOUT_SECONDS:-8}
   RawRetentionDays: 30
   ForecastVersionRetentionDays: 30

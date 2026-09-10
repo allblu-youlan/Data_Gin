@@ -76,12 +76,17 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 		job.NewAsynqTaskPublisher(global.QueueJobClient, inspector),
 		registry,
 		job.OutboxDispatcherConfig{
-			WorkerID:     "outbox-" + uuid.NewString(),
-			PollInterval: time.Duration(config.GetInt("cfg.queue_job.outbox.poll_interval_ms")) * time.Millisecond,
-			LockTimeout:  time.Duration(config.GetInt("cfg.queue_job.outbox.lock_timeout_seconds")) * time.Second,
-			BatchSize:    config.GetInt("cfg.queue_job.outbox.batch_size"),
-			RetryBase:    time.Duration(config.GetInt("cfg.queue_job.outbox.retry_base_seconds")) * time.Second,
-			RetryMax:     time.Duration(config.GetInt("cfg.queue_job.outbox.retry_max_seconds")) * time.Second,
+			WorkerID: "outbox-" + uuid.NewString(),
+			PollInterval: time.Duration(
+				config.GetInt("cfg.queue_job.outbox.poll_interval_ms"),
+			) * time.Millisecond,
+			IdlePollMax: time.Duration(
+				config.GetInt("cfg.queue_job.outbox.idle_poll_max_interval_ms"),
+			) * time.Millisecond,
+			LockTimeout: time.Duration(config.GetInt("cfg.queue_job.outbox.lock_timeout_seconds")) * time.Second,
+			BatchSize:   config.GetInt("cfg.queue_job.outbox.batch_size"),
+			RetryBase:   time.Duration(config.GetInt("cfg.queue_job.outbox.retry_base_seconds")) * time.Second,
+			RetryMax:    time.Duration(config.GetInt("cfg.queue_job.outbox.retry_max_seconds")) * time.Second,
 			OnPublished: func(row model.AsyncJobOutbox, publishedAt time.Time) {
 				if global.MallWeatherEnabledAtStartup {
 					data_svc.RecordMallWeatherOutboxQueueLag(row, publishedAt)
