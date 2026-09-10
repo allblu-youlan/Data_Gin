@@ -11,6 +11,18 @@ export const reportInputControls: Array<ReportInputControl | ''> = ['', 'TEXT', 
 export const reportDateFormats: ReportInputFormat[] = ['YYYYMMDD', 'YYYY-MM-DD']
 export const reportDateTimeFormats: ReportInputFormat[] = ['YYYYMMDDHHmmss', 'YYYY-MM-DD HH:mm:ss', 'ISO8601']
 
+const reportExportValueTypes = [
+  { value: 'string', label: '文本' },
+  { value: 'integer', label: '整数' },
+  { value: 'decimal', label: '小数（保留两位）' },
+  { value: 'date', label: '日期' },
+  { value: 'datetime', label: '日期时间' },
+  { value: 'boolean', label: '布尔' },
+  { value: 'enum', label: '单选枚举' },
+  { value: 'multi_enum', label: '多选枚举' },
+  { value: 'json', label: 'JSON 文本' },
+] as const
+
 export function parseReportInputSchemaText(source: string): ReportInputSchema {
   if (reportJSONContainsUnsafeNumber(source)) throw new Error(`筛选条件 JSON 中的数字${unsafeNumberError}`)
   return parseReportInputSchemaDocument(JSON.parse(source) as unknown)
@@ -130,6 +142,28 @@ export function excelMappingFromColumns(columns: ReportColumn[]): Record<string,
     .filter((column) => column.exportVisible && column.exportAllowed)
     .sort((left, right) => left.exportOrder - right.exportOrder)
     .map((column) => [column.databaseColumn, column.excelHeader]))
+}
+
+export function moveReportExportColumn(columns: ReportColumn[], fieldId: string, offset: -1 | 1): ReportColumn[] {
+  const ordered = [...columns].sort((left, right) => left.exportOrder - right.exportOrder || left.displayOrder - right.displayOrder)
+  const exportable = ordered.filter((column) => column.exportVisible && column.exportAllowed)
+  const index = exportable.findIndex((column) => column.fieldId === fieldId)
+  const target = index + offset
+  if (index < 0 || target < 0 || target >= exportable.length) return columns
+  ;[exportable[index], exportable[target]] = [exportable[target], exportable[index]]
+
+  const exportableOrder = new Map(exportable.map((column, exportOrder) => [column.fieldId, exportOrder]))
+  let hiddenOrder = exportable.length
+  const exportOrders = new Map<string, number>()
+  for (const column of ordered) {
+    const exportOrder = exportableOrder.get(column.fieldId)
+    exportOrders.set(column.fieldId, exportOrder ?? hiddenOrder++)
+  }
+  return columns.map((column) => ({ ...column, exportOrder: exportOrders.get(column.fieldId)! }))
+}
+
+export function reportExportValueTypeOptions(oracleType: string, scale: number | null) {
+  return reportExportValueTypes.filter((option) => reportValueTypeCompatible(option.value, oracleType, scale))
 }
 
 export function applyExcelMapping(columns: ReportColumn[], mapping: Record<string, string>, createFieldId: () => string = () => crypto.randomUUID()): ReportColumn[] {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { appendReportColumnFromResultSchema, countReportColumnsMissingFromResultSchema, refreshReportColumnMetadata, refreshReportColumnMetadataPreservingUnknown, replaceExcelMappingFieldWithResultSchema, reportColumnsFromResultSchema } from '../.test-dist/reportCenter/refCursorConfig.js'
+import { appendReportColumnFromResultSchema, countReportColumnsMissingFromResultSchema, moveReportExportColumn, refreshReportColumnMetadata, refreshReportColumnMetadataPreservingUnknown, replaceExcelMappingFieldWithResultSchema, reportColumnsFromResultSchema, reportExportValueTypeOptions } from '../.test-dist/reportCenter/refCursorConfig.js'
 
 test('result metadata refresh keeps selected fields and compatible presentation types', () => {
   const existing = [
@@ -91,4 +91,28 @@ test('adding an Excel result field preserves existing columns and creates a uniq
   assert.equal(appended[0].exportVisible, false)
   assert.equal(appended[1].fieldId, 'new-field')
   assert.notEqual(appended[1].logicalCode.toUpperCase(), appended[0].logicalCode.toUpperCase())
+})
+
+test('Excel export columns can be reordered without changing their preview order', () => {
+  const columns = reportColumnsFromResultSchema([
+    { name: 'STORE', position: 1, oracleType: 'VARCHAR2', dataLength: 30, precision: null, scale: null, nullable: false },
+    { name: 'HIDDEN', position: 2, oracleType: 'VARCHAR2', dataLength: 30, precision: null, scale: null, nullable: true },
+    { name: 'AMOUNT', position: 3, oracleType: 'NUMBER', dataLength: 22, precision: 18, scale: 2, nullable: true },
+  ], (() => { let index = 0; return () => `field-${++index}` })())
+  columns[1].exportVisible = false
+
+  const moved = moveReportExportColumn(columns, columns[2].fieldId, -1)
+  assert.deepEqual([...moved].sort((left, right) => left.exportOrder - right.exportOrder).map((column) => column.databaseColumn), ['AMOUNT', 'STORE', 'HIDDEN'])
+  assert.deepEqual(moved.map((column) => column.displayOrder), [0, 1, 2])
+  assert.deepEqual([...moved].map((column) => column.exportOrder).sort((left, right) => left - right), [0, 1, 2])
+  assert.strictEqual(moveReportExportColumn(moved, columns[2].fieldId, -1), moved)
+})
+
+test('Excel export type options follow the Oracle field metadata', () => {
+  assert.deepEqual(reportExportValueTypeOptions('NUMBER', 0).map((option) => option.value), ['integer', 'decimal', 'boolean'])
+  assert.deepEqual(reportExportValueTypeOptions('NUMBER', 2).map((option) => option.value), ['decimal', 'boolean'])
+  assert.deepEqual(reportExportValueTypeOptions('DATE', null).map((option) => option.value), ['date', 'datetime'])
+  assert.deepEqual(reportExportValueTypeOptions('TIMESTAMP(6)', null).map((option) => option.value), ['datetime'])
+  assert.deepEqual(reportExportValueTypeOptions('VARCHAR2', null).map((option) => option.value), ['string', 'boolean', 'enum'])
+  assert.deepEqual(reportExportValueTypeOptions('CLOB', null).map((option) => option.value), ['string', 'enum', 'multi_enum', 'json'])
 })

@@ -45,6 +45,14 @@ func TestReportExportProcessorRendersUploadsVerifiesAndPurges(t *testing.T) {
 	}
 }
 
+func TestReportExportWorkbookRenderRequestUsesTwoDecimalPlaces(t *testing.T) {
+	columns := []frozenResultColumn{{ValueType: "decimal"}}
+	request := reportExportWorkbookRenderRequest(columns, "report.xlsx")
+	if request.decimalNumberFormat != reportExcelTwoDecimalNumberFormat || request.OutputPath != "report.xlsx" || len(request.Columns) != 1 {
+		t.Fatalf("reportExportWorkbookRenderRequest()=%#v", request)
+	}
+}
+
 func TestReportExportProcessorTableSnapshotMarksResultPurgedWithoutOracleDelete(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	runtime := testReportExportRuntime(now)

@@ -29,12 +29,11 @@ import (
 )
 
 const (
-	officePushMaximumRows     = int64(100_000)
-	officePushLeaseTTL        = 5 * time.Minute
-	officePushHeartbeat       = time.Minute
-	officePushStateTimeout    = 5 * time.Second
-	officeProcedureLockTTL    = 2 * officePushLeaseTTL
-	officeDecimalNumberFormat = "0.00"
+	officePushMaximumRows  = int64(100_000)
+	officePushLeaseTTL     = 5 * time.Minute
+	officePushHeartbeat    = time.Minute
+	officePushStateTimeout = 5 * time.Second
+	officeProcedureLockTTL = 2 * officePushLeaseTTL
 )
 
 var ErrOfficePushProcessNonRetryable = errors.New("office push processor: non-retryable")
@@ -757,7 +756,7 @@ func officeWorkbookRenderRequest(mappings []OfficeColumnMapping, outputPath stri
 	return ReportExportRenderRequest{
 		Columns:             officeFrozenColumns(mappings),
 		OutputPath:          outputPath,
-		decimalNumberFormat: officeDecimalNumberFormat,
+		decimalNumberFormat: reportExcelTwoDecimalNumberFormat,
 	}
 }
 

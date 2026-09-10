@@ -60,6 +60,7 @@ func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
 	}{
 		{name: "default keeps available decimal places", value: "12.3456", wantFormatted: "12.3456"},
 		{name: "requested format displays two decimal places", value: "12.5", numberFormat: "0.00", wantFormatted: "12.50"},
+		{name: "requested format rounds displayed decimal places", value: "12.345", numberFormat: "0.00", wantFormatted: "12.35"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -88,6 +89,10 @@ func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
 			formatted, err := workbook.GetCellValue("数据", "A2")
 			if err != nil || formatted != test.wantFormatted {
 				t.Fatalf("GetCellValue()=%q error=%v, want %q", formatted, err, test.wantFormatted)
+			}
+			cellType, err := workbook.GetCellType("数据", "A2")
+			if numericCell := cellType == excelize.CellTypeUnset || cellType == excelize.CellTypeNumber; err != nil || !numericCell {
+				t.Fatalf("GetCellType()=%v error=%v, want numeric or unmarked numeric cell", cellType, err)
 			}
 		})
 	}

@@ -23,15 +23,16 @@ import (
 )
 
 const (
-	reportExportPageSize           = 1000
-	reportExportProgressRows       = int64(1000)
-	reportExcelMaxRows             = 1_048_576
-	reportExcelMaxDataRows         = reportExcelMaxRows - 1
-	reportExcelMaxSheets           = 256
-	reportExcelMaxCellRunes        = 32_767
-	reportExcelDefaultWidth        = 18
-	reportExcelMaximumWidth        = 80
-	reportExcelDecimalNumberFormat = "0.################"
+	reportExportPageSize              = 1000
+	reportExportProgressRows          = int64(1000)
+	reportExcelMaxRows                = 1_048_576
+	reportExcelMaxDataRows            = reportExcelMaxRows - 1
+	reportExcelMaxSheets              = 256
+	reportExcelMaxCellRunes           = 32_767
+	reportExcelDefaultWidth           = 18
+	reportExcelMaximumWidth           = 80
+	reportExcelDecimalNumberFormat    = "0.################"
+	reportExcelTwoDecimalNumberFormat = "0.00"
 )
 
 type reportExportPageReader interface {

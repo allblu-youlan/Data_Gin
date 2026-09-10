@@ -157,7 +157,7 @@ func (processor *ReportExportProcessor) Process(ctx context.Context, exportID ui
 	fileName := "report-" + runtime.Run.RunUUID + ".xlsx"
 	outputPath := filepath.Join(workDir, fileName)
 	renderer := NewReportExportRenderer(session)
-	renderResult, renderErr := renderer.Render(runCtx, ReportExportRenderRequest{Columns: columns, OutputPath: outputPath}, func(progress ReportExportRenderProgress) error {
+	renderResult, renderErr := renderer.Render(runCtx, reportExportWorkbookRenderRequest(columns, outputPath), func(progress ReportExportRenderProgress) error {
 		checkpoint, encodeErr := reportExportCheckpoint(progress)
 		if encodeErr != nil {
 			return encodeErr
@@ -242,6 +242,14 @@ func (processor *ReportExportProcessor) Process(ctx context.Context, exportID ui
 	cancelRun()
 	<-monitor
 	return processor.purgeReadyExport(ctx, exportID, true)
+}
+
+func reportExportWorkbookRenderRequest(columns []frozenResultColumn, outputPath string) ReportExportRenderRequest {
+	return ReportExportRenderRequest{
+		Columns:             columns,
+		OutputPath:          outputPath,
+		decimalNumberFormat: reportExcelTwoDecimalNumberFormat,
+	}
 }
 
 func (processor *ReportExportProcessor) CleanupReadyResult(ctx context.Context, exportID uint) error {
