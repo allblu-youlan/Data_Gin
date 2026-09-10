@@ -16,6 +16,7 @@ import (
 	jobPkg "gin-biz-web-api/pkg/job"
 	"gin-biz-web-api/pkg/logger"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/hibiken/asynq"
 	"go.uber.org/zap"
 )
@@ -100,7 +101,7 @@ func setupQueueJob() {
 		if err != nil {
 			console.Exit("Mall Weather Worker Init Failed %v", err)
 		}
-		weatherHandler := newMallWeatherHandler(weatherProcessor)
+		weatherHandler := newMallWeatherHandler(weatherProcessor, config.GetBool("cfg.mall_weather.repair_enabled"))
 		for _, taskType := range job.MallWeatherFetchTaskTypes() {
 			mux.HandleFunc(taskType, weatherHandler)
 		}
@@ -458,13 +459,16 @@ func newMallGeocodeHandler(processor mallGeocodeProcessor) asynq.HandlerFunc {
 	}
 }
 
-func newMallWeatherHandler(processor mallWeatherProcessor) asynq.HandlerFunc {
+func newMallWeatherHandler(processor mallWeatherProcessor, repairEnabled bool) asynq.HandlerFunc {
 	return func(ctx context.Context, task *asynq.Task) error {
 		if processor == nil {
 			return fmt.Errorf("mall weather handler: processor is not configured")
 		}
 		if task == nil {
 			return fmt.Errorf("%w: mall weather task is nil", asynq.SkipRetry)
+		}
+		if task.Type() == job.TypeMallWeatherRepair && !repairEnabled {
+			return nil
 		}
 		payload, err := job.DecodeMallWeatherTaskPayload(task.Type(), task.Payload())
 		if err != nil {
@@ -497,8 +501,20 @@ func newMallWeatherScheduleHandler(planner mallWeatherSchedulePlanner) asynq.Han
 			data_svc.RecordMallWeatherDeadLetterTask(task.Type(), data_svc.MallWeatherDeadLetterReasonInvalidPayload)
 			return fmt.Errorf("%w: %v", asynq.SkipRetry, err)
 		}
-		return planner.Plan(ctx, payload)
+		err = planner.Plan(ctx, payload)
+		if err != nil && payload.TaskType == job.TypeMallWeatherRepair && isTerminalMallWeatherRepairScheduleError(err) {
+			return fmt.Errorf("%w: %v", asynq.SkipRetry, err)
+		}
+		return err
 	}
+}
+
+func isTerminalMallWeatherRepairScheduleError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || database.IsConnectivityError(err) {
+		return true
+	}
+	var mysqlError *mysqlDriver.MySQLError
+	return errors.As(err, &mysqlError) && mysqlError.Number == 3024
 }
 
 func newMallWeatherExportHandler(processor mallWeatherExportProcessor) asynq.HandlerFunc {

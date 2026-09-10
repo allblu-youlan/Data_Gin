@@ -75,6 +75,10 @@ func queryIndexSpecs() []queryIndexSpec {
 			Columns: []queryIndexColumn{{Name: "mall_id"}, {Name: "data_kind"}, {Name: "business_time"}, {Name: "id"}},
 		},
 		{
+			TableName: "mall_weather_fetch_runs", IndexName: "idx_weather_fetch_runs_repair",
+			Columns: []queryIndexColumn{{Name: "mall_id"}, {Name: "endpoint_kind"}, {Name: "status"}, {Name: "task_kind"}, {Name: "id", Desc: true}},
+		},
+		{
 			TableName: "mall_weather_alert_relations", IndexName: "idx_weather_alert_relation_active",
 			Columns: []queryIndexColumn{{Name: "mall_id"}, {Name: "is_active"}, {Name: "last_seen_at"}, {Name: "alert_pk"}},
 		},

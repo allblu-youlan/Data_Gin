@@ -107,7 +107,9 @@ func (planner *MallWeatherSchedulePlanner) Plan(ctx context.Context, payload job
 		if !planner.repairEnabled {
 			return nil
 		}
-		return planner.planRepairs(ctx, scheduledAt)
+		repairCtx, cancel := planner.databaseContext(ctx)
+		defer cancel()
+		return planner.planRepairs(repairCtx, scheduledAt)
 	}
 	var afterID uint
 	for {
@@ -149,17 +151,13 @@ func (planner *MallWeatherSchedulePlanner) planRepairs(ctx context.Context, sche
 	if planner.repairMaxRounds < 1 || planner.repairSpread < 0 || planner.databaseTimeout <= 0 || scheduledAt.IsZero() {
 		return fmt.Errorf("mall weather scheduler: invalid repair plan")
 	}
-	reconcileCtx, cancel := planner.databaseContext(ctx)
-	_, err := planner.store.ReconcileLatestFreshness(reconcileCtx, scheduledAt)
-	cancel()
+	_, err := planner.store.ReconcileLatestFreshness(ctx, scheduledAt)
 	if err != nil {
 		return fmt.Errorf("mall weather scheduler: reconcile freshness: %w", err)
 	}
 	var afterID uint
 	for {
-		queryCtx, cancel := planner.databaseContext(ctx)
-		candidates, err := planner.store.ListRepairCandidates(queryCtx, afterID, mallWeatherSchedulePageSize)
-		cancel()
+		candidates, err := planner.store.ListRepairCandidates(ctx, afterID, mallWeatherSchedulePageSize)
 		if err != nil {
 			return fmt.Errorf("mall weather scheduler: list repair candidates: %w", err)
 		}
@@ -173,9 +171,7 @@ func (planner *MallWeatherSchedulePlanner) planRepairs(ctx context.Context, sche
 				rows = append(rows, row)
 			}
 		}
-		writeCtx, cancel := planner.databaseContext(ctx)
-		_, err = planner.store.CreateOutboxes(writeCtx, rows)
-		cancel()
+		_, err = planner.store.CreateOutboxes(ctx, rows)
 		if err != nil {
 			return fmt.Errorf("mall weather scheduler: store repair outboxes: %w", err)
 		}

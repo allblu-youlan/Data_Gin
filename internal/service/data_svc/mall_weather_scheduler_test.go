@@ -135,6 +135,26 @@ func TestMallWeatherSchedulePlannerTimesOutRepairCandidateQuery(t *testing.T) {
 	}
 }
 
+func TestMallWeatherSchedulePlannerSharesOneRepairDeadline(t *testing.T) {
+	store := &fakeMallWeatherScheduleStore{}
+	planner, err := newMallWeatherSchedulePlanner(store, time.Now, time.UTC)
+	if err != nil {
+		t.Fatalf("newMallWeatherSchedulePlanner() error=%v", err)
+	}
+	planner.databaseTimeout = 2 * time.Second
+	if err := planner.Plan(t.Context(), job.MallWeatherSchedulePayload{TaskType: job.TypeMallWeatherRepair}); err != nil {
+		t.Fatalf("Plan(repair) error=%v", err)
+	}
+	if len(store.deadlines) != 3 {
+		t.Fatalf("repair database calls=%d want=3", len(store.deadlines))
+	}
+	for _, deadline := range store.deadlines[1:] {
+		if !deadline.Equal(store.deadlines[0]) {
+			t.Fatalf("repair deadline renewed: first=%s next=%s", store.deadlines[0], deadline)
+		}
+	}
+}
+
 func TestNextWeatherRepairIdentityValidatesHistory(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -180,6 +200,7 @@ type fakeMallWeatherScheduleStore struct {
 	repairList       func(context.Context, uint, int) ([]model.MallWeatherFetchRun, error)
 	rows             []model.AsyncJobOutbox
 	reconciledAt     time.Time
+	deadlines        []time.Time
 
 	listErr       error
 	repairListErr error
@@ -188,6 +209,7 @@ type fakeMallWeatherScheduleStore struct {
 }
 
 func (store *fakeMallWeatherScheduleStore) ListRepairCandidates(ctx context.Context, afterID uint, limit int) ([]model.MallWeatherFetchRun, error) {
+	store.recordDeadline(ctx)
 	if store.repairList != nil {
 		return store.repairList(ctx, afterID, limit)
 	}
@@ -203,7 +225,8 @@ func (store *fakeMallWeatherScheduleStore) ListRepairCandidates(ctx context.Cont
 	return rows, nil
 }
 
-func (store *fakeMallWeatherScheduleStore) ReconcileLatestFreshness(_ context.Context, now time.Time) (int64, error) {
+func (store *fakeMallWeatherScheduleStore) ReconcileLatestFreshness(ctx context.Context, now time.Time) (int64, error) {
+	store.recordDeadline(ctx)
 	if store.reconcileErr != nil {
 		return 0, store.reconcileErr
 	}
@@ -224,10 +247,17 @@ func (store *fakeMallWeatherScheduleStore) ListEnabledMalls(_ context.Context, a
 	return rows, nil
 }
 
-func (store *fakeMallWeatherScheduleStore) CreateOutboxes(_ context.Context, rows []model.AsyncJobOutbox) (int64, error) {
+func (store *fakeMallWeatherScheduleStore) CreateOutboxes(ctx context.Context, rows []model.AsyncJobOutbox) (int64, error) {
+	store.recordDeadline(ctx)
 	if store.createErr != nil {
 		return 0, store.createErr
 	}
 	store.rows = append(store.rows, rows...)
 	return int64(len(rows)), nil
+}
+
+func (store *fakeMallWeatherScheduleStore) recordDeadline(ctx context.Context) {
+	if deadline, ok := ctx.Deadline(); ok {
+		store.deadlines = append(store.deadlines, deadline)
+	}
 }
