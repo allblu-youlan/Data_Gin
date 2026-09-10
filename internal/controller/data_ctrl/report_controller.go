@@ -36,6 +36,7 @@ type ReportController struct {
 
 type ReportPublishServiceAPI interface {
 	Publish(context.Context, uint, uint, uint64) (*data_svc.ReportPublicationDTO, error)
+	Activate(context.Context, uint, uint, uint, uint64) (*data_svc.ReportPublicationDTO, error)
 }
 
 type ReportRunServiceAPI interface {
@@ -45,6 +46,7 @@ type ReportRunServiceAPI interface {
 
 type ReportVersionServiceAPI interface {
 	List(context.Context, uint, uint, uint, int) (*data_svc.ReportVersionPageDTO, error)
+	Get(context.Context, uint, uint, uint) (*data_svc.ReportVersionDetailDTO, error)
 	Diff(context.Context, uint, uint, uint, uint) (*data_svc.ReportVersionDiffDTO, error)
 }
 
@@ -95,6 +97,29 @@ func (controller *ReportController) ListVersions(c *gin.Context) {
 		return
 	}
 	result, err := controller.versionService.List(c.Request.Context(), auth.CurrentUserID(c), reportID, afterID, limit)
+	if err != nil {
+		writeReportError(c, err)
+		return
+	}
+	responses.New(c).ToResponseWithStatus(http.StatusOK, result)
+}
+
+func (controller *ReportController) GetVersion(c *gin.Context) {
+	if controller.versionService == nil {
+		writeReportError(c, errors.New("report version service is unavailable"))
+		return
+	}
+	reportID, err := parseReportUint(c.Param("id"), "report id")
+	if err != nil {
+		writeReportError(c, err)
+		return
+	}
+	versionID, err := parseReportUint(c.Param("versionId"), "version id")
+	if err != nil {
+		writeReportError(c, err)
+		return
+	}
+	result, err := controller.versionService.Get(c.Request.Context(), auth.CurrentUserID(c), reportID, versionID)
 	if err != nil {
 		writeReportError(c, err)
 		return
@@ -270,6 +295,29 @@ func (controller *ReportController) Publish(c *gin.Context) {
 		return
 	}
 	result, err := controller.publishService.Publish(c.Request.Context(), auth.CurrentUserID(c), reportID, request.ExpectedLockVersion)
+	if err != nil {
+		writeReportError(c, err)
+		return
+	}
+	responses.New(c).ToResponseWithStatus(http.StatusOK, result)
+}
+
+func (controller *ReportController) ActivateVersion(c *gin.Context) {
+	if controller.publishService == nil {
+		writeReportError(c, errors.New("report publication service is unavailable"))
+		return
+	}
+	reportID, err := parseReportUint(c.Param("id"), "report id")
+	if err != nil {
+		writeReportError(c, err)
+		return
+	}
+	var request requestbody.ReportVersionActivateRequest
+	if err := decodeMallJSON(c, &request); err != nil || request.VersionID == 0 || request.ExpectedLockVersion == 0 {
+		writeReportError(c, fmt.Errorf("%w: invalid version activation request", data_svc.ErrReportInvalid))
+		return
+	}
+	result, err := controller.publishService.Activate(c.Request.Context(), auth.CurrentUserID(c), reportID, request.VersionID, request.ExpectedLockVersion)
 	if err != nil {
 		writeReportError(c, err)
 		return

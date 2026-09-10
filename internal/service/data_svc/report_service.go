@@ -90,17 +90,19 @@ type ReportDraftDTO struct {
 }
 
 type ReportDraftSummaryDTO struct {
-	ID           uint      `json:"id"`
-	Code         string    `json:"code"`
-	Name         string    `json:"name"`
-	Category     string    `json:"category"`
-	Description  string    `json:"description"`
-	DatasourceID uint      `json:"datasourceId"`
-	Status       string    `json:"status"`
-	LockVersion  uint64    `json:"lockVersion"`
-	IsOwner      bool      `json:"isOwner"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                        uint      `json:"id"`
+	Code                      string    `json:"code"`
+	Name                      string    `json:"name"`
+	Category                  string    `json:"category"`
+	Description               string    `json:"description"`
+	DatasourceID              uint      `json:"datasourceId"`
+	Status                    string    `json:"status"`
+	LockVersion               uint64    `json:"lockVersion"`
+	CurrentDraftVersionID     uint      `json:"currentDraftVersionId,omitempty"`
+	CurrentPublishedVersionID uint      `json:"currentPublishedVersionId,omitempty"`
+	IsOwner                   bool      `json:"isOwner"`
+	CreatedAt                 time.Time `json:"createdAt"`
+	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
 type ReportProcedureDTO struct {
@@ -987,17 +989,21 @@ func reportDraftDTO(draft *reportrepo.Draft) *ReportDraftDTO {
 func reportDraftSummaryDTO(summary reportrepo.DraftSummary) ReportDraftSummaryDTO {
 	datasourceID := summary.Definition.DatasourceID
 	lockVersion := summary.LockVersion
+	currentDraftVersionID := summary.Definition.CurrentDraftVersionID
+	currentPublishedVersionID := summary.Definition.CurrentPublishedVersionID
 	if !summary.IsOwner {
 		// Shared entries expose published catalog metadata only. Draft locks and
 		// datasource bindings remain inside the owner-only configuration boundary.
 		datasourceID = 0
 		lockVersion = 0
+		currentDraftVersionID = 0
+		currentPublishedVersionID = 0
 	}
 	return ReportDraftSummaryDTO{
 		ID: summary.Definition.ID, Code: summary.Definition.Code, Name: summary.Definition.Name,
 		Category: summary.Definition.Category, Description: summary.Definition.Description,
 		DatasourceID: datasourceID, Status: summary.Definition.Status,
-		LockVersion: lockVersion, IsOwner: summary.IsOwner,
+		LockVersion: lockVersion, CurrentDraftVersionID: currentDraftVersionID, CurrentPublishedVersionID: currentPublishedVersionID, IsOwner: summary.IsOwner,
 		CreatedAt: summary.Definition.CreatedAt, UpdatedAt: summary.Definition.UpdatedAt,
 	}
 }

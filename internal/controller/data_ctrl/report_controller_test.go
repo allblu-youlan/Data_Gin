@@ -15,6 +15,7 @@ import (
 	"gin-biz-web-api/constant"
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/service/data_svc"
+	"gin-biz-web-api/model"
 )
 
 func TestReportControllerCreateUsesActorAndStrictJSON(t *testing.T) {
@@ -243,6 +244,29 @@ func TestReportControllerPublishUsesActorAndLockVersion(t *testing.T) {
 	}
 }
 
+func TestReportControllerActivatesSelectedVersion(t *testing.T) {
+	publishService := &fakeReportPublishService{result: &data_svc.ReportPublicationDTO{DefinitionID: 7, VersionID: 18, Version: 2, Status: model.ReportVersionStatusPublished}}
+	controller := NewReportControllerWithServices(&fakeReportControllerService{}, publishService)
+	router := reportControllerRouter()
+	router.PUT("/reports/:id/active-version", controller.ActivateVersion)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/reports/7/active-version", strings.NewReader(`{"versionId":18,"expectedLockVersion":3}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || publishService.actor != 17 || publishService.reportID != 7 || publishService.versionID != 18 || publishService.lockVersion != 3 {
+		t.Fatalf("activation response = %d %s service=%#v", recorder.Code, recorder.Body, publishService)
+	}
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPut, "/reports/7/active-version", strings.NewReader(`{"versionId":0,"expectedLockVersion":3}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity || publishService.calls != 1 {
+		t.Fatalf("invalid activation response = %d %s calls=%d", recorder.Code, recorder.Body, publishService.calls)
+	}
+}
+
 func TestReportControllerCreateRunUsesActorParametersAndStrictJSON(t *testing.T) {
 	draftService := &fakeReportControllerService{}
 	runService := &fakeReportRunService{result: &data_svc.ReportRunDTO{ID: 31}}
@@ -286,11 +310,17 @@ func TestReportControllerVersionEndpointsValidateAndScopeRequests(t *testing.T) 
 	controller := NewReportControllerWithVersionService(&fakeReportControllerService{}, nil, nil, versionService)
 	router := reportControllerRouter()
 	router.GET("/reports/:id/versions", controller.ListVersions)
+	router.GET("/reports/:id/versions/:versionId", controller.GetVersion)
 	router.GET("/reports/:id/version-diff", controller.VersionDiff)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reports/9/versions?afterId=23&limit=50", nil))
 	if recorder.Code != http.StatusOK || versionService.actor != 17 || versionService.reportID != 9 || versionService.afterID != 23 || versionService.limit != 50 {
 		t.Fatalf("versions response=%d service=%#v", recorder.Code, versionService)
+	}
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reports/9/versions/12", nil))
+	if recorder.Code != http.StatusOK || versionService.reportID != 9 || versionService.targetID != 12 {
+		t.Fatalf("version detail response=%d service=%#v", recorder.Code, versionService)
 	}
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reports/9/version-diff?baseVersionId=11&targetVersionId=23", nil))
@@ -364,6 +394,7 @@ type fakeReportControllerService struct {
 type fakeReportPublishService struct {
 	actor       uint
 	reportID    uint
+	versionID   uint
 	lockVersion uint64
 	calls       int
 	result      *data_svc.ReportPublicationDTO
@@ -398,6 +429,10 @@ func (service *fakeReportVersionService) Diff(_ context.Context, actor, reportID
 	service.diffCalls++
 	return service.diff, nil
 }
+func (service *fakeReportVersionService) Get(_ context.Context, actor, reportID, versionID uint) (*data_svc.ReportVersionDetailDTO, error) {
+	service.actor, service.reportID, service.targetID = actor, reportID, versionID
+	return &data_svc.ReportVersionDetailDTO{}, nil
+}
 
 func (service *fakeReportRunService) Contract(_ context.Context, actor, reportID uint) (*data_svc.ReportRunContractDTO, error) {
 	service.actor, service.reportID = actor, reportID
@@ -413,6 +448,12 @@ func (service *fakeReportRunService) Create(_ context.Context, actor, reportID u
 
 func (service *fakeReportPublishService) Publish(_ context.Context, actor, reportID uint, lockVersion uint64) (*data_svc.ReportPublicationDTO, error) {
 	service.actor, service.reportID, service.lockVersion = actor, reportID, lockVersion
+	service.calls++
+	return service.result, nil
+}
+func (service *fakeReportPublishService) Activate(_ context.Context, actor, reportID, versionID uint, lockVersion uint64) (*data_svc.ReportPublicationDTO, error) {
+	service.actor, service.reportID, service.lockVersion = actor, reportID, lockVersion
+	service.versionID = versionID
 	service.calls++
 	return service.result, nil
 }

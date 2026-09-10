@@ -2,6 +2,7 @@ package data_svc
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"gin-biz-web-api/internal/reportrepo"
@@ -10,6 +11,7 @@ import (
 type reportVersionStore interface {
 	ListPublishedVersions(context.Context, uint, uint, reportrepo.VersionListQuery) (reportrepo.VersionPage, error)
 	FindPublishedVersionSummary(context.Context, uint, uint, uint) (reportrepo.VersionSummary, error)
+	FindPublishedVersion(context.Context, uint, uint, uint) (*reportrepo.Draft, error)
 }
 
 type ReportVersionService struct{ store reportVersionStore }
@@ -54,6 +56,23 @@ type ReportVersionDiffDTO struct {
 	Sections []ReportVersionDiffSectionDTO `json:"sections"`
 }
 
+type ReportVersionConfigurationDTO struct {
+	DatasourceID  uint                 `json:"datasourceId"`
+	Procedure     ReportProcedureDTO   `json:"procedure"`
+	ExecutionMode string               `json:"executionMode"`
+	InputSchema   json.RawMessage      `json:"inputSchema"`
+	Result        ReportResultDTO      `json:"result"`
+	CallTemplate  string               `json:"callTemplate"`
+	Parameters    []ReportParameterDTO `json:"parameters"`
+	Columns       []ReportColumnDTO    `json:"columns"`
+	Grants        []ReportGrantDTO     `json:"grants"`
+}
+
+type ReportVersionDetailDTO struct {
+	Summary       ReportVersionSummaryDTO       `json:"summary"`
+	Configuration ReportVersionConfigurationDTO `json:"configuration"`
+}
+
 func (service *ReportVersionService) List(ctx context.Context, actor, definitionID, afterID uint, limit int) (*ReportVersionPageDTO, error) {
 	if limit == 0 {
 		limit = defaultReportDraftPageSize
@@ -93,6 +112,25 @@ func (service *ReportVersionService) Diff(ctx context.Context, actor, definition
 		diffSection("permissions", "权限", append(countChange("grantCount", "授权数量", base.GrantCount, target.GrantCount), hashChange("permissionHash", "权限契约", base.Version.PermissionHash, target.Version.PermissionHash)...)),
 	}
 	return &ReportVersionDiffDTO{Base: baseDTO, Target: targetDTO, Sections: sections}, nil
+}
+
+func (service *ReportVersionService) Get(ctx context.Context, actor, definitionID, versionID uint) (*ReportVersionDetailDTO, error) {
+	if service == nil || service.store == nil || ctx == nil || actor == 0 || definitionID == 0 || versionID == 0 {
+		return nil, invalidReport("invalid version detail request")
+	}
+	draft, err := service.store.FindPublishedVersion(ctx, actor, definitionID, versionID)
+	if err != nil {
+		return nil, classifyReportStoreError(err)
+	}
+	detail := reportDraftDTO(draft)
+	return &ReportVersionDetailDTO{
+		Summary: versionSummaryDTO(reportrepo.VersionSummary{Version: draft.Version, ParameterCount: len(draft.Parameters), ColumnCount: len(draft.Columns), GrantCount: len(draft.Grants)}),
+		Configuration: ReportVersionConfigurationDTO{
+			DatasourceID: draft.Version.DatasourceID, Procedure: detail.Procedure, ExecutionMode: detail.ExecutionMode,
+			InputSchema: detail.InputSchema, Result: detail.Result, CallTemplate: detail.CallTemplate,
+			Parameters: detail.Parameters, Columns: detail.Columns, Grants: detail.Grants,
+		},
+	}, nil
 }
 
 func versionSummaryDTO(item reportrepo.VersionSummary) ReportVersionSummaryDTO {

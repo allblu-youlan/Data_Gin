@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/model"
@@ -53,6 +54,7 @@ func TestReportVersionServiceBuildsSafeSummaryDiff(t *testing.T) {
 
 type fakeVersionStore struct {
 	items               map[uint]reportrepo.VersionSummary
+	draft               *reportrepo.Draft
 	actor, definitionID uint
 }
 
@@ -62,4 +64,35 @@ func (store *fakeVersionStore) ListPublishedVersions(context.Context, uint, uint
 func (store *fakeVersionStore) FindPublishedVersionSummary(_ context.Context, actor, definitionID, versionID uint) (reportrepo.VersionSummary, error) {
 	store.actor, store.definitionID = actor, definitionID
 	return store.items[versionID], nil
+}
+func (store *fakeVersionStore) FindPublishedVersion(context.Context, uint, uint, uint) (*reportrepo.Draft, error) {
+	if store.draft == nil {
+		return nil, reportrepo.ErrDraftNotFound
+	}
+	return store.draft, nil
+}
+
+func TestReportVersionServiceReturnsReadOnlyConfiguration(t *testing.T) {
+	publishedAt := time.Date(2026, 9, 10, 8, 0, 0, 0, time.UTC)
+	draft := publicationDraft()
+	draft.Version.Status = model.ReportVersionStatusPublished
+	draft.Version.PublishedAt = &publishedAt
+	draft.Parameters[0].Sensitive = true
+	draft.Parameters[0].DefaultValueJSON = model.JSONText(`"secret"`)
+	result, err := NewReportVersionService(&fakeVersionStore{draft: draft}).Get(t.Context(), 17, 9, 23)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if result.Summary.ID != 23 || result.Summary.Version != 3 || result.Configuration.DatasourceID != 4 || len(result.Configuration.Columns) != 1 {
+		t.Fatalf("detail = %#v", result)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	for _, forbidden := range []string{"compiledSpec", "schemaProbeToken", "publishedBy", "secret"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("detail leaked %q: %s", forbidden, encoded)
+		}
+	}
 }

@@ -82,10 +82,18 @@ type Publication struct {
 	DatasourceSnapshotFingerprint string
 }
 
+type VersionActivation struct {
+	ContractHash                  string
+	ConnectionFingerprint         string
+	ConnectionIdentitySource      string
+	DatasourceSnapshotFingerprint string
+}
+
 type transactionRunner func(context.Context, *gorm.DB, func(*gorm.DB) error) error
 type draftReferenceValidator func(context.Context, *gorm.DB, uint, string, []model.ReportGrant) error
 type draftDefinitionLocker func(context.Context, *gorm.DB, uint, uint) (*definitionRecord, error)
 type draftVersionLocker func(context.Context, *gorm.DB, uint, uint) (*versionRecord, error)
+type publishedVersionLocker func(context.Context, *gorm.DB, uint, uint) (*versionRecord, error)
 type publicationDatasourceLocker func(context.Context, *gorm.DB, uint, string) error
 type reportAuditWriter func(context.Context, *gorm.DB, model.ReportAudit) error
 type systemReportAuditWriter func(context.Context, *gorm.DB, string, string, uint, map[string]interface{}) error
@@ -110,6 +118,7 @@ type Repository struct {
 	validateReferences    draftReferenceValidator
 	lockDefinition        draftDefinitionLocker
 	lockVersion           draftVersionLocker
+	lockPublishedVersion  publishedVersionLocker
 	lockPublicationSource publicationDatasourceLocker
 	writeAudit            reportAuditWriter
 	writeSystemAudit      systemReportAuditWriter
@@ -133,7 +142,8 @@ func New(databases ...*gorm.DB) *Repository {
 	return &Repository{
 		db: db, transact: runTransaction, validateReferences: validateDraftReferences,
 		lockDefinition: lockDraftDefinition, lockVersion: lockDraftVersion, lockPublicationSource: lockPublicationDatasource,
-		writeAudit: createReportAudit, writeSystemAudit: writeSystemReportAudit,
+		lockPublishedVersion: lockPublishedReportVersion,
+		writeAudit:           createReportAudit, writeSystemAudit: writeSystemReportAudit,
 		loadCollections: loadCollections, publishVersion: writePublishedVersion, createVersion: createDraftVersion,
 		copyCollections: replaceVersionCollections, switchDefinition: switchPublishedDefinition,
 		loadPublished: loadPublishedReport, createReportRun: writeReportRun, createRunOutbox: writeReportRunOutbox,
@@ -420,6 +430,69 @@ func (repository *Repository) PublishDraft(ctx context.Context, ownerUserID, def
 	published.Definition.CurrentPublishedVersionID = published.Version.ID
 	published.Definition.CurrentDraftVersionID = nextDraftVersionID
 	return &published, nil
+}
+
+func (repository *Repository) ActivatePublishedVersion(ctx context.Context, ownerUserID, definitionID, versionID uint, expectedLockVersion uint64, activation VersionActivation) (*Draft, error) {
+	if err := repository.validate(ctx, ownerUserID); err != nil {
+		return nil, err
+	}
+	if definitionID == 0 || versionID == 0 || expectedLockVersion == 0 || len(activation.ContractHash) != 64 ||
+		len(activation.ConnectionFingerprint) != 64 || activation.ConnectionIdentitySource != reportidentity.BindingIdentitySourceOracle || len(activation.DatasourceSnapshotFingerprint) != 64 {
+		return nil, invalidDraft("definition, version, lock version and activation are required")
+	}
+	var activated Draft
+	err := repository.transact(ctx, repository.db, func(tx *gorm.DB) error {
+		definition, err := repository.lockDefinition(ctx, tx, ownerUserID, definitionID)
+		if err != nil {
+			return err
+		}
+		currentDraft, err := repository.lockVersion(ctx, tx, definitionID, definition.CurrentDraftVersionID)
+		if err != nil {
+			return err
+		}
+		if currentDraft.VersionNumber != expectedLockVersion || definition.CurrentPublishedVersionID == versionID {
+			return ErrDraftVersionConflict
+		}
+		target, err := repository.lockPublishedVersion(ctx, tx, definitionID, versionID)
+		if err != nil {
+			return err
+		}
+		if target.ContractHash != activation.ContractHash || target.DatasourceID == 0 {
+			return ErrDraftVersionConflict
+		}
+		activated = Draft{Definition: definition.ReportDefinition, Version: target.ReportVersion, LockVersion: target.VersionNumber}
+		if err := repository.loadCollections(ctx, tx, ownerUserID, definitionID, target.ID, &activated); err != nil {
+			return err
+		}
+		if err := repository.lockPublicationSource(ctx, tx, target.DatasourceID, activation.DatasourceSnapshotFingerprint); err != nil {
+			return err
+		}
+		if err := repository.validateReferences(ctx, tx, target.DatasourceID, definition.Category, activated.Grants); err != nil {
+			return err
+		}
+		if err := replaceResultTableBinding(ctx, tx, definitionID, target.ID, target.ReportVersion, activation.ConnectionFingerprint, activation.ConnectionIdentitySource); err != nil {
+			return err
+		}
+		result := definitionScope(tx.WithContext(ctx), ownerUserID).
+			Where("id = ? AND current_draft_version_id = ?", definitionID, currentDraft.ID).
+			Updates(map[string]interface{}{"status": model.ReportDefinitionStatusActive, "current_published_version_id": target.ID, "updated_by": ownerUserID})
+		if result.Error != nil {
+			return fmt.Errorf("report version: activate definition: %w", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return ErrDraftVersionConflict
+		}
+		return repository.writeAudit(ctx, tx, buildReportAudit("REPORT_VERSION_ACTIVATE", ownerUserID, definitionID, reportDraftAuditDetail{
+			VersionNumber: target.VersionNumber, Code: definition.Code, DatasourceID: target.DatasourceID,
+			ParameterCount: len(activated.Parameters), ColumnCount: len(activated.Columns), GrantCount: len(activated.Grants),
+		}))
+	})
+	if err != nil {
+		return nil, err
+	}
+	activated.Definition.Status = model.ReportDefinitionStatusActive
+	activated.Definition.CurrentPublishedVersionID = versionID
+	return &activated, nil
 }
 
 func nextDraftAfterPublication(current model.ReportVersion, actor uint) model.ReportVersion {
@@ -824,7 +897,7 @@ func (repository *Repository) SaveDraftCollections(
 
 func (repository *Repository) validate(ctx context.Context, ownerUserID uint) error {
 	if repository == nil || repository.db == nil || repository.transact == nil || repository.validateReferences == nil ||
-		repository.lockDefinition == nil || repository.lockVersion == nil || repository.lockPublicationSource == nil || repository.writeAudit == nil || repository.loadCollections == nil ||
+		repository.lockDefinition == nil || repository.lockVersion == nil || repository.lockPublishedVersion == nil || repository.lockPublicationSource == nil || repository.writeAudit == nil || repository.loadCollections == nil ||
 		repository.publishVersion == nil || repository.createVersion == nil || repository.copyCollections == nil || repository.switchDefinition == nil ||
 		ctx == nil || ownerUserID == 0 {
 		return invalidDraft("repository, context and owner scope are required")
@@ -861,6 +934,22 @@ func lockDraftVersion(ctx context.Context, tx *gorm.DB, definitionID, versionID 
 	}
 	if err != nil {
 		return nil, fmt.Errorf("report draft: lock version: %w", err)
+	}
+	return &version, nil
+}
+
+func lockPublishedReportVersion(ctx context.Context, tx *gorm.DB, definitionID, versionID uint) (*versionRecord, error) {
+	if versionID == 0 {
+		return nil, ErrDraftNotFound
+	}
+	var version versionRecord
+	err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND definition_id = ? AND status = ?", versionID, definitionID, model.ReportVersionStatusPublished).Take(&version).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrDraftNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("report version: lock activation target: %w", err)
 	}
 	return &version, nil
 }

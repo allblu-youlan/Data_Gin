@@ -109,6 +109,11 @@ type ReportPublishRequest struct {
 	ExpectedLockVersion uint64 `json:"expectedLockVersion"`
 }
 
+type ReportVersionActivateRequest struct {
+	VersionID           uint   `json:"versionId"`
+	ExpectedLockVersion uint64 `json:"expectedLockVersion"`
+}
+
 type ReportRunCreateRequest struct {
 	Parameters   map[string]json.RawMessage `json:"parameters"`
 	Conditions   map[string]json.RawMessage `json:"conditions"`

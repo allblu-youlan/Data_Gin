@@ -24,8 +24,10 @@ const defaultReportPublicationInspectionTimeout = 5 * time.Minute
 
 type reportPublicationStore interface {
 	FindDraftByID(context.Context, uint, uint) (*reportrepo.Draft, error)
+	FindPublishedVersion(context.Context, uint, uint, uint) (*reportrepo.Draft, error)
 	FindDatasource(context.Context, uint) (*model.ReportDatasource, error)
 	PublishDraft(context.Context, uint, uint, uint64, reportrepo.Publication) (*reportrepo.Draft, error)
+	ActivatePublishedVersion(context.Context, uint, uint, uint, uint64, reportrepo.VersionActivation) (*reportrepo.Draft, error)
 }
 
 type reportCredentialDecryptor interface {
@@ -155,14 +157,68 @@ func (service *ReportPublishService) Publish(ctx context.Context, actor, definit
 	return &ReportPublicationDTO{
 		DefinitionID: published.Definition.ID, VersionID: published.Version.ID, Version: published.Version.VersionNumber,
 		Status: model.ReportVersionStatusPublished, ContractHash: inspection.compiled.Hashes.Contract, PublishedAt: publishedAt,
-		Validation: &ReportPublicationValidationDTO{
-			ValidatedAt: validatedAt,
-			Procedure:   ReportPublicationProcedureDTO{Owner: draft.Version.ProcedureOwner, Package: draft.Version.PackageName, Name: draft.Version.ProcedureName, Overload: draft.Version.ProcedureOverload, ArgumentCount: inspection.procedureArgumentCount, SignatureHash: inspection.compiled.Hashes.ProcedureSignature},
-			Result:      ReportPublicationResultDTO{TableOwner: draft.Version.ResultTableOwner, TableName: draft.Version.ResultTableName, ColumnCount: inspection.resultColumnCount, SchemaHash: inspection.compiled.Hashes.ResultSchema},
-			Snapshot:    ReportPublicationSnapshotDTO{ResultTableValidated: inspection.resultTableValidated},
-			Export:      ReportPublicationExportDTO{ExportableColumnCount: exportableReportColumnCount(draft.Columns), SchemaHash: inspection.compiled.Hashes.ExportSchema},
-		},
+		Validation: publicationValidationDTO(validatedAt, draft, inspection),
 	}, nil
+}
+
+func (service *ReportPublishService) Activate(ctx context.Context, actor, definitionID, versionID uint, expectedLockVersion uint64) (*ReportPublicationDTO, error) {
+	if service == nil || service.store == nil || service.decryptor == nil || service.open == nil || ctx == nil || actor == 0 || definitionID == 0 || versionID == 0 || expectedLockVersion == 0 {
+		return nil, fmt.Errorf("%w: service, actor, report, version and lock version are required", ErrReportPublicationInvalid)
+	}
+	current, err := service.store.FindDraftByID(ctx, actor, definitionID)
+	if err != nil {
+		return nil, classifyPublicationStoreError(err)
+	}
+	if current.LockVersion != expectedLockVersion || current.Definition.CurrentPublishedVersionID == versionID {
+		return nil, ErrReportConflict
+	}
+	target, err := service.store.FindPublishedVersion(ctx, actor, definitionID, versionID)
+	if err != nil {
+		return nil, classifyPublicationStoreError(err)
+	}
+	datasource, err := service.store.FindDatasource(ctx, target.Version.DatasourceID)
+	if err != nil {
+		return nil, classifyPublicationStoreError(err)
+	}
+	password, err := service.decryptor.Decrypt(datasource.CredentialKeyVersion, datasource.PasswordCiphertext)
+	if err != nil {
+		return nil, fmt.Errorf("report publication: decrypt datasource credential: %w", err)
+	}
+	inspection, err := service.inspectContract(ctx, datasource, password, target)
+	if err != nil {
+		return nil, err
+	}
+	if inspection.compiled.Hashes.Contract != target.Version.ContractHash {
+		return nil, fmt.Errorf("%w: selected version no longer matches the Oracle contract", ErrReportPublicationInvalid)
+	}
+	validatedAt := service.now().UTC()
+	activated, err := service.store.ActivatePublishedVersion(ctx, actor, definitionID, versionID, expectedLockVersion, reportrepo.VersionActivation{
+		ContractHash: target.Version.ContractHash, ConnectionFingerprint: inspection.connectionFingerprint,
+		ConnectionIdentitySource:      reportidentity.BindingIdentitySourceOracle,
+		DatasourceSnapshotFingerprint: reportidentity.DatasourceFingerprint(*datasource),
+	})
+	if err != nil {
+		return nil, classifyPublicationStoreError(err)
+	}
+	publishedAt := validatedAt
+	if activated.Version.PublishedAt != nil {
+		publishedAt = activated.Version.PublishedAt.UTC()
+	}
+	return &ReportPublicationDTO{
+		DefinitionID: activated.Definition.ID, VersionID: activated.Version.ID, Version: activated.Version.VersionNumber,
+		Status: model.ReportVersionStatusPublished, ContractHash: activated.Version.ContractHash, PublishedAt: publishedAt,
+		Validation: publicationValidationDTO(validatedAt, target, inspection),
+	}, nil
+}
+
+func publicationValidationDTO(validatedAt time.Time, draft *reportrepo.Draft, inspection reportPublicationInspection) *ReportPublicationValidationDTO {
+	return &ReportPublicationValidationDTO{
+		ValidatedAt: validatedAt,
+		Procedure:   ReportPublicationProcedureDTO{Owner: draft.Version.ProcedureOwner, Package: draft.Version.PackageName, Name: draft.Version.ProcedureName, Overload: draft.Version.ProcedureOverload, ArgumentCount: inspection.procedureArgumentCount, SignatureHash: inspection.compiled.Hashes.ProcedureSignature},
+		Result:      ReportPublicationResultDTO{TableOwner: draft.Version.ResultTableOwner, TableName: draft.Version.ResultTableName, ColumnCount: inspection.resultColumnCount, SchemaHash: inspection.compiled.Hashes.ResultSchema},
+		Snapshot:    ReportPublicationSnapshotDTO{ResultTableValidated: inspection.resultTableValidated},
+		Export:      ReportPublicationExportDTO{ExportableColumnCount: exportableReportColumnCount(draft.Columns), SchemaHash: inspection.compiled.Hashes.ExportSchema},
+	}
 }
 
 func (service *ReportPublishService) inspectContract(

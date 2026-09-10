@@ -64,6 +64,43 @@ func TestReportPublishServicePublishesValidatedOracleContract(t *testing.T) {
 	}
 }
 
+func TestReportPublishServiceActivatesValidatedHistoricalVersion(t *testing.T) {
+	current := publicationDraft()
+	current.Definition.CurrentPublishedVersionID = 19
+	target := publicationDraft()
+	target.Version.ID = 18
+	target.Version.VersionNumber = 2
+	target.Version.Status = model.ReportVersionStatusPublished
+	publishedAt := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	target.Version.PublishedAt = &publishedAt
+	store := &fakePublicationStore{draft: current, published: target, datasource: publicationDatasource()}
+	probe := NewReportPublishService(store, &fakePublicationDecryptor{password: "password"}, func(context.Context, reportoracle.Config) (reportOracleInspector, error) {
+		return &fakeReportOracleInspector{procedure: publicationProcedure(), columns: publicationResultColumns()}, nil
+	})
+	inspection, err := probe.inspectContract(t.Context(), store.datasource, "password", target)
+	if err != nil {
+		t.Fatalf("inspectContract() error = %v", err)
+	}
+	target.Version.ContractHash = inspection.compiled.Hashes.Contract
+	inspector := &fakeReportOracleInspector{procedure: publicationProcedure(), columns: publicationResultColumns()}
+	service := NewReportPublishService(store, &fakePublicationDecryptor{password: "password"}, func(context.Context, reportoracle.Config) (reportOracleInspector, error) {
+		return inspector, nil
+	})
+	validatedAt := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return validatedAt }
+
+	result, err := service.Activate(t.Context(), 17, 9, 18, 3)
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	if store.activateCalls != 1 || store.activateVersionID != 18 || store.activateLockVersion != 3 || result.VersionID != 18 || result.Version != 2 {
+		t.Fatalf("activation calls=%d version=%d lock=%d result=%#v", store.activateCalls, store.activateVersionID, store.activateLockVersion, result)
+	}
+	if result.Validation == nil || !result.Validation.ValidatedAt.Equal(validatedAt) || !result.PublishedAt.Equal(publishedAt) || !inspector.closed {
+		t.Fatalf("result=%#v inspector closed=%t", result, inspector.closed)
+	}
+}
+
 func TestReportPublishServiceRejectsResultTableWithoutStableROWID(t *testing.T) {
 	store := &fakePublicationStore{draft: publicationDraft(), datasource: publicationDatasource()}
 	inspector := &fakeReportOracleInspector{
@@ -280,15 +317,25 @@ func TestClassifyPublicationStoreErrorUsesResourceSpecificSemantics(t *testing.T
 }
 
 type fakePublicationStore struct {
-	draft         *reportrepo.Draft
-	datasource    *model.ReportDatasource
-	publication   reportrepo.Publication
-	publishCalls  int
-	beforePublish func()
-	publishErr    error
+	draft               *reportrepo.Draft
+	published           *reportrepo.Draft
+	datasource          *model.ReportDatasource
+	publication         reportrepo.Publication
+	publishCalls        int
+	beforePublish       func()
+	publishErr          error
+	activateCalls       int
+	activateVersionID   uint
+	activateLockVersion uint64
 }
 
 func (store *fakePublicationStore) FindDraftByID(context.Context, uint, uint) (*reportrepo.Draft, error) {
+	return store.draft, nil
+}
+func (store *fakePublicationStore) FindPublishedVersion(context.Context, uint, uint, uint) (*reportrepo.Draft, error) {
+	if store.published != nil {
+		return store.published, nil
+	}
 	return store.draft, nil
 }
 func (store *fakePublicationStore) FindDatasource(context.Context, uint) (*model.ReportDatasource, error) {
@@ -308,6 +355,15 @@ func (store *fakePublicationStore) PublishDraft(_ context.Context, _ uint, _ uin
 	publishedAt := publication.SchemaValidatedAt.Add(time.Second)
 	published.Version.PublishedAt = &publishedAt
 	return &published, nil
+}
+func (store *fakePublicationStore) ActivatePublishedVersion(_ context.Context, _, _ uint, versionID uint, lockVersion uint64, _ reportrepo.VersionActivation) (*reportrepo.Draft, error) {
+	store.activateCalls++
+	store.activateVersionID = versionID
+	store.activateLockVersion = lockVersion
+	if store.published != nil {
+		return store.published, store.publishErr
+	}
+	return store.draft, store.publishErr
 }
 
 type fakePublicationDecryptor struct {

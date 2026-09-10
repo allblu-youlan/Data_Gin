@@ -444,6 +444,48 @@ func TestPublishDraftFreezesContractAndCreatesCleanNextDraft(t *testing.T) {
 	}
 }
 
+func TestActivatePublishedVersionKeepsDraftAndSwitchesOnlyActiveVersion(t *testing.T) {
+	repository, transactionState := publicationTestRepository(t)
+	repository.lockDefinition = func(context.Context, *gorm.DB, uint, uint) (*definitionRecord, error) {
+		return &definitionRecord{ReportDefinition: model.ReportDefinition{BaseModel: model.BaseModel{ID: 7}, Code: "orders", DatasourceID: 3, OwnerUserID: 8, CurrentDraftVersionID: 11, CurrentPublishedVersionID: 19}}, nil
+	}
+	contractHash := strings.Repeat("a", 64)
+	repository.lockPublishedVersion = func(_ context.Context, _ *gorm.DB, definitionID, versionID uint) (*versionRecord, error) {
+		if definitionID != 7 || versionID != 18 {
+			t.Fatalf("target = %d/%d", definitionID, versionID)
+		}
+		return &versionRecord{ReportVersion: model.ReportVersion{BaseModel: model.BaseModel{ID: 18}, DefinitionID: 7, DatasourceID: 3, VersionNumber: 2, Status: model.ReportVersionStatusPublished, ExecutionMode: model.ReportExecutionModeTableSnapshot, ResultTableOwner: "REPORT", ResultTableName: "ORDER_RESULTS", ContractHash: contractHash}}, nil
+	}
+	repository.validateReferences = func(context.Context, *gorm.DB, uint, string, []model.ReportGrant) error { return nil }
+	repository.writeAudit = func(_ context.Context, _ *gorm.DB, audit model.ReportAudit) error {
+		if audit.Action != "REPORT_VERSION_ACTIVATE" || audit.TargetID != 7 {
+			t.Fatalf("audit = %#v", audit)
+		}
+		return nil
+	}
+	activation := VersionActivation{
+		ContractHash: contractHash, ConnectionFingerprint: strings.Repeat("b", 64),
+		ConnectionIdentitySource:      reportidentity.BindingIdentitySourceOracle,
+		DatasourceSnapshotFingerprint: strings.Repeat("c", 64),
+	}
+	activated, err := repository.ActivatePublishedVersion(t.Context(), 8, 7, 18, 4, activation)
+	if err != nil {
+		t.Fatalf("ActivatePublishedVersion() error = %v", err)
+	}
+	if activated.Version.ID != 18 || activated.Definition.CurrentPublishedVersionID != 18 || activated.Definition.CurrentDraftVersionID != 11 {
+		t.Fatalf("activated = %#v", activated)
+	}
+	if transactionState.begins != 1 || transactionState.commits != 1 || transactionState.rollbacks != 0 {
+		t.Fatalf("transaction state = %#v", transactionState)
+	}
+	statements := strings.Join(transactionState.execs, "\n")
+	for _, expected := range []string{"DELETE FROM `report_result_table_bindings`", "INSERT INTO report_result_table_bindings", "current_published_version_id"} {
+		if !strings.Contains(statements, expected) {
+			t.Fatalf("activation statements missing %q: %s", expected, statements)
+		}
+	}
+}
+
 func TestPublishDraftRejectsAnotherLegacyBindingForTheSameOwnerAndTable(t *testing.T) {
 	repository, transactionState := publicationTestRepository(t)
 	transactionState.queryCount = 1
