@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -19,6 +20,15 @@ end
 return 0
 `
 
+const renewTaskLockScript = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`
+
+var ErrTaskLockLeaseLost = errors.New("task lock lease lost")
+
 var taskLockKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9:_-]{0,255}$`)
 
 type TaskLock interface {
@@ -27,6 +37,11 @@ type TaskLock interface {
 
 type TaskLocker interface {
 	Acquire(ctx context.Context, key string) (TaskLock, bool, error)
+}
+
+type RenewableTaskLock interface {
+	TaskLock
+	Renew(ctx context.Context) error
 }
 
 type redisTaskLockClient interface {
@@ -49,6 +64,9 @@ func newRedisTaskLocker(client redisTaskLockClient, prefix string, ttl time.Dura
 	if client == nil || prefix == "" || len(prefix) > 256 || ttl <= 0 || newToken == nil {
 		return nil, fmt.Errorf("weather task lock: invalid configuration")
 	}
+	if ttl < time.Millisecond {
+		ttl = time.Millisecond
+	}
 	return &RedisTaskLocker{client: client, prefix: prefix, ttl: ttl, newToken: newToken}, nil
 }
 
@@ -68,18 +86,45 @@ func (locker *RedisTaskLocker) Acquire(ctx context.Context, key string) (TaskLoc
 	if !acquired {
 		return nil, false, nil
 	}
-	return &redisTaskLock{client: locker.client, key: redisKey, token: token}, true, nil
+	return &redisTaskLock{client: locker.client, key: redisKey, token: token, ttl: locker.ttl}, true, nil
 }
 
 type redisTaskLock struct {
 	client redisTaskLockClient
 	key    string
 	token  string
+	ttl    time.Duration
 
 	mu          sync.Mutex
 	releaseDone chan struct{}
 	releaseErr  error
 	released    bool
+}
+
+func (lock *redisTaskLock) Renew(ctx context.Context) error {
+	if lock == nil || lock.client == nil || ctx == nil || lock.ttl <= 0 {
+		return fmt.Errorf("weather task lock: invalid renewal")
+	}
+	lock.mu.Lock()
+	unavailable := lock.released
+	lock.mu.Unlock()
+	if unavailable {
+		return ErrTaskLockLeaseLost
+	}
+	renewed, err := lock.client.Eval(
+		ctx,
+		renewTaskLockScript,
+		[]string{lock.key},
+		lock.token,
+		lock.ttl.Milliseconds(),
+	).Int64()
+	if err != nil {
+		return fmt.Errorf("weather task lock: renew: %w", err)
+	}
+	if renewed != 1 {
+		return ErrTaskLockLeaseLost
+	}
+	return nil
 }
 
 func (lock *redisTaskLock) Release(ctx context.Context) error {

@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,134 @@ func TestRedisTaskLockerAcquiresAndReleasesOwnedLock(t *testing.T) {
 	}
 	if err := lock.Release(context.Background()); err != nil || client.evalCalls != 1 {
 		t.Fatalf("second Release() error=%v calls=%d", err, client.evalCalls)
+	}
+}
+
+func TestRedisTaskLockRenewsOnlyOwnedLease(t *testing.T) {
+	tests := []struct {
+		name       string
+		evalResult int64
+		wantLost   bool
+	}{
+		{name: "owned", evalResult: 1},
+		{name: "lost", evalResult: 0, wantLost: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeRedisTaskLockClient{setNXResult: true, evalResult: test.evalResult}
+			locker, err := newRedisTaskLocker(client, "app:lock:", 2*time.Minute, func() (string, error) {
+				return "token-renew", nil
+			})
+			if err != nil {
+				t.Fatalf("newRedisTaskLocker() error=%v", err)
+			}
+			lock, acquired, err := locker.Acquire(t.Context(), "cron:data_collect")
+			if err != nil || !acquired {
+				t.Fatalf("Acquire() acquired=%t error=%v", acquired, err)
+			}
+			renewable, ok := lock.(RenewableTaskLock)
+			if !ok {
+				t.Fatal("acquired redis lock is not renewable")
+			}
+			err = renewable.Renew(t.Context())
+			if test.wantLost && !errors.Is(err, ErrTaskLockLeaseLost) {
+				t.Fatalf("Renew() error=%v wantLost=%t", err, test.wantLost)
+			}
+			if !test.wantLost && err != nil {
+				t.Fatalf("Renew() error=%v, want nil", err)
+			}
+			if client.evalCalls != 1 || client.evalKeys[0] != "app:lock:cron:data_collect" ||
+				client.evalArgs[0] != "token-renew" || client.evalArgs[1] != int64((2*time.Minute)/time.Millisecond) {
+				t.Fatalf("renew Eval call=%+v", client)
+			}
+			const expectedRenewScript = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+end
+return 0
+`
+			if client.evalScript != expectedRenewScript {
+				t.Fatalf("renew script is not token-fenced: %s", client.evalScript)
+			}
+		})
+	}
+}
+
+func TestRedisTaskLockRenewFailsClosedOnRedisError(t *testing.T) {
+	client := &fakeRedisTaskLockClient{setNXResult: true, evalErr: errors.New("redis unavailable")}
+	locker, err := newRedisTaskLocker(client, "app:lock:", time.Minute, func() (string, error) {
+		return "token", nil
+	})
+	if err != nil {
+		t.Fatalf("newRedisTaskLocker() error=%v", err)
+	}
+	lock, _, err := locker.Acquire(t.Context(), "cron:data_collect")
+	if err != nil {
+		t.Fatalf("Acquire() error=%v", err)
+	}
+	err = lock.(RenewableTaskLock).Renew(t.Context())
+	if err == nil || errors.Is(err, ErrTaskLockLeaseLost) {
+		t.Fatalf("Renew() error=%v, want Redis error", err)
+	}
+}
+
+func TestRedisTaskLockLetsRedisOrderRenewWithRelease(t *testing.T) {
+	client := newOrderedRedisTaskLockClient()
+	locker, err := newRedisTaskLocker(client, "app:lock:", time.Minute, func() (string, error) {
+		return "token", nil
+	})
+	if err != nil {
+		t.Fatalf("newRedisTaskLocker() error=%v", err)
+	}
+	lock, _, err := locker.Acquire(t.Context(), "cron:data_collect")
+	if err != nil {
+		t.Fatalf("Acquire() error=%v", err)
+	}
+	releaseResult := make(chan error, 1)
+	go func() {
+		releaseResult <- lock.Release(t.Context())
+	}()
+	<-client.releaseStarted
+	if err := lock.(RenewableTaskLock).Renew(t.Context()); err != nil {
+		t.Fatalf("Renew() during release error=%v", err)
+	}
+	close(client.releaseContinue)
+	if err := <-releaseResult; err != nil {
+		t.Fatalf("Release() error=%v", err)
+	}
+	if client.isHeld() {
+		t.Fatal("lease remained held after release")
+	}
+	if err := lock.(RenewableTaskLock).Renew(t.Context()); !errors.Is(err, ErrTaskLockLeaseLost) {
+		t.Fatalf("Renew() after release error=%v, want lease lost", err)
+	}
+}
+
+func TestRedisTaskLockerClampsSubMillisecondTTL(t *testing.T) {
+	client := &fakeRedisTaskLockClient{setNXResult: true, evalResult: int64(1)}
+	locker, err := newRedisTaskLocker(client, "app:lock:", time.Microsecond, func() (string, error) {
+		return "token", nil
+	})
+	if err != nil {
+		t.Fatalf("newRedisTaskLocker() error=%v", err)
+	}
+	lock, acquired, err := locker.Acquire(t.Context(), "cron:data_collect")
+	if err != nil || !acquired {
+		t.Fatalf("Acquire() acquired=%t error=%v", acquired, err)
+	}
+	if client.setNXTTL != time.Millisecond {
+		t.Fatalf("SetNX TTL=%v, want 1ms", client.setNXTTL)
+	}
+	if err := lock.(RenewableTaskLock).Renew(t.Context()); err != nil {
+		t.Fatalf("Renew() error=%v", err)
+	}
+	if client.evalArgs[1] != int64(1) {
+		t.Fatalf("renew TTL milliseconds=%v, want 1", client.evalArgs[1])
+	}
+	if _, err := newRedisTaskLocker(client, "app:lock:", time.Millisecond, func() (string, error) {
+		return "token", nil
+	}); err != nil {
+		t.Fatalf("newRedisTaskLocker(1ms) error=%v", err)
 	}
 }
 
@@ -104,6 +233,7 @@ type fakeRedisTaskLockClient struct {
 	evalResult  interface{}
 	evalErr     error
 	evalCalls   int
+	evalScript  string
 	evalKeys    []string
 	evalArgs    []interface{}
 }
@@ -118,12 +248,69 @@ func (client *fakeRedisTaskLockClient) SetNX(_ context.Context, key string, valu
 	return command
 }
 
-func (client *fakeRedisTaskLockClient) Eval(_ context.Context, _ string, keys []string, args ...interface{}) *redisv8.Cmd {
+func (client *fakeRedisTaskLockClient) Eval(_ context.Context, script string, keys []string, args ...interface{}) *redisv8.Cmd {
 	client.evalCalls++
+	client.evalScript = script
 	client.evalKeys = append([]string(nil), keys...)
 	client.evalArgs = append([]interface{}(nil), args...)
 	command := redisv8.NewCmd(context.Background())
 	command.SetVal(client.evalResult)
 	command.SetErr(client.evalErr)
 	return command
+}
+
+type orderedRedisTaskLockClient struct {
+	mu              sync.Mutex
+	held            bool
+	token           string
+	releaseStarted  chan struct{}
+	releaseContinue chan struct{}
+}
+
+func newOrderedRedisTaskLockClient() *orderedRedisTaskLockClient {
+	return &orderedRedisTaskLockClient{
+		releaseStarted:  make(chan struct{}),
+		releaseContinue: make(chan struct{}),
+	}
+}
+
+func (client *orderedRedisTaskLockClient) SetNX(_ context.Context, _ string, value interface{}, _ time.Duration) *redisv8.BoolCmd {
+	client.mu.Lock()
+	client.held = true
+	client.token, _ = value.(string)
+	client.mu.Unlock()
+	command := redisv8.NewBoolCmd(context.Background())
+	command.SetVal(true)
+	return command
+}
+
+func (client *orderedRedisTaskLockClient) Eval(ctx context.Context, script string, _ []string, args ...interface{}) *redisv8.Cmd {
+	if script == releaseTaskLockScript {
+		close(client.releaseStarted)
+		select {
+		case <-ctx.Done():
+			command := redisv8.NewCmd(context.Background())
+			command.SetErr(ctx.Err())
+			return command
+		case <-client.releaseContinue:
+		}
+	}
+	client.mu.Lock()
+	result := int64(0)
+	if client.held && len(args) > 0 && args[0] == client.token {
+		result = 1
+		if script == releaseTaskLockScript {
+			client.held = false
+		}
+	}
+	client.mu.Unlock()
+	command := redisv8.NewCmd(context.Background())
+	command.SetVal(result)
+	return command
+}
+
+func (client *orderedRedisTaskLockClient) isHeld() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.held
 }
