@@ -18,11 +18,15 @@ func TestBuildWeatherRepairCandidateQueryUsesLatestEligibleRun(t *testing.T) {
 		"MAX_EXECUTION_TIME(5000)",
 		"WITH eligible_malls AS",
 		"newest_runs AS",
-		"current_weather AS",
-		"current_v26_life AS",
-		"current_v3_life AS",
+		"candidate_runs AS",
+		"candidate_malls AS",
+		"WHERE candidate.status = ?",
+		"ranked_latest AS",
+		"current_freshness AS",
+		"OVER (PARTITION BY latest.mall_id, latest.data_kind)",
+		"INNER JOIN candidate_malls AS candidate ON candidate.mall_id = latest.mall_id",
 		"runs.id > ?",
-		"runs.status IN ?",
+		"candidate.status IN ?",
 		"latest.freshness_status IN ?",
 		"latest.subtype LIKE ?",
 		"ORDER BY runs.id ASC",
@@ -31,6 +35,9 @@ func TestBuildWeatherRepairCandidateQueryUsesLatestEligibleRun(t *testing.T) {
 		if !strings.Contains(statement, required) {
 			t.Fatalf("query missing %q: %s", required, statement)
 		}
+	}
+	if strings.Count(statement, "FROM mall_weather_latest") != 1 {
+		t.Fatalf("latest data must be read once for the candidate malls: %s", statement)
 	}
 	for _, forbidden := range []string{"runs.id = (", "SELECT MAX(newest.id)", "SELECT MAX(current_latest.fetched_at_utc)"} {
 		if strings.Contains(statement, forbidden) {
@@ -43,12 +50,53 @@ func TestBuildWeatherRepairCandidateQueryUsesLatestEligibleRun(t *testing.T) {
 	if strings.Count(statement, "?") != len(args) {
 		t.Fatalf("placeholder count=%d args=%d", strings.Count(statement, "?"), len(args))
 	}
-	if !containsRepairQueryArg(args, uint(42)) || args[len(args)-1] != maxWeatherPageSize {
-		t.Fatalf("args=%#v", args)
+	taskKinds := []string{"fast", "full", "lifeindex", "manual", "repair"}
+	terminalStatuses := []string{"success", "partial_success", "failed"}
+	repairStatuses := []string{"partial_success", "failed"}
+	weatherDataKinds := []string{
+		model.MallWeatherDataKindRealtime,
+		model.MallWeatherDataKindMinutely,
+		model.MallWeatherDataKindHourly,
+		model.MallWeatherDataKindDaily,
 	}
+	currentDataKinds := append([]string(nil), weatherDataKinds...)
+	currentDataKinds = append(currentDataKinds, model.MallWeatherDataKindLife)
 	wantFreshness := []string{model.MallWeatherFreshnessCritical, model.MallWeatherFreshnessStale}
-	if !containsRepairQueryArg(args, wantFreshness) {
-		t.Fatalf("freshness args=%#v", args)
+	v26LifePattern := weatherdomain.SourceAPIV26Daily + ":%"
+	v3LifePattern := weatherdomain.SourceAPIV3LifeIndex + ":%"
+	wantArgs := []interface{}{
+		"active",
+		"confirmed",
+		true,
+		weatherdomain.ProviderCaiyun,
+		[]string{caiyun.EndpointWeatherV26, caiyun.EndpointLifeIndexV3},
+		taskKinds,
+		terminalStatuses,
+		uint(42),
+		taskKinds,
+		terminalStatuses,
+		"success",
+		weatherDataKinds,
+		model.MallWeatherDataKindLife,
+		v26LifePattern,
+		model.MallWeatherDataKindLife,
+		v3LifePattern,
+		currentDataKinds,
+		weatherDataKinds,
+		wantFreshness,
+		model.MallWeatherDataKindLife,
+		v26LifePattern,
+		wantFreshness,
+		model.MallWeatherDataKindLife,
+		v3LifePattern,
+		wantFreshness,
+		repairStatuses,
+		caiyun.EndpointWeatherV26,
+		caiyun.EndpointLifeIndexV3,
+		maxWeatherPageSize,
+	}
+	if !reflect.DeepEqual(args, wantArgs) {
+		t.Fatalf("args=%#v want=%#v", args, wantArgs)
 	}
 }
 
@@ -84,13 +132,4 @@ func TestNormalizeWeatherRepairPageSize(t *testing.T) {
 			}
 		})
 	}
-}
-
-func containsRepairQueryArg(args []interface{}, want interface{}) bool {
-	for _, arg := range args {
-		if reflect.DeepEqual(arg, want) {
-			return true
-		}
-	}
-	return false
 }

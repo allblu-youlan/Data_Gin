@@ -32,63 +32,49 @@ const weatherRepairCandidateQuery = `WITH eligible_malls AS (
   AND candidate.task_kind IN ?
   AND candidate.status IN ?
   GROUP BY candidate.mall_id, candidate.endpoint_kind
-), current_weather AS (
-  SELECT latest.mall_id,
-    MAX(CASE WHEN latest.freshness_status IN ? THEN 1 ELSE 0 END) AS needs_repair
+), candidate_runs AS (
+  SELECT runs.*
+  FROM newest_runs
+  INNER JOIN mall_weather_fetch_runs AS runs ON runs.id = newest_runs.id
+  WHERE runs.id > ?
+  AND runs.task_kind IN ?
+  AND runs.status IN ?
+), candidate_malls AS (
+  SELECT DISTINCT candidate.mall_id
+  FROM candidate_runs AS candidate
+  WHERE candidate.status = ?
+), ranked_latest AS (
+  SELECT latest.mall_id, latest.data_kind, latest.subtype,
+    latest.fetched_at_utc, latest.freshness_status,
+    MAX(CASE WHEN latest.data_kind IN ? THEN latest.fetched_at_utc END)
+      OVER (PARTITION BY latest.mall_id, latest.data_kind) AS current_weather_fetched_at,
+    MAX(CASE WHEN latest.data_kind = ? AND latest.subtype LIKE ? THEN latest.fetched_at_utc END)
+      OVER (PARTITION BY latest.mall_id) AS current_v26_life_fetched_at,
+    MAX(CASE WHEN latest.data_kind = ? AND latest.subtype LIKE ? THEN latest.fetched_at_utc END)
+      OVER (PARTITION BY latest.mall_id) AS current_v3_life_fetched_at
   FROM mall_weather_latest AS latest
-  INNER JOIN (
-    SELECT mall_id, data_kind, MAX(fetched_at_utc) AS fetched_at_utc
-    FROM mall_weather_latest
-    WHERE data_kind IN ?
-    GROUP BY mall_id, data_kind
-  ) AS current
-    ON current.mall_id = latest.mall_id
-    AND current.data_kind = latest.data_kind
-    AND current.fetched_at_utc = latest.fetched_at_utc
-  GROUP BY latest.mall_id
-), current_v26_life AS (
+  INNER JOIN candidate_malls AS candidate ON candidate.mall_id = latest.mall_id
+  WHERE latest.data_kind IN ?
+), current_freshness AS (
   SELECT latest.mall_id,
-    MAX(CASE WHEN latest.freshness_status IN ? THEN 1 ELSE 0 END) AS needs_repair
-  FROM mall_weather_latest AS latest
-  INNER JOIN (
-    SELECT mall_id, MAX(fetched_at_utc) AS fetched_at_utc
-    FROM mall_weather_latest
-    WHERE data_kind = ? AND subtype LIKE ?
-    GROUP BY mall_id
-  ) AS current
-    ON current.mall_id = latest.mall_id
-    AND current.fetched_at_utc = latest.fetched_at_utc
-  WHERE latest.data_kind = ? AND latest.subtype LIKE ?
-  GROUP BY latest.mall_id
-), current_v3_life AS (
-  SELECT latest.mall_id,
-    MAX(CASE WHEN latest.freshness_status IN ? THEN 1 ELSE 0 END) AS needs_repair
-  FROM mall_weather_latest AS latest
-  INNER JOIN (
-    SELECT mall_id, MAX(fetched_at_utc) AS fetched_at_utc
-    FROM mall_weather_latest
-    WHERE data_kind = ? AND subtype LIKE ?
-    GROUP BY mall_id
-  ) AS current
-    ON current.mall_id = latest.mall_id
-    AND current.fetched_at_utc = latest.fetched_at_utc
-  WHERE latest.data_kind = ? AND latest.subtype LIKE ?
+    MAX(CASE WHEN latest.data_kind IN ?
+      AND latest.fetched_at_utc = latest.current_weather_fetched_at
+      AND latest.freshness_status IN ? THEN 1 ELSE 0 END) AS weather_needs_repair,
+    MAX(CASE WHEN latest.data_kind = ? AND latest.subtype LIKE ?
+      AND latest.fetched_at_utc = latest.current_v26_life_fetched_at
+      AND latest.freshness_status IN ? THEN 1 ELSE 0 END) AS v26_life_needs_repair,
+    MAX(CASE WHEN latest.data_kind = ? AND latest.subtype LIKE ?
+      AND latest.fetched_at_utc = latest.current_v3_life_fetched_at
+      AND latest.freshness_status IN ? THEN 1 ELSE 0 END) AS v3_life_needs_repair
+  FROM ranked_latest AS latest
   GROUP BY latest.mall_id
 )
 SELECT /*+ MAX_EXECUTION_TIME(%d) */ runs.*
-FROM newest_runs
-INNER JOIN mall_weather_fetch_runs AS runs ON runs.id = newest_runs.id
-LEFT JOIN current_weather AS weather ON weather.mall_id = runs.mall_id
-LEFT JOIN current_v26_life AS v26_life ON v26_life.mall_id = runs.mall_id
-LEFT JOIN current_v3_life AS v3_life ON v3_life.mall_id = runs.mall_id
-WHERE runs.id > ?
-  AND runs.task_kind IN ?
-  AND runs.status IN ?
-  AND (
-    runs.status IN ?
-    OR (runs.endpoint_kind = ? AND (COALESCE(weather.needs_repair, 0) = 1 OR COALESCE(v26_life.needs_repair, 0) = 1))
-    OR (runs.endpoint_kind = ? AND COALESCE(v3_life.needs_repair, 0) = 1)
-  )
+FROM candidate_runs AS runs
+LEFT JOIN current_freshness AS freshness ON freshness.mall_id = runs.mall_id
+WHERE runs.status IN ?
+  OR (runs.endpoint_kind = ? AND (COALESCE(freshness.weather_needs_repair, 0) = 1 OR COALESCE(freshness.v26_life_needs_repair, 0) = 1))
+  OR (runs.endpoint_kind = ? AND COALESCE(freshness.v3_life_needs_repair, 0) = 1)
 ORDER BY runs.id ASC
 LIMIT ?`
 
@@ -116,6 +102,8 @@ func buildWeatherRepairCandidateQuery(afterID uint, limit, maxExecutionMillis in
 		model.MallWeatherDataKindHourly,
 		model.MallWeatherDataKindDaily,
 	}
+	currentDataKinds := append([]string(nil), weatherDataKinds...)
+	currentDataKinds = append(currentDataKinds, model.MallWeatherDataKindLife)
 	freshnessStatuses := []string{model.MallWeatherFreshnessCritical, model.MallWeatherFreshnessStale}
 	v26LifePattern := weatherdomain.SourceAPIV26Daily + ":%"
 	v3LifePattern := weatherdomain.SourceAPIV3LifeIndex + ":%"
@@ -127,21 +115,24 @@ func buildWeatherRepairCandidateQuery(afterID uint, limit, maxExecutionMillis in
 		[]string{caiyun.EndpointWeatherV26, caiyun.EndpointLifeIndexV3},
 		taskKinds,
 		terminalStatuses,
-		freshnessStatuses,
+		afterID,
+		taskKinds,
+		terminalStatuses,
+		"success",
+		weatherDataKinds,
+		model.MallWeatherDataKindLife,
+		v26LifePattern,
+		model.MallWeatherDataKindLife,
+		v3LifePattern,
+		currentDataKinds,
 		weatherDataKinds,
 		freshnessStatuses,
 		model.MallWeatherDataKindLife,
 		v26LifePattern,
-		model.MallWeatherDataKindLife,
-		v26LifePattern,
 		freshnessStatuses,
 		model.MallWeatherDataKindLife,
 		v3LifePattern,
-		model.MallWeatherDataKindLife,
-		v3LifePattern,
-		afterID,
-		taskKinds,
-		terminalStatuses,
+		freshnessStatuses,
 		repairStatuses,
 		caiyun.EndpointWeatherV26,
 		caiyun.EndpointLifeIndexV3,
