@@ -15,13 +15,20 @@ type BojunOrderCrontab struct{}
 var bojunOrderCronRunning atomic.Bool
 
 func (b BojunOrderCrontab) Run() {
+	b.RunContext(context.Background())
+}
+
+func (b BojunOrderCrontab) RunContext(ctx context.Context) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
 	if !bojunOrderCronRunning.CompareAndSwap(false, true) {
 		logger.Warn("伯俊订单拉取仍在运行，跳过本次调度")
 		return
 	}
 	defer bojunOrderCronRunning.Store(false)
 
-	result, err := data_svc.NewBojunOrderSourceRouter().SyncRecentOrders(context.Background())
+	result, err := data_svc.NewBojunOrderSourceRouter().SyncRecentOrders(ctx)
 	if err != nil {
 		logger.Error("伯俊订单拉取失败", zap.Error(err))
 		return

@@ -21,7 +21,13 @@ func (d DataCollectCrontab) GetSpec() string {
 
 // Run 执行定时任务
 func (d DataCollectCrontab) Run() {
-	ctx := context.Background()
+	d.RunContext(context.Background())
+}
+
+func (d DataCollectCrontab) RunContext(ctx context.Context) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
 	logger.Info("开始执行数据采集定时任务")
 
 	// 1. 获取所有活跃的数据源
@@ -37,6 +43,9 @@ func (d DataCollectCrontab) Run() {
 	// 2. 遍历数据源执行采集
 	collectService := data_svc.NewCollectService()
 	for _, source := range activeSources {
+		if ctx.Err() != nil {
+			return
+		}
 		// 检查是否需要执行采集（根据schedule字段）
 		if d.shouldCollect(source.Schedule) {
 			logger.Info("开始采集数据源", zap.Uint("source_id", source.ID), zap.String("source_name", source.Name))
