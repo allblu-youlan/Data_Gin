@@ -7,13 +7,14 @@ import (
 
 	crontabTask "gin-biz-web-api/crontab"
 	"gin-biz-web-api/global"
+	"gin-biz-web-api/internal/weather"
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/console"
 	"gin-biz-web-api/pkg/crontab"
 	"gin-biz-web-api/pkg/database"
 	"gin-biz-web-api/pkg/logger"
+	"gin-biz-web-api/pkg/redis"
 
-	robfigcron "github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )
 
@@ -29,42 +30,63 @@ func setupCrontab() {
 	task := crontab.NewTask(config.GetString("cfg.app.timezone"))
 	global.Crontab = task
 
-	addScheduleTask()
+	cronLocker, err := weather.NewRedisTaskLocker(
+		redis.Instance().Client,
+		redis.GenNamespace("lock:cron:"),
+		cronTaskLockTTL,
+	)
+	if err != nil {
+		logger.Error("初始化定时任务分布式锁失败", zap.Error(err))
+	}
+	addScheduleTask(cronLocker)
 
 	task.Start()
 }
 
 // addScheduleTask 添加计划任务
-func addScheduleTask() {
+func addScheduleTask(locker weather.TaskLocker) {
 
 	// @daily 或者 @midnight 每天 0 点执行清理日志
-	clearLogsCrontabEntryID, err := global.Crontab.AddJob("@daily", crontabTask.ClearLogsCrontab{})
+	clearLogsCrontabEntryID, err := global.Crontab.AddJob(
+		"@daily",
+		newDistributedCronJob("clear_logs", locker, crontabTask.ClearLogsCrontab{}),
+	)
 	ifError(err, int(clearLogsCrontabEntryID), "ClearLogsCrontab")
 
 	// 每30分钟执行数据采集
-	dataCollectCrontabEntryID, err := global.Crontab.AddJob("0 */30 * * * *", databaseBackedCronJob(crontabTask.DataCollectCrontab{}))
+	dataCollectCrontabEntryID, err := global.Crontab.AddJob(
+		"0 */30 * * * *",
+		newDistributedCronJob("data_collect", locker, databaseBackedCronJob(crontabTask.DataCollectCrontab{})),
+	)
 	ifError(err, int(dataCollectCrontabEntryID), "DataCollectCrontab")
 
 	bojunOrderCronExpr := resolveBojunOrderCronExpr()
-	bojunOrderCrontabEntryID, err := global.Crontab.AddJob(bojunOrderCronExpr, databaseBackedCronJob(crontabTask.BojunOrderCrontab{}))
+	bojunOrderCrontabEntryID, err := global.Crontab.AddJob(
+		bojunOrderCronExpr,
+		newDistributedCronJob("bojun_order", locker, databaseBackedCronJob(crontabTask.BojunOrderCrontab{})),
+	)
 	ifError(err, int(bojunOrderCrontabEntryID), "BojunOrderCrontab")
 
 }
 
 type guardedDatabaseCronJob struct {
-	next      robfigcron.Job
+	next      contextCronJob
 	available func(context.Context) bool
 }
 
-func databaseBackedCronJob(next robfigcron.Job) robfigcron.Job {
+func databaseBackedCronJob(next contextCronJob) guardedDatabaseCronJob {
 	return guardedDatabaseCronJob{next: next, available: database.CanServe}
 }
 
 func (job guardedDatabaseCronJob) Run() {
-	if job.next == nil || job.available == nil || !job.available(context.Background()) {
+	job.RunContext(context.Background())
+}
+
+func (job guardedDatabaseCronJob) RunContext(ctx context.Context) {
+	if ctx == nil || ctx.Err() != nil || job.next == nil || job.available == nil || !job.available(ctx) {
 		return
 	}
-	job.next.Run()
+	job.next.RunContext(ctx)
 }
 
 func resolveBojunOrderCronExpr() string {

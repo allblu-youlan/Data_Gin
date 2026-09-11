@@ -9,6 +9,12 @@ type fakeCronJob struct{ calls int }
 
 func (job *fakeCronJob) Run() { job.calls++ }
 
+func (job *fakeCronJob) RunContext(ctx context.Context) {
+	if ctx != nil && ctx.Err() == nil {
+		job.calls++
+	}
+}
+
 func TestGuardedDatabaseCronJob(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -34,7 +40,7 @@ func TestGuardedDatabaseCronJob(t *testing.T) {
 				job.available = func(context.Context) bool { return tt.available }
 			}
 
-			job.Run()
+			job.RunContext(t.Context())
 			if next.calls != tt.wantCalls {
 				t.Fatalf("cron calls = %d, want %d", next.calls, tt.wantCalls)
 			}
