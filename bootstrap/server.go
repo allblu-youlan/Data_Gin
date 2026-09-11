@@ -67,7 +67,7 @@ func gracefulShutdown(srv *http.Server) {
 	}()
 
 	// 等待中断信号
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	// 接受 syscall.SIGINT 和 syscall.SIGTERM 信号
 	// kill 不加参数发送 syscall.SIGTERM 信号
 	// kill -2 发送 syscall.SIGINT 信号
@@ -101,7 +101,7 @@ func gracefulShutdownHTTPS(srv *http.Server, certFile, keyFile string) {
 	}()
 
 	// 等待中断信号
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	// 接受 syscall.SIGINT 和 syscall.SIGTERM 信号
 	// kill 不加参数发送 syscall.SIGTERM 信号
 	// kill -2 发送 syscall.SIGINT 信号
