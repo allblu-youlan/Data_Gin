@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,38 @@ import (
 
 	"gin-biz-web-api/pkg/logger"
 )
+
+type shutdownContextRecorder struct {
+	calls      int
+	contextErr error
+}
+
+func (recorder *shutdownContextRecorder) Shutdown(ctx context.Context) error {
+	recorder.calls++
+	recorder.contextErr = ctx.Err()
+	return nil
+}
+
+func TestShutdownServerStartsWhileCrontabIsStillStopping(t *testing.T) {
+	cron := &fakeStoppableCron{stopped: make(chan struct{})}
+	startCrontabLifecycle(cron)
+	server := &shutdownContextRecorder{}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+
+	if err := shutdownServerAndCrontab(ctx, server); err != nil {
+		t.Fatalf("shutdownServerAndCrontab() error = %v", err)
+	}
+	if server.calls != 1 {
+		t.Fatalf("server shutdown calls = %d, want 1", server.calls)
+	}
+	if server.contextErr != nil {
+		t.Fatalf("server shutdown started with expired context: %v", server.contextErr)
+	}
+	if ctx.Err() == nil {
+		t.Fatal("test cron did not consume the shared shutdown deadline")
+	}
+}
 
 func TestMallWeatherExportContentRequestMatcher(t *testing.T) {
 	const validPath = "/api/v1/weather-exports/00000000-0000-4000-8000-000000000017/content"

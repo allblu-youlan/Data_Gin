@@ -80,8 +80,7 @@ func gracefulShutdown(srv *http.Server) {
 	// 最大时间控制，用于通知该服务端它有 5 秒的时间来处理原有的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stopCrontab(ctx)
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := shutdownServerAndCrontab(ctx, srv); err != nil {
 		logger.FatalString("Server", "gracefulShutdown", err.Error())
 	}
 
@@ -115,14 +114,29 @@ func gracefulShutdownHTTPS(srv *http.Server, certFile, keyFile string) {
 	// 最大时间控制，用于通知该服务端它有 5 秒的时间来处理原有的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stopCrontab(ctx)
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := shutdownServerAndCrontab(ctx, srv); err != nil {
 		logger.FatalString("Server", "gracefulShutdownHTTPS", err.Error())
 	}
 
 	console.Warning("Server exiting")
 	logger.WarnString("Server", "gracefulShutdownHTTPS", "服务已经退出")
 
+}
+
+type gracefulHTTPServer interface {
+	Shutdown(context.Context) error
+}
+
+func shutdownServerAndCrontab(ctx context.Context, srv gracefulHTTPServer) error {
+	cronStopped := make(chan struct{})
+	go func() {
+		defer close(cronStopped)
+		stopCrontab(ctx)
+	}()
+
+	err := srv.Shutdown(ctx)
+	<-cronStopped
+	return err
 }
 
 // initServer 初始化服务器
