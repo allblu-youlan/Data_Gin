@@ -29,6 +29,7 @@ func setupCrontab() {
 
 	task := crontab.NewTask(config.GetString("cfg.app.timezone"))
 	global.Crontab = task
+	cronCtx := startCrontabLifecycle(task)
 
 	cronLocker, err := weather.NewRedisTaskLocker(
 		redis.Instance().Client,
@@ -38,32 +39,32 @@ func setupCrontab() {
 	if err != nil {
 		logger.Error("初始化定时任务分布式锁失败", zap.Error(err))
 	}
-	addScheduleTask(cronLocker)
+	addScheduleTask(cronCtx, cronLocker)
 
 	task.Start()
 }
 
 // addScheduleTask 添加计划任务
-func addScheduleTask(locker weather.TaskLocker) {
+func addScheduleTask(ctx context.Context, locker weather.TaskLocker) {
 
 	// @daily 或者 @midnight 每天 0 点执行清理日志
 	clearLogsCrontabEntryID, err := global.Crontab.AddJob(
 		"@daily",
-		newDistributedCronJob("clear_logs", locker, crontabTask.ClearLogsCrontab{}),
+		newDistributedCronJob(ctx, "clear_logs", locker, crontabTask.ClearLogsCrontab{}),
 	)
 	ifError(err, int(clearLogsCrontabEntryID), "ClearLogsCrontab")
 
 	// 每30分钟执行数据采集
 	dataCollectCrontabEntryID, err := global.Crontab.AddJob(
 		"0 */30 * * * *",
-		newDistributedCronJob("data_collect", locker, databaseBackedCronJob(crontabTask.DataCollectCrontab{})),
+		newDistributedCronJob(ctx, "data_collect", locker, databaseBackedCronJob(crontabTask.DataCollectCrontab{})),
 	)
 	ifError(err, int(dataCollectCrontabEntryID), "DataCollectCrontab")
 
 	bojunOrderCronExpr := resolveBojunOrderCronExpr()
 	bojunOrderCrontabEntryID, err := global.Crontab.AddJob(
 		bojunOrderCronExpr,
-		newDistributedCronJob("bojun_order", locker, databaseBackedCronJob(crontabTask.BojunOrderCrontab{})),
+		newDistributedCronJob(ctx, "bojun_order", locker, databaseBackedCronJob(crontabTask.BojunOrderCrontab{})),
 	)
 	ifError(err, int(bojunOrderCrontabEntryID), "BojunOrderCrontab")
 

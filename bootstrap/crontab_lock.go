@@ -21,6 +21,7 @@ type contextCronJob interface {
 }
 
 type distributedCronJob struct {
+	ctx           context.Context
 	next          contextCronJob
 	locker        weather.TaskLocker
 	key           string
@@ -28,8 +29,14 @@ type distributedCronJob struct {
 	redisTimeout  time.Duration
 }
 
-func newDistributedCronJob(key string, locker weather.TaskLocker, next contextCronJob) distributedCronJob {
+func newDistributedCronJob(
+	ctx context.Context,
+	key string,
+	locker weather.TaskLocker,
+	next contextCronJob,
+) distributedCronJob {
 	return distributedCronJob{
+		ctx:           ctx,
 		next:          next,
 		locker:        locker,
 		key:           key,
@@ -39,7 +46,7 @@ func newDistributedCronJob(key string, locker weather.TaskLocker, next contextCr
 }
 
 func (job distributedCronJob) Run() {
-	job.RunContext(context.Background())
+	job.RunContext(job.ctx)
 }
 
 func (job distributedCronJob) RunContext(ctx context.Context) {
@@ -69,11 +76,13 @@ func (job distributedCronJob) RunContext(ctx context.Context) {
 	runCtx, cancelRun := context.WithCancel(ctx)
 	renewDone := make(chan struct{})
 	go job.renewLock(runCtx, cancelRun, renewable, renewDone)
+	defer func() {
+		cancelRun()
+		<-renewDone
+		job.releaseLock(ctx, lock)
+	}()
 
 	job.next.RunContext(runCtx)
-	cancelRun()
-	<-renewDone
-	job.releaseLock(ctx, lock)
 }
 
 func (job distributedCronJob) renewLock(
@@ -95,8 +104,8 @@ func (job distributedCronJob) renewLock(
 			err := lock.Renew(renewCtx)
 			cancelRenew()
 			if err != nil {
-				logCronLockError("定时任务分布式锁续租失败，取消本次执行", job.key, err)
 				cancelRun()
+				logCronLockError("定时任务分布式锁续租失败，取消本次执行", job.key, err)
 				return
 			}
 		}

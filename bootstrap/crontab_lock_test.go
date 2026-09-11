@@ -64,7 +64,7 @@ func TestDistributedCronJobRunsAndReleasesOwnedLock(t *testing.T) {
 	lock := &fakeRenewableCronLock{}
 	locker := &fakeCronLocker{lock: lock, acquired: true}
 	next := &fakeCronJob{}
-	job := newDistributedCronJob("data_collect", locker, next)
+	job := newDistributedCronJob(t.Context(), "data_collect", locker, next)
 
 	job.RunContext(t.Context())
 
@@ -94,7 +94,7 @@ func TestDistributedCronJobFailsClosed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			next := &fakeCronJob{}
-			job := newDistributedCronJob("clear_logs", tt.locker, next)
+			job := newDistributedCronJob(t.Context(), "clear_logs", tt.locker, next)
 			job.RunContext(t.Context())
 			if next.calls != 0 {
 				t.Fatalf("cron calls = %d, want 0", next.calls)
@@ -107,7 +107,7 @@ func TestDistributedCronJobCancelsRunWhenLeaseIsLost(t *testing.T) {
 	lock := &fakeRenewableCronLock{renewErr: weather.ErrTaskLockLeaseLost}
 	locker := &fakeCronLocker{lock: lock, acquired: true}
 	next := &blockingContextCronJob{started: make(chan struct{}), canceled: make(chan struct{})}
-	job := newDistributedCronJob("bojun_order", locker, next)
+	job := newDistributedCronJob(t.Context(), "bojun_order", locker, next)
 	job.renewInterval = time.Millisecond
 	job.redisTimeout = time.Second
 
@@ -139,5 +139,66 @@ func TestDistributedCronJobCancelsRunWhenLeaseIsLost(t *testing.T) {
 	}
 	if releaseCalls != 1 {
 		t.Fatalf("release calls = %d, want 1", releaseCalls)
+	}
+}
+
+type panicContextCronJob struct{}
+
+func (panicContextCronJob) RunContext(context.Context) {
+	panic("cron panic")
+}
+
+func TestDistributedCronJobReleasesLockAfterTaskPanic(t *testing.T) {
+	lock := &fakeRenewableCronLock{}
+	locker := &fakeCronLocker{lock: lock, acquired: true}
+	job := newDistributedCronJob(t.Context(), "clear_logs", locker, panicContextCronJob{})
+
+	func() {
+		defer func() {
+			if recovered := recover(); recovered == nil {
+				t.Fatal("expected cron panic")
+			}
+		}()
+		job.Run()
+	}()
+
+	_, releaseCalls := lock.counts()
+	if releaseCalls != 1 {
+		t.Fatalf("release calls after panic = %d, want 1", releaseCalls)
+	}
+}
+
+func TestDistributedCronJobRunUsesLifecycleContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	lock := &fakeRenewableCronLock{}
+	locker := &fakeCronLocker{lock: lock, acquired: true}
+	next := &blockingContextCronJob{started: make(chan struct{}), canceled: make(chan struct{})}
+	job := newDistributedCronJob(ctx, "data_collect", locker, next)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		job.Run()
+	}()
+	select {
+	case <-next.started:
+	case <-time.After(time.Second):
+		t.Fatal("cron task did not start")
+	}
+	cancel()
+	select {
+	case <-next.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("production Run did not propagate lifecycle cancellation")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("production Run did not finish after lifecycle cancellation")
+	}
+
+	_, releaseCalls := lock.counts()
+	if releaseCalls != 1 {
+		t.Fatalf("release calls after lifecycle cancellation = %d, want 1", releaseCalls)
 	}
 }

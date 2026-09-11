@@ -80,6 +80,7 @@ func gracefulShutdown(srv *http.Server) {
 	// 最大时间控制，用于通知该服务端它有 5 秒的时间来处理原有的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	stopCrontab(ctx)
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.FatalString("Server", "gracefulShutdown", err.Error())
 	}
@@ -114,6 +115,7 @@ func gracefulShutdownHTTPS(srv *http.Server, certFile, keyFile string) {
 	// 最大时间控制，用于通知该服务端它有 5 秒的时间来处理原有的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	stopCrontab(ctx)
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.FatalString("Server", "gracefulShutdownHTTPS", err.Error())
 	}
