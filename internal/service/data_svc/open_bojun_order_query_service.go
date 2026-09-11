@@ -70,6 +70,7 @@ type OpenBojunOrderPagination struct {
 type OpenBojunOrderDTO struct {
 	OrderNo         string                  `json:"orderNo"`
 	ExternalOrderNo string                  `json:"externalOrderNo"`
+	OrderPhone      string                  `json:"order_phone"`
 	OrderDate       string                  `json:"orderDate"`
 	CompletedAt     *string                 `json:"completedAt"`
 	MallCode        string                  `json:"mallCode"`
@@ -392,6 +393,7 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 	return OpenBojunOrderDTO{
 		OrderNo:         order.DocNo,
 		ExternalOrderNo: order.OtherDocNo,
+		OrderPhone:      order.OrderPhone,
 		OrderDate:       formatOpenBojunBillDate(order.BillDate),
 		CompletedAt:     formatOpenBojunCompletedAt(order.CompletedAt),
 		MallCode:        order.StoreCode,

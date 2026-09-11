@@ -178,7 +178,7 @@ func (dao *BojunRetailOrderDAO) ListOpenOrders(
 	}
 	dbQuery = dbQuery.
 		Select([]string{
-			"id", "otherdocno", "docno", "billdate", "completed_at", "c_store_code", "c_store_name",
+			"id", "otherdocno", "docno", "order_phone", "billdate", "completed_at", "c_store_code", "c_store_name",
 			"order_type_code", "order_type_name", "tot_lines", "tot_qty", "tot_amt_list",
 			"tot_amt_actual", "avg_discount", "related_normal_docno", "items_json",
 		})

@@ -54,7 +54,8 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 	orders := &fakeOpenBojunOrderReader{orders: []model.BojunRetailOrder{
 		{
 			BaseModel: model.BaseModel{ID: 9}, DocNo: "B001", OtherDocNo: "EXT001",
-			BillDate: 20260703, CompletedAt: &completedAt, StoreCode: "ABCN001P012", StoreName: "前滩",
+			OrderPhone: "18616613488",
+			BillDate:   20260703, CompletedAt: &completedAt, StoreCode: "ABCN001P012", StoreName: "前滩",
 			OrderTypeCode: "CMR", OrderTypeName: "正常零售", TotalLines: 1, TotalQty: 2,
 			TotalAmtList: 500, TotalAmtActual: 446.4, AvgDiscount: 0.8928,
 			ItemsJSON:      `[{"no":"SKU001","mProductName":"商品","qty":2,"totAmtActual":446.4,"vipno":"secret"}]`,
@@ -82,6 +83,7 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		t.Fatalf("query=%+v", orders.query)
 	}
 	if len(result.Items) != 1 || result.Items[0].OrderDate != "2026-07-03 00:00:00" ||
+		result.Items[0].OrderPhone != "18616613488" ||
 		result.Items[0].CompletedAt == nil || *result.Items[0].CompletedAt != "2026-07-03 12:40:27" ||
 		result.Items[0].MallCode != "ABCN001P012" || result.Items[0].MallName != "前滩" ||
 		result.Items[0].ActualAmount != "446.40" || len(result.Items[0].Items) != 1 ||
@@ -98,6 +100,9 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 	payload, err := json.Marshal(result)
 	if err != nil {
 		t.Fatalf("marshal result: %v", err)
+	}
+	if !strings.Contains(string(payload), `"order_phone":"18616613488"`) {
+		t.Fatalf("response missing order_phone: %s", payload)
 	}
 	for _, sensitive := range []string{"member-secret", "must-not-leak", "vipno"} {
 		if strings.Contains(string(payload), sensitive) {

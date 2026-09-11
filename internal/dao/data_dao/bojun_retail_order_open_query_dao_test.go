@@ -139,7 +139,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 		t.Fatal("ListOpenOrders() returned nil slice")
 	}
 	for _, fragment := range []string{
-		"SELECT `id`,`otherdocno`,`docno`,`billdate`,`completed_at`,`c_store_code`,`c_store_name`",
+		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`c_store_code`,`c_store_name`",
 		"completed_at >= ? AND completed_at < ?",
 		"c_store_code IN (?)",
 		"order_type_code IN (?)",
