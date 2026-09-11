@@ -30,6 +30,8 @@ const (
 	MallDeliveryQueueName = "delivery"
 )
 
+const mallWeatherScheduleDefaultMaxRetry = 2
+
 var mallWeatherTaskTypes = []string{
 	TypeMallGeocode,
 	TypeMallWeatherFast,
@@ -181,10 +183,17 @@ func NewMallWeatherScheduleTask(payload MallWeatherSchedulePayload) (*asynq.Task
 		TypeMallWeatherSchedule,
 		data,
 		asynq.Queue(MallWeatherQueueName),
-		asynq.MaxRetry(0),
+		asynq.MaxRetry(mallWeatherScheduleMaxRetry(payload.TaskType)),
 		asynq.Timeout(15*time.Minute),
 		asynq.Unique(30*time.Second),
 	), nil
+}
+
+func mallWeatherScheduleMaxRetry(taskType string) int {
+	if taskType == TypeMallWeatherRepair {
+		return 0
+	}
+	return mallWeatherScheduleDefaultMaxRetry
 }
 
 func MallWeatherScheduleDefinitions(fastCron, fullCron string, repairEnabled bool) ([]MallWeatherScheduleDefinition, error) {

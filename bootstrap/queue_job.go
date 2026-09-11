@@ -62,7 +62,8 @@ func setupQueueJob() {
 	}
 
 	mux := asynq.NewServeMux()
-	mux.Use(requireQueueDatabaseAvailability(database.RequireAvailable), jobLoggingMiddleware)
+	repairEnabled := config.GetBool("cfg.mall_weather.repair_enabled")
+	mux.Use(requireQueueDatabaseAvailability(database.RequireAvailable, repairEnabled), jobLoggingMiddleware)
 
 	addQueueJob(mux)
 	officePushProcessor := data_svc.NewOfficePushProcessor()
@@ -105,7 +106,7 @@ func setupQueueJob() {
 		if err != nil {
 			console.Exit("Mall Weather Worker Init Failed %v", err)
 		}
-		weatherHandler := newMallWeatherHandler(weatherProcessor, config.GetBool("cfg.mall_weather.repair_enabled"))
+		weatherHandler := newMallWeatherHandler(weatherProcessor, repairEnabled)
 		for _, taskType := range job.MallWeatherFetchTaskTypes() {
 			mux.HandleFunc(taskType, weatherHandler)
 		}
@@ -706,10 +707,10 @@ func (queueDatabaseUnavailableError) RetryDelay() time.Duration {
 	return queueDatabaseUnavailableRetryDelay
 }
 
-func requireQueueDatabaseAvailability(check func(context.Context) error) asynq.MiddlewareFunc {
+func requireQueueDatabaseAvailability(check func(context.Context) error, repairEnabled bool) asynq.MiddlewareFunc {
 	return func(next asynq.Handler) asynq.Handler {
 		return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
-			if task != nil && task.Type() == job.TypeFoo {
+			if queueTaskSkipsDatabaseGate(task, repairEnabled) {
 				return next.ProcessTask(ctx, task)
 			}
 			if check == nil {
@@ -721,4 +722,24 @@ func requireQueueDatabaseAvailability(check func(context.Context) error) asynq.M
 			return next.ProcessTask(ctx, task)
 		})
 	}
+}
+
+func queueTaskSkipsDatabaseGate(task *asynq.Task, repairEnabled bool) bool {
+	if task == nil {
+		return false
+	}
+	if task.Type() == job.TypeFoo {
+		return true
+	}
+	if repairEnabled {
+		return false
+	}
+	if task.Type() == job.TypeMallWeatherRepair {
+		return true
+	}
+	if task.Type() != job.TypeMallWeatherSchedule {
+		return false
+	}
+	payload, err := job.DecodeMallWeatherSchedulePayload(task.Payload())
+	return err == nil && payload.TaskType == job.TypeMallWeatherRepair
 }

@@ -104,6 +104,26 @@ func TestMallWeatherScheduleDefinitionsOmitRepairWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestMallWeatherScheduleRetryPolicyOnlyDisablesRepairRetry(t *testing.T) {
+	tests := []struct {
+		name      string
+		payload   MallWeatherSchedulePayload
+		wantRetry int
+	}{
+		{name: "repair", payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherRepair}, wantRetry: 0},
+		{name: "fast", payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFast, DetailProfile: "full"}, wantRetry: mallWeatherScheduleDefaultMaxRetry},
+		{name: "full", payload: MallWeatherSchedulePayload{TaskType: TypeMallWeatherFull, DetailProfile: "economy"}, wantRetry: mallWeatherScheduleDefaultMaxRetry},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			maxRetry := mallWeatherScheduleMaxRetry(test.payload.TaskType)
+			if maxRetry != test.wantRetry {
+				t.Fatalf("max retry = %d, want %d", maxRetry, test.wantRetry)
+			}
+		})
+	}
+}
+
 func TestDecodeMallWeatherSchedulePayloadRejectsUnknownFields(t *testing.T) {
 	if _, err := DecodeMallWeatherSchedulePayload([]byte(`{"task_type":"mall:weather:fast","detail_profile":"full","secret":"x"}`)); err == nil {
 		t.Fatal("DecodeMallWeatherSchedulePayload() accepted unknown field")
