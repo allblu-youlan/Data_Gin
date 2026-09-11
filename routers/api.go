@@ -77,13 +77,15 @@ func healthCheck(c *gin.Context) {
 
 type databasePing func(context.Context) error
 
+const databaseReadinessRequestTimeout = 2 * time.Second
+
 func pingApplicationDatabase(ctx context.Context) error {
-	return database.RequireAvailable(ctx)
+	return database.CheckReadiness(ctx)
 }
 
 func databaseReadiness(ping databasePing) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), databaseReadinessRequestTimeout)
 		defer cancel()
 
 		status := http.StatusOK
