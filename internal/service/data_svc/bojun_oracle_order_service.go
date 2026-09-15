@@ -542,6 +542,14 @@ func buildBojunRetailOrderFromOracle(row reportoracle.BojunRetailRow) (*model.Bo
 	if err := json.Unmarshal([]byte(itemsJSON), &items); err != nil {
 		return nil, fmt.Errorf("JSON_ITEM must be a JSON array: %w", err)
 	}
+	payItemsJSON := strings.TrimSpace(row.PayItemsJSON)
+	if payItemsJSON == "" {
+		payItemsJSON = "[]"
+	}
+	var payItems []interface{}
+	if err := json.Unmarshal([]byte(payItemsJSON), &payItems); err != nil {
+		return nil, fmt.Errorf("PAY_ITEMS must be a JSON array: %w", err)
+	}
 	rawContent, err := json.Marshal(bojunOracleRawPayload(row))
 	if err != nil {
 		return nil, err
@@ -559,7 +567,7 @@ func buildBojunRetailOrderFromOracle(row reportoracle.BojunRetailRow) (*model.Bo
 		TotalLines: len(items), TotalQty: quantity,
 		TotalAmtList: row.PaidAmount, TotalAmtActual: row.PaidAmount,
 		TotalAmtAcc: row.PaidAmount, TotalAmtAcc1: row.PaidAmount,
-		ItemsJSON: itemsJSON, PayItemsJSON: "{}", RawContentJSON: string(rawContent),
+		ItemsJSON: itemsJSON, PayItemsJSON: payItemsJSON, RawContentJSON: string(rawContent),
 		Synced: bojunOracleInitialSyncStatus(row),
 	}, nil
 }
@@ -588,6 +596,7 @@ type bojunOracleRawRecord struct {
 	IsToShop       string          `json:"IS_TOSHOP"`
 	PushStatus     int             `json:"STATUS"`
 	ItemsJSON      json.RawMessage `json:"JSON_ITEM"`
+	PayItemsJSON   json.RawMessage `json:"PAY_ITEMS"`
 }
 
 func bojunOracleRawPayload(row reportoracle.BojunRetailRow) bojunOracleRawRecord {
@@ -595,11 +604,16 @@ func bojunOracleRawPayload(row reportoracle.BojunRetailRow) bojunOracleRawRecord
 	if itemsJSON == "" {
 		itemsJSON = "[]"
 	}
+	payItemsJSON := strings.TrimSpace(row.PayItemsJSON)
+	if payItemsJSON == "" {
+		payItemsJSON = "[]"
+	}
 	return bojunOracleRawRecord{
 		RetailID: row.RetailID, StoreCode: row.StoreCode, StoreName: row.StoreName, DocNo: row.DocNo,
 		RetailSaleType: row.RetailSaleType, StatusTime: row.StatusTime, OrderPhone: row.OrderPhone,
 		PaidAmount: row.PaidAmount, PushAmount: row.PushAmount, IsToShop: row.IsToShop,
 		PushStatus: row.PushStatus, ItemsJSON: json.RawMessage(itemsJSON),
+		PayItemsJSON: json.RawMessage(payItemsJSON),
 	}
 }
 

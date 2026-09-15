@@ -89,15 +89,46 @@ func TestBojunRetailItemsSQLUsesFixedSourcesAndBoundIDs(t *testing.T) {
 	}
 }
 
+func TestBojunRetailPayItemsSQLUsesFixedSourcesAndBoundIDs(t *testing.T) {
+	orders := []BojunRetailRow{{RetailID: 45077}, {RetailID: 45078}, {RetailID: 45077}}
+	statement, arguments, err := buildBojunRetailPayItemsQuery(orders)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{
+		bojunRetailPayItemTable,
+		bojunRetailPaywayTable,
+		bojunRetailSourceHeadTable,
+		"k.ID = a.C_PAYWAY_ID",
+		"a.ISACTIVE = 'Y'",
+		"b.STATUS = 2",
+		"b.ID IN (:1, :2)",
+		"GROUP BY b.ID, a.C_PAYWAY_ID, k.NAME",
+		"ORDER BY b.ID, a.C_PAYWAY_ID",
+	} {
+		if !strings.Contains(statement, fragment) {
+			t.Fatalf("retail pay item SQL is missing %q: %s", fragment, statement)
+		}
+	}
+	if strings.Contains(statement, "45077") || strings.Contains(statement, "45078") {
+		t.Fatalf("retail pay item SQL contains unbound IDs: %s", statement)
+	}
+	if len(arguments) != 2 || arguments[0] != uint64(45077) || arguments[1] != uint64(45078) {
+		t.Fatalf("retail pay item query arguments = %#v", arguments)
+	}
+}
+
 const bojunRetailQueryTestDriverName = "bojun-retail-query-test"
 
 var registerBojunRetailQueryTestDriver sync.Once
 var activeBojunRetailQueryTestState *bojunRetailQueryTestState
 
 type bojunRetailQueryTestState struct {
-	headerCalls int
-	itemCalls   int
-	headerRows  *bojunRetailQueryTestRows
+	headerCalls  int
+	itemCalls    int
+	payItemCalls int
+	headerRows   *bojunRetailQueryTestRows
+	itemRows     *bojunRetailQueryTestRows
 }
 
 type bojunRetailQueryTestDriver struct{}
@@ -149,7 +180,7 @@ func (connection *bojunRetailQueryTestConn) QueryContext(
 		if len(arguments) != 4 || arguments[0].Value != uint64(45077) || arguments[1].Value != uint64(45078) {
 			return nil, fmt.Errorf("retail item query arguments = %#v", arguments)
 		}
-		return &bojunRetailQueryTestRows{
+		rows := &bojunRetailQueryTestRows{
 			columns: []string{
 				"M_RETAIL_ID", "DOCNO", "TYPE", "MARKDIS", "PRODUCT_NAME", "PRODUCT_VALUE", "PROD_COLOR", "NO",
 				"VALUE1", "VALUE2", "QTY", "DM_AMT_RETAIL", "TOT_AMT_ACTUAL", "TOT_AMT_LIST", "AMT_ACC",
@@ -157,6 +188,23 @@ func (connection *bojunRetailQueryTestConn) QueryContext(
 			},
 			values: [][]driver.Value{
 				{int64(45077), "ORDER-1", 1.0, 0.0, "C41H1079A", "儿童|家居服", "C41H1079AG265", "C41H1079AG265130", "中灰蓝", "130CM", 1.0, nil, 160.65, 189.0, 0.0, 0.0, 0.85, 189.0, 160.65},
+			},
+		}
+		connection.state.itemRows = rows
+		return rows, nil
+	case strings.HasPrefix(query, bojunRetailPayItemsSQLPrefix):
+		connection.state.payItemCalls++
+		if connection.state.itemRows == nil || !connection.state.itemRows.closed {
+			return nil, fmt.Errorf("retail item rows were not closed before pay item query")
+		}
+		if len(arguments) != 4 || arguments[0].Value != uint64(45077) || arguments[1].Value != uint64(45078) {
+			return nil, fmt.Errorf("retail pay item query arguments = %#v", arguments)
+		}
+		return &bojunRetailQueryTestRows{
+			columns: []string{"M_RETAIL_ID", "C_PAYWAY_ID", "C_PAYWAY_NAME", "TOT_AMT_CX"},
+			values: [][]driver.Value{
+				{int64(45077), int64(25), " 支付宝 ", 250.2},
+				{int64(45077), int64(24), "微信", 20.5},
 			},
 		}, nil
 	default:
@@ -185,7 +233,7 @@ func (rows *bojunRetailQueryTestRows) Next(destination []driver.Value) error {
 	return nil
 }
 
-func TestQueryBojunRetailAfterIDBuildsItemsJSONWithOneBatchQuery(t *testing.T) {
+func TestQueryBojunRetailAfterIDBuildsDetailJSONWithOneBatchQueryEach(t *testing.T) {
 	registerBojunRetailQueryTestDriver.Do(func() {
 		sql.Register(bojunRetailQueryTestDriverName, bojunRetailQueryTestDriver{})
 	})
@@ -206,8 +254,8 @@ func TestQueryBojunRetailAfterIDBuildsItemsJSONWithOneBatchQuery(t *testing.T) {
 	if len(orders) != 2 {
 		t.Fatalf("orders = %d, want 2", len(orders))
 	}
-	if state.headerCalls != 1 || state.itemCalls != 1 {
-		t.Fatalf("query calls = header:%d items:%d, want 1 and 1", state.headerCalls, state.itemCalls)
+	if state.headerCalls != 1 || state.itemCalls != 1 || state.payItemCalls != 1 {
+		t.Fatalf("query calls = header:%d items:%d pay items:%d, want 1 each", state.headerCalls, state.itemCalls, state.payItemCalls)
 	}
 	if !strings.Contains(orders[0].ItemsJSON, `"no":"C41H1079AG265130"`) ||
 		!strings.Contains(orders[0].ItemsJSON, `"mProductName":"C41H1079A"`) {
@@ -215,6 +263,18 @@ func TestQueryBojunRetailAfterIDBuildsItemsJSONWithOneBatchQuery(t *testing.T) {
 	}
 	if orders[1].ItemsJSON != "[]" {
 		t.Fatalf("second order ItemsJSON = %q, want []", orders[1].ItemsJSON)
+	}
+	var payItems []map[string]interface{}
+	if err := json.Unmarshal([]byte(orders[0].PayItemsJSON), &payItems); err != nil {
+		t.Fatalf("unmarshal generated pay items JSON: %v", err)
+	}
+	if len(payItems) != 2 || payItems[0]["cPaywayId"] != float64(25) ||
+		payItems[0]["cPaywayName"] != "支付宝" || payItems[0]["payamount"] != 250.2 ||
+		payItems[1]["cPaywayName"] != "微信" {
+		t.Fatalf("first order PayItemsJSON = %s", orders[0].PayItemsJSON)
+	}
+	if orders[1].PayItemsJSON != "[]" {
+		t.Fatalf("second order PayItemsJSON = %q, want []", orders[1].PayItemsJSON)
 	}
 }
 
@@ -296,6 +356,16 @@ func TestSetBojunRetailItemsJSONUsesEmptyArrayWhenNoActiveItems(t *testing.T) {
 	}
 	if orders[0].ItemsJSON != "[]" {
 		t.Fatalf("ItemsJSON = %q, want []", orders[0].ItemsJSON)
+	}
+}
+
+func TestSetBojunRetailPayItemsJSONUsesEmptyArrayWhenNoActiveItems(t *testing.T) {
+	orders := []BojunRetailRow{{RetailID: 45077}}
+	if err := setBojunRetailPayItemsJSON(orders, nil); err != nil {
+		t.Fatal(err)
+	}
+	if orders[0].PayItemsJSON != "[]" {
+		t.Fatalf("PayItemsJSON = %q, want []", orders[0].PayItemsJSON)
 	}
 }
 

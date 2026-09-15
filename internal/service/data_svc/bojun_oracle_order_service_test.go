@@ -208,6 +208,7 @@ func TestBuildBojunRetailOrderFromOracleMapsConfirmedFields(t *testing.T) {
 		RetailID: 45077, StoreCode: "ABCN001A001", StoreName: " 商场一店 ", DocNo: "SALE-45077", RetailSaleType: " ret ",
 		StatusTime: statusTime, OrderPhone: "18616613488", PaidAmount: 470.83, PushAmount: 0,
 		IsToShop: "Y", ItemsJSON: "",
+		PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":470.83}]`,
 	})
 	if err != nil {
 		t.Fatalf("buildBojunRetailOrderFromOracle() error = %v", err)
@@ -224,6 +225,9 @@ func TestBuildBojunRetailOrderFromOracleMapsConfirmedFields(t *testing.T) {
 	if order.OrderTypeCode != "RET" || order.TotalQty != -1 || order.BillDate != 20260825 || order.ItemsJSON != "[]" {
 		t.Fatalf("type/date/items mapping = %+v", order)
 	}
+	if order.PayItemsJSON != `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":470.83}]` {
+		t.Fatalf("pay items mapping = %s", order.PayItemsJSON)
+	}
 	if order.RetailBillType != "ret" || order.RetailSaleType != "RET" || order.StoreName != "商场一店" {
 		t.Fatalf("retail bill type/store name mapping = %+v", order)
 	}
@@ -233,6 +237,21 @@ func TestBuildBojunRetailOrderFromOracleMapsConfirmedFields(t *testing.T) {
 	}
 	if rawPayload["STORE_NAME"] != " 商场一店 " || rawPayload["RETAILSALETYPE"] != " ret " {
 		t.Fatalf("raw payload mapping = %+v", rawPayload)
+	}
+	if payItems, ok := rawPayload["PAY_ITEMS"].([]interface{}); !ok || len(payItems) != 1 {
+		t.Fatalf("raw pay items mapping = %+v", rawPayload["PAY_ITEMS"])
+	}
+}
+
+func TestBuildBojunRetailOrderFromOracleDefaultsPayItemsToEmptyArray(t *testing.T) {
+	order, err := buildBojunRetailOrderFromOracle(reportoracle.BojunRetailRow{
+		RetailID: 45077, DocNo: "SALE-45077", StatusTime: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if order.PayItemsJSON != "[]" {
+		t.Fatalf("PayItemsJSON = %q, want []", order.PayItemsJSON)
 	}
 }
 

@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	BojunRetailTable        = "YL_DBS.BJ_REPORT_RETAIL_SF"
-	bojunRetailItemTable    = "BOSNDS3.M_RETAILITEM@LINK_TO_BOJUN"
-	maxBojunRetailBatchSize = 1000
+	BojunRetailTable           = "YL_DBS.BJ_REPORT_RETAIL_SF"
+	bojunRetailItemTable       = "BOSNDS3.M_RETAILITEM@LINK_TO_BOJUN"
+	bojunRetailPayItemTable    = "BOSNDS3.M_RETAILPAYITEM@LINK_TO_BOJUN"
+	bojunRetailPaywayTable     = "BOSNDS3.C_PAYWAY@LINK_TO_BOJUN"
+	bojunRetailSourceHeadTable = "BOSNDS3.M_RETAIL@LINK_TO_BOJUN"
+	maxBojunRetailBatchSize    = 1000
 )
 
 type BojunRetailRow struct {
@@ -31,6 +34,7 @@ type BojunRetailRow struct {
 	IsToShop       string
 	PushStatus     int
 	ItemsJSON      string
+	PayItemsJSON   string
 }
 
 const bojunRetailProjectedColumns = `
@@ -103,6 +107,22 @@ WHERE b.ISACTIVE = 'Y'
 const bojunRetailItemsSQLSuffix = `)
 ORDER BY a.M_RETAIL_ID, c.NO`
 
+const bojunRetailPayItemsSQLPrefix = `
+SELECT b.ID AS M_RETAIL_ID,
+       a.C_PAYWAY_ID,
+       k.NAME AS C_PAYWAY_NAME,
+       SUM(a.PAYAMOUNT) AS TOT_AMT_CX
+FROM ` + bojunRetailPayItemTable + ` a
+JOIN ` + bojunRetailPaywayTable + ` k ON k.ID = a.C_PAYWAY_ID
+LEFT JOIN ` + bojunRetailSourceHeadTable + ` b ON a.M_RETAIL_ID = b.ID
+WHERE a.ISACTIVE = 'Y'
+  AND b.STATUS = 2
+  AND b.ID IN (`
+
+const bojunRetailPayItemsSQLSuffix = `)
+GROUP BY b.ID, a.C_PAYWAY_ID, k.NAME
+ORDER BY b.ID, a.C_PAYWAY_ID`
+
 type bojunRetailItem struct {
 	RetailID     uint64   `json:"-"`
 	DocNo        string   `json:"docno"`
@@ -123,6 +143,13 @@ type bojunRetailItem struct {
 	Discount     *float64 `json:"discount"`
 	PriceList    *float64 `json:"pricelist"`
 	PriceActual  *float64 `json:"priceactual"`
+}
+
+type bojunRetailPayItem struct {
+	RetailID   uint64   `json:"-"`
+	PaywayID   int64    `json:"cPaywayId"`
+	PaywayName string   `json:"cPaywayName"`
+	PayAmount  *float64 `json:"payamount"`
 }
 
 func (adapter *Adapter) QueryBojunRetailAfterID(ctx context.Context, afterID uint64, limit int) ([]BojunRetailRow, error) {
@@ -224,6 +251,9 @@ func (adapter *Adapter) queryBojunRetailRows(ctx context.Context, statement stri
 	if err := adapter.attachBojunRetailItems(ctx, result); err != nil {
 		return nil, err
 	}
+	if err := adapter.attachBojunRetailPayItems(ctx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -307,15 +337,78 @@ func setBojunRetailItemsJSON(orders []BojunRetailRow, itemsByRetailID map[uint64
 }
 
 func buildBojunRetailItemsQuery(orders []BojunRetailRow) (string, []interface{}, error) {
+	placeholders, arguments, err := buildBojunRetailIDBindings(orders, "items")
+	if err != nil {
+		return "", nil, err
+	}
+	return bojunRetailItemsSQLPrefix + placeholders + bojunRetailItemsSQLSuffix, arguments, nil
+}
+
+func (adapter *Adapter) attachBojunRetailPayItems(ctx context.Context, orders []BojunRetailRow) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	statement, arguments, err := buildBojunRetailPayItemsQuery(orders)
+	if err != nil {
+		return err
+	}
+	queryArguments := append(arguments,
+		godror.PrefetchCount(adapter.prefetchRows),
+		godror.FetchArraySize(adapter.fetchArraySize),
+	)
+	rows, err := adapter.db.QueryContext(ctx, statement, queryArguments...)
+	if err != nil {
+		return fmt.Errorf("query bojun Oracle retail pay items: %w", err)
+	}
+	defer rows.Close()
+
+	itemsByRetailID := make(map[uint64][]bojunRetailPayItem, len(orders))
+	for rows.Next() {
+		item, scanErr := scanBojunRetailPayItem(rows)
+		if scanErr != nil {
+			return scanErr
+		}
+		itemsByRetailID[item.RetailID] = append(itemsByRetailID[item.RetailID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate bojun Oracle retail pay items: %w", err)
+	}
+	return setBojunRetailPayItemsJSON(orders, itemsByRetailID)
+}
+
+func setBojunRetailPayItemsJSON(orders []BojunRetailRow, itemsByRetailID map[uint64][]bojunRetailPayItem) error {
+	for index := range orders {
+		items := itemsByRetailID[orders[index].RetailID]
+		if items == nil {
+			items = []bojunRetailPayItem{}
+		}
+		encoded, marshalErr := json.Marshal(items)
+		if marshalErr != nil {
+			return fmt.Errorf("marshal bojun Oracle retail pay items %d: %w", orders[index].RetailID, marshalErr)
+		}
+		orders[index].PayItemsJSON = string(encoded)
+	}
+	return nil
+}
+
+func buildBojunRetailPayItemsQuery(orders []BojunRetailRow) (string, []interface{}, error) {
+	placeholders, arguments, err := buildBojunRetailIDBindings(orders, "pay items")
+	if err != nil {
+		return "", nil, err
+	}
+	return bojunRetailPayItemsSQLPrefix + placeholders + bojunRetailPayItemsSQLSuffix, arguments, nil
+}
+
+func buildBojunRetailIDBindings(orders []BojunRetailRow, detailName string) (string, []interface{}, error) {
 	if len(orders) == 0 || len(orders) > maxBojunRetailBatchSize {
-		return "", nil, fmt.Errorf("query bojun Oracle retail items: order count must be between 1 and %d", maxBojunRetailBatchSize)
+		return "", nil, fmt.Errorf("query bojun Oracle retail %s: order count must be between 1 and %d", detailName, maxBojunRetailBatchSize)
 	}
 	placeholders := make([]string, 0, len(orders))
 	arguments := make([]interface{}, 0, len(orders))
 	seen := make(map[uint64]struct{}, len(orders))
 	for _, order := range orders {
 		if order.RetailID == 0 {
-			return "", nil, fmt.Errorf("query bojun Oracle retail items: retail id is required")
+			return "", nil, fmt.Errorf("query bojun Oracle retail %s: retail id is required", detailName)
 		}
 		if _, exists := seen[order.RetailID]; exists {
 			continue
@@ -324,7 +417,7 @@ func buildBojunRetailItemsQuery(orders []BojunRetailRow) (string, []interface{},
 		placeholders = append(placeholders, ":"+strconv.Itoa(len(placeholders)+1))
 		arguments = append(arguments, order.RetailID)
 	}
-	return bojunRetailItemsSQLPrefix + strings.Join(placeholders, ", ") + bojunRetailItemsSQLSuffix, arguments, nil
+	return strings.Join(placeholders, ", "), arguments, nil
 }
 
 func scanBojunRetailItem(scanner bojunRetailScanner) (bojunRetailItem, error) {
@@ -356,6 +449,25 @@ func scanBojunRetailItem(scanner bojunRetailScanner) (bojunRetailItem, error) {
 		AmtAcc: nullableBojunFloat(amtAcc), TotAmtAcc: nullableBojunFloat(totAmtAcc),
 		Discount: nullableBojunFloat(discount), PriceList: nullableBojunFloat(priceList),
 		PriceActual: nullableBojunFloat(priceActual),
+	}, nil
+}
+
+func scanBojunRetailPayItem(scanner bojunRetailScanner) (bojunRetailPayItem, error) {
+	var (
+		retailID int64
+		paywayID sql.NullInt64
+		name     sql.NullString
+		amount   sql.NullFloat64
+	)
+	if err := scanner.Scan(&retailID, &paywayID, &name, &amount); err != nil {
+		return bojunRetailPayItem{}, fmt.Errorf("scan bojun Oracle retail pay item: %w", err)
+	}
+	if retailID <= 0 || !paywayID.Valid {
+		return bojunRetailPayItem{}, fmt.Errorf("scan bojun Oracle retail pay item: required field is empty")
+	}
+	return bojunRetailPayItem{
+		RetailID: uint64(retailID), PaywayID: paywayID.Int64,
+		PaywayName: strings.TrimSpace(name.String), PayAmount: nullableBojunFloat(amount),
 	}, nil
 }
 
