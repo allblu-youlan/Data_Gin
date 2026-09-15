@@ -58,7 +58,14 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 			BillDate:   20260703, CompletedAt: &completedAt, StoreCode: "ABCN001P012", StoreName: "前滩",
 			OrderTypeCode: "CMR", OrderTypeName: "正常零售", TotalLines: 1, TotalQty: 2,
 			TotalAmtList: 500, TotalAmtActual: 446.4, AvgDiscount: 0.8928,
-			ItemsJSON:      `[{"no":"SKU001","mProductName":"商品","qty":2,"totAmtActual":446.4,"vipno":"secret"}]`,
+			ItemsJSON: `[{
+				"no":"SKU001","mProductName":"商品","qty":2,"totAmtActual":446.4,"vipno":"secret",
+				"type":1,"docno":"B001","amtAcc":446.4,"value1":"中灰","value2":"130CM",
+				"markdis":0,"discount":0.8928,"pricelist":250,"prodColor":"SKU001-COLOR",
+				"totAmtAcc":446.4,"totAmtList":500,"dmAmtRetail":null,"priceactual":223.2,
+				"productValue":"儿童|长裤"
+			}]`,
+			PayItemsJSON:   `[{"cPaywayId":25,"payamount":446.4,"cPaywayName":"支付宝"}]`,
 			RawContentJSON: `{"secret":"must-not-leak"}`, VIPNo: "member-secret",
 		},
 		{BaseModel: model.BaseModel{ID: 8}, DocNo: "B002", BillDate: 20260702, CompletedAt: &olderCompletedAt},
@@ -87,7 +94,27 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		result.Items[0].CompletedAt == nil || *result.Items[0].CompletedAt != "2026-07-03 12:40:27" ||
 		result.Items[0].MallCode != "ABCN001P012" || result.Items[0].MallName != "前滩" ||
 		result.Items[0].ActualAmount != "446.40" || len(result.Items[0].Items) != 1 ||
-		result.Items[0].Items[0].SKUNo != "SKU001" {
+		result.Items[0].Items[0].SKUNo != "SKU001" ||
+		result.Items[0].Items[0].ProductName != "商品" ||
+		result.Items[0].Items[0].Quantity != "2" ||
+		result.Items[0].Items[0].ActualAmount != "446.40" ||
+		result.Items[0].Items[0].Type == nil || *result.Items[0].Items[0].Type != "1" ||
+		result.Items[0].Items[0].DocNo != "B001" ||
+		result.Items[0].Items[0].AmtAcc == nil || *result.Items[0].Items[0].AmtAcc != "446.40" ||
+		result.Items[0].Items[0].Value1 != "中灰" ||
+		result.Items[0].Items[0].Value2 != "130CM" ||
+		result.Items[0].Items[0].MarkDis == nil || *result.Items[0].Items[0].MarkDis != "0" ||
+		result.Items[0].Items[0].Discount == nil || *result.Items[0].Items[0].Discount != "0.8928" ||
+		result.Items[0].Items[0].PriceList == nil || *result.Items[0].Items[0].PriceList != "250.00" ||
+		result.Items[0].Items[0].ProductColor != "SKU001-COLOR" ||
+		result.Items[0].Items[0].TotalAmtAcc == nil || *result.Items[0].Items[0].TotalAmtAcc != "446.40" ||
+		result.Items[0].Items[0].TotalListAmount == nil || *result.Items[0].Items[0].TotalListAmount != "500.00" ||
+		result.Items[0].Items[0].DMAmtRetail != nil ||
+		result.Items[0].Items[0].ActualPrice == nil || *result.Items[0].Items[0].ActualPrice != "223.20" ||
+		result.Items[0].Items[0].ProductValue != "儿童|长裤" ||
+		len(result.Items[0].Payments) != 1 ||
+		result.Items[0].Payments[0].PaymentMethodName != "支付宝" ||
+		result.Items[0].Payments[0].Amount == nil || *result.Items[0].Payments[0].Amount != "446.40" {
 		t.Fatalf("result=%+v", result)
 	}
 	if !result.Pagination.HasMore || result.Pagination.NextCursor == "" {
@@ -104,7 +131,19 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 	if !strings.Contains(string(payload), `"order_phone":"18616613488"`) {
 		t.Fatalf("response missing order_phone: %s", payload)
 	}
-	for _, sensitive := range []string{"member-secret", "must-not-leak", "vipno"} {
+	for _, field := range []string{
+		`"type":"1"`, `"docNo":"B001"`, `"amtAcc":"446.40"`, `"value1":"中灰"`,
+		`"value2":"130CM"`, `"markDis":"0"`, `"discount":"0.8928"`,
+		`"priceList":"250.00"`, `"productColor":"SKU001-COLOR"`,
+		`"totalAmtAcc":"446.40"`, `"totalListAmount":"500.00"`, `"dmAmtRetail":null`,
+		`"actualPrice":"223.20"`, `"productValue":"儿童|长裤"`,
+		`"payments":[`, `"paymentMethodName":"支付宝"`, `"amount":"446.40"`,
+	} {
+		if !strings.Contains(string(payload), field) {
+			t.Fatalf("response missing %s: %s", field, payload)
+		}
+	}
+	for _, sensitive := range []string{"member-secret", "must-not-leak", "vipno", "cPaywayId"} {
 		if strings.Contains(string(payload), sensitive) {
 			t.Fatalf("response leaked %q: %s", sensitive, payload)
 		}
@@ -282,5 +321,36 @@ func TestOpenBojunOrderLinesFailsClosedOnInvalidJSON(t *testing.T) {
 	items := openBojunOrderLines(`{"vipno":"secret"}`)
 	if items == nil || len(items) != 0 {
 		t.Fatalf("items=%+v", items)
+	}
+}
+
+func TestOpenBojunOrderPaymentsFailsClosedOnInvalidJSON(t *testing.T) {
+	payments := openBojunOrderPayments(`{"cPaywayName":"支付宝"}`)
+	if payments == nil || len(payments) != 0 {
+		t.Fatalf("payments=%+v", payments)
+	}
+}
+
+func TestFormatOpenBojunOrderNullableNumberRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value interface{}
+	}{
+		{name: "nil", value: nil},
+		{name: "invalid string", value: "abc"},
+		{name: "NaN", value: "NaN"},
+		{name: "boolean", value: true},
+		{name: "object", value: map[string]interface{}{"bad": true}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := formatOpenBojunOrderNullableNumber(test.value, 2); got != nil {
+				t.Fatalf("formatOpenBojunOrderNullableNumber(%v)=%q, want nil", test.value, *got)
+			}
+		})
+	}
+	zero := formatOpenBojunOrderNullableNumber(0, 2)
+	if zero == nil || *zero != "0.00" {
+		t.Fatalf("zero=%v", zero)
 	}
 }

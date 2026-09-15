@@ -68,30 +68,50 @@ type OpenBojunOrderPagination struct {
 }
 
 type OpenBojunOrderDTO struct {
-	OrderNo         string                  `json:"orderNo"`
-	ExternalOrderNo string                  `json:"externalOrderNo"`
-	OrderPhone      string                  `json:"order_phone"`
-	OrderDate       string                  `json:"orderDate"`
-	CompletedAt     *string                 `json:"completedAt"`
-	MallCode        string                  `json:"mallCode"`
-	MallName        string                  `json:"mallName"`
-	OrderTypeCode   string                  `json:"orderTypeCode"`
-	OrderTypeName   string                  `json:"orderTypeName"`
-	TotalLines      int                     `json:"totalLines"`
-	TotalQuantity   int                     `json:"totalQuantity"`
-	ListAmount      string                  `json:"listAmount"`
-	ActualAmount    string                  `json:"actualAmount"`
-	AverageDiscount string                  `json:"averageDiscount"`
-	Currency        string                  `json:"currency"`
-	RelatedOrderNo  string                  `json:"relatedOrderNo"`
-	Items           []OpenBojunOrderLineDTO `json:"items"`
+	OrderNo         string                     `json:"orderNo"`
+	ExternalOrderNo string                     `json:"externalOrderNo"`
+	OrderPhone      string                     `json:"order_phone"`
+	OrderDate       string                     `json:"orderDate"`
+	CompletedAt     *string                    `json:"completedAt"`
+	MallCode        string                     `json:"mallCode"`
+	MallName        string                     `json:"mallName"`
+	OrderTypeCode   string                     `json:"orderTypeCode"`
+	OrderTypeName   string                     `json:"orderTypeName"`
+	TotalLines      int                        `json:"totalLines"`
+	TotalQuantity   int                        `json:"totalQuantity"`
+	ListAmount      string                     `json:"listAmount"`
+	ActualAmount    string                     `json:"actualAmount"`
+	AverageDiscount string                     `json:"averageDiscount"`
+	Currency        string                     `json:"currency"`
+	RelatedOrderNo  string                     `json:"relatedOrderNo"`
+	Items           []OpenBojunOrderLineDTO    `json:"items"`
+	Payments        []OpenBojunOrderPaymentDTO `json:"payments"`
 }
 
 type OpenBojunOrderLineDTO struct {
-	SKUNo        string `json:"skuNo"`
-	ProductName  string `json:"productName"`
-	Quantity     string `json:"quantity"`
-	ActualAmount string `json:"actualAmount"`
+	SKUNo           string  `json:"skuNo"`
+	ProductName     string  `json:"productName"`
+	Quantity        string  `json:"quantity"`
+	ActualAmount    string  `json:"actualAmount"`
+	Type            *string `json:"type"`
+	DocNo           string  `json:"docNo"`
+	AmtAcc          *string `json:"amtAcc"`
+	Value1          string  `json:"value1"`
+	Value2          string  `json:"value2"`
+	MarkDis         *string `json:"markDis"`
+	Discount        *string `json:"discount"`
+	PriceList       *string `json:"priceList"`
+	ProductColor    string  `json:"productColor"`
+	TotalAmtAcc     *string `json:"totalAmtAcc"`
+	TotalListAmount *string `json:"totalListAmount"`
+	DMAmtRetail     *string `json:"dmAmtRetail"`
+	ActualPrice     *string `json:"actualPrice"`
+	ProductValue    string  `json:"productValue"`
+}
+
+type OpenBojunOrderPaymentDTO struct {
+	PaymentMethodName string  `json:"paymentMethodName"`
+	Amount            *string `json:"amount"`
 }
 
 type openBojunOrderCursor struct {
@@ -408,6 +428,7 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 		Currency:        "CNY",
 		RelatedOrderNo:  order.RelatedNormalNo,
 		Items:           openBojunOrderLines(order.ItemsJSON),
+		Payments:        openBojunOrderPayments(order.PayItemsJSON),
 	}
 }
 
@@ -425,13 +446,81 @@ func openBojunOrderLines(raw string) []OpenBojunOrderLineDTO {
 	items := make([]OpenBojunOrderLineDTO, 0, len(values))
 	for _, value := range values {
 		items = append(items, OpenBojunOrderLineDTO{
-			SKUNo:        truncateOpenBojunOrderString(stringFromAny(value["no"]), 128),
-			ProductName:  truncateOpenBojunOrderString(stringFromAny(value["mProductName"]), 500),
-			Quantity:     formatOpenBojunOrderNumber(floatFromAny(value["qty"]), -1),
-			ActualAmount: formatOpenBojunOrderNumber(floatFromAny(value["totAmtActual"]), 2),
+			SKUNo:           truncateOpenBojunOrderString(stringFromAny(value["no"]), 128),
+			ProductName:     truncateOpenBojunOrderString(stringFromAny(value["mProductName"]), 500),
+			Quantity:        formatOpenBojunOrderNumber(floatFromAny(value["qty"]), -1),
+			ActualAmount:    formatOpenBojunOrderNumber(floatFromAny(value["totAmtActual"]), 2),
+			Type:            formatOpenBojunOrderNullableNumber(value["type"], -1),
+			DocNo:           truncateOpenBojunOrderString(stringFromAny(value["docno"]), 255),
+			AmtAcc:          formatOpenBojunOrderNullableNumber(value["amtAcc"], 2),
+			Value1:          truncateOpenBojunOrderString(stringFromAny(value["value1"]), 255),
+			Value2:          truncateOpenBojunOrderString(stringFromAny(value["value2"]), 255),
+			MarkDis:         formatOpenBojunOrderNullableNumber(value["markdis"], -1),
+			Discount:        formatOpenBojunOrderNullableNumber(value["discount"], 4),
+			PriceList:       formatOpenBojunOrderNullableNumber(value["pricelist"], 2),
+			ProductColor:    truncateOpenBojunOrderString(stringFromAny(value["prodColor"]), 128),
+			TotalAmtAcc:     formatOpenBojunOrderNullableNumber(value["totAmtAcc"], 2),
+			TotalListAmount: formatOpenBojunOrderNullableNumber(value["totAmtList"], 2),
+			DMAmtRetail:     formatOpenBojunOrderNullableNumber(value["dmAmtRetail"], 2),
+			ActualPrice:     formatOpenBojunOrderNullableNumber(value["priceactual"], 2),
+			ProductValue:    truncateOpenBojunOrderString(stringFromAny(value["productValue"]), 500),
 		})
 	}
 	return items
+}
+
+func openBojunOrderPayments(raw string) []OpenBojunOrderPaymentDTO {
+	if len(raw) == 0 || len(raw) > openBojunOrderMaxItemsBytes {
+		return []OpenBojunOrderPaymentDTO{}
+	}
+	var values []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return []OpenBojunOrderPaymentDTO{}
+	}
+	if len(values) > openBojunOrderMaxLines {
+		values = values[:openBojunOrderMaxLines]
+	}
+	payments := make([]OpenBojunOrderPaymentDTO, 0, len(values))
+	for _, value := range values {
+		payments = append(payments, OpenBojunOrderPaymentDTO{
+			PaymentMethodName: truncateOpenBojunOrderString(stringFromAny(value["cPaywayName"]), 255),
+			Amount:            formatOpenBojunOrderNullableNumber(value["payamount"], 2),
+		})
+	}
+	return payments
+}
+
+func formatOpenBojunOrderNullableNumber(value interface{}, precision int) *string {
+	number, ok := parseOpenBojunOrderNumber(value)
+	if !ok {
+		return nil
+	}
+	formatted := strconv.FormatFloat(number, 'f', precision, 64)
+	return &formatted
+}
+
+func parseOpenBojunOrderNumber(value interface{}) (float64, bool) {
+	var number float64
+	switch typed := value.(type) {
+	case int:
+		number = float64(typed)
+	case int64:
+		number = float64(typed)
+	case float64:
+		number = typed
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, false
+		}
+		number = parsed
+	default:
+		return 0, false
+	}
+	if math.IsNaN(number) || math.IsInf(number, 0) {
+		return 0, false
+	}
+	return number, true
 }
 
 func formatOpenBojunOrderNumber(value float64, precision int) string {

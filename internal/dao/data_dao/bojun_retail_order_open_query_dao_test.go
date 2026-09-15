@@ -180,6 +180,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	}
 	for _, fragment := range []string{
 		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`c_store_code`,`c_store_name`",
+		"`items_json`,`pay_items_json`",
 		"completed_at >= ? AND completed_at < ?",
 		"c_store_code IN (?)",
 		"order_type_code IN (?)",
@@ -191,7 +192,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 			t.Fatalf("statement missing %q: %s", fragment, statement)
 		}
 	}
-	for _, sensitive := range []string{"raw_content_json", "pay_items_json", "vipno", "raw_data_id"} {
+	for _, sensitive := range []string{"raw_content_json", "vipno", "raw_data_id"} {
 		if strings.Contains(statement, sensitive) {
 			t.Fatalf("statement selects sensitive column %q: %s", sensitive, statement)
 		}
