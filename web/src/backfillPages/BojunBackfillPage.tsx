@@ -32,6 +32,7 @@ type BojunOrderBackfillResult = {
   writable_count: number
   existing_count: number
   saved_count: number
+  updated_count: number
   retail_count: number
   skipped_count: number
   failed_count: number
@@ -101,7 +102,7 @@ export function BojunBackfillPage({ client, loading, onCompletedRefresh }: { cli
 
   return <PageCanvas>
     <PageHeader eyebrow="DATA BACKFILL" title="伯俊订单补拉" description="先真实查询并预览，再按相同时间范围投递后台补拉任务。" />
-    <Section title="补拉范围" description="Oracle 模式从本地订单按完成时间读取 docno，查询默认 Oracle 后只更新商品和付款明细；API 模式保持原有补拉流程。预览阶段不会写入数据库。" actions={<StatusTag tone={preview ? 'success' : 'neutral'}>{preview ? '预览已就绪' : '等待预览'}</StatusTag>}>
+    <Section title="补拉范围" description="Oracle 模式按完成时间查询默认 Oracle：本地不存在的订单完整新增，已存在的订单只更新商品和付款明细；API 模式保持原有补拉流程。预览阶段不会写入数据库。" actions={<StatusTag tone={preview ? 'success' : 'neutral'}>{preview ? '预览已就绪' : '等待预览'}</StatusTag>}>
       <form className={styles.form} onSubmit={submit}>
         <Field label="开始时间" name="start_time" defaultValue={datetimeLocalMinutesAgo(60)} onChange={invalidatePreview} />
         <Field label="结束时间" name="end_time" defaultValue={datetimeLocalMinutesAgo(0)} onChange={invalidatePreview} />
@@ -112,14 +113,14 @@ export function BojunBackfillPage({ client, loading, onCompletedRefresh }: { cli
     {error ? <FeedbackState kind="error" title="伯俊补拉未完成" description={error} /> : null}
     {preview ? <BackfillResult title="预览结果" result={preview} /> : <FeedbackState kind="empty" title="等待补拉预览" description="选择时间范围并预览后，可在这里核对订单样例与写入数量。" />}
     {queuedTask ? <FeedbackState kind="empty" title="补拉任务已投递" description={`任务 ID ${queuedTask.id}，队列 ${queuedTask.queue}，类型 ${queuedTask.type}。后台完成后可刷新数据查看结果。`} /> : null}
-    <Dialog open={confirmingWrite && Boolean(preview)} title="确认投递伯俊补拉任务" role="alertdialog" closeDisabled={loading || writing} onClose={() => { if (!loading && !writing) setConfirmingWrite(false) }} footer={<><button type="button" disabled={loading || writing} onClick={() => setConfirmingWrite(false)}>取消</button><button className={styles.primary} type="button" disabled={loading || writing} onClick={() => void confirmWrite()}>{writing ? '投递中…' : '确认并投递'}</button></>}><p>确认投递预计处理 {preview?.writable_count ?? 0} 条订单的后台任务？Oracle 模式只覆盖 items_json 和 pay_items_json。</p></Dialog>
+    <Dialog open={confirmingWrite && Boolean(preview)} title="确认投递伯俊补拉任务" role="alertdialog" closeDisabled={loading || writing} onClose={() => { if (!loading && !writing) setConfirmingWrite(false) }} footer={<><button type="button" disabled={loading || writing} onClick={() => setConfirmingWrite(false)}>取消</button><button className={styles.primary} type="button" disabled={loading || writing} onClick={() => void confirmWrite()}>{writing ? '投递中…' : '确认并投递'}</button></>}><p>确认投递预计处理 {preview?.writable_count ?? 0} 条订单的后台任务？Oracle 模式会完整新增缺失订单，已有订单只覆盖 items_json 和 pay_items_json。</p></Dialog>
   </PageCanvas>
 }
 
 function BackfillResult({ title, result }: { title: string; result: BojunOrderBackfillResult }) {
   const samples = [...(result.samples ?? []), ...(result.failed_samples ?? [])].slice(0, 12)
   return <Section title={title} description={`${result.start_time} ~ ${result.end_time} / 拉取 ${result.fetch_pages} 页`} flush>
-    <MetricStrip label={`${title}统计`} items={[{ key: 'total', label: '伯俊返回', value: result.total_count }, { key: 'writable', label: '可写入', value: result.writable_count }, { key: 'existing', label: '已存在', value: result.existing_count }, { key: 'written', label: '已写入', value: result.retail_count }, { key: 'failed', label: '失败', value: result.failed_count }]} />
+    <MetricStrip label={`${title}统计`} items={[{ key: 'total', label: 'Oracle 返回', value: result.total_count }, { key: 'writable', label: '可处理', value: result.writable_count }, { key: 'existing', label: '已存在', value: result.existing_count }, { key: 'created', label: '已新增', value: result.retail_count }, { key: 'updated', label: '已更新', value: result.updated_count }, { key: 'failed', label: '失败', value: result.failed_count }]} />
     {samples.length === 0 ? <FeedbackState kind="empty" title="暂无样例数据" /> : <DataTable minWidth={860} scrollLabel={`${title}订单样例`}><thead><tr><th scope="col">状态</th><th scope="col">订单号</th><th scope="col">门店</th><th scope="col">类型</th><th scope="col">数量</th><th scope="col">金额</th><th scope="col">说明</th></tr></thead><tbody>{samples.map((sample, index) => <tr key={`${sample.docno || 'empty'}-${sample.status}-${index}`}><td><StatusTag tone={sampleTone(sample.status)}>{statusLabel(sample.status)}</StatusTag></td><td>{sample.docno || '-'}</td><td>{sample.c_store_name || sample.c_store_code || '-'}</td><td>{sample.order_type_name || sample.order_type_code || '-'}</td><td>{sample.tot_qty ?? '-'}</td><td>{sample.tot_amt_actual ?? '-'}</td><td>{sample.reason || '-'}</td></tr>)}</tbody></DataTable>}
   </Section>
 }
@@ -147,5 +148,5 @@ function readTaskResult(response: ClientResponse) {
 
 function formValue(form: FormData, key: string) { const value = form.get(key); return typeof value === 'string' ? value : '' }
 function datetimeLocalMinutesAgo(minutes: number) { const date = new Date(Date.now() - minutes * 60 * 1000); const pad = (value: number) => String(value).padStart(2, '0'); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}` }
-function statusLabel(value: string) { return ({ pending: '待写入', created: '已写入', exists: '已存在', invalid: '无效', failed: '失败', push_failed: '推送失败' } as Record<string, string>)[value] ?? (value || '-') }
-function sampleTone(value: string) { return value === 'created' ? 'success' as const : /failed|invalid/.test(value) ? 'danger' as const : value === 'pending' ? 'warning' as const : 'neutral' as const }
+function statusLabel(value: string) { return ({ pending: '待写入', created: '已新增', updated: '已更新', exists: '已存在', invalid: '无效', failed: '失败', push_failed: '推送失败' } as Record<string, string>)[value] ?? (value || '-') }
+function sampleTone(value: string) { return /created|updated/.test(value) ? 'success' as const : /failed|invalid/.test(value) ? 'danger' as const : value === 'pending' ? 'warning' as const : 'neutral' as const }
