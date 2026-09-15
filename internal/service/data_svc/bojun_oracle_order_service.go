@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportrepo"
@@ -37,7 +38,7 @@ type bojunOracleCredentialDecryptor interface {
 
 type bojunOracleConnection interface {
 	QueryBojunRetailAfterID(context.Context, uint64, int) ([]reportoracle.BojunRetailRow, error)
-	QueryBojunRetailByStatusTime(context.Context, time.Time, time.Time, uint64, int) ([]reportoracle.BojunRetailRow, error)
+	QueryBojunRetailDetailsByDocNos(context.Context, []string) ([]reportoracle.BojunRetailDetailRow, error)
 	MaxBojunRetailID(context.Context) (uint64, error)
 	UpdateBojunRetailPushStatus(context.Context, uint64, bool, int) error
 	Close() error
@@ -60,26 +61,31 @@ type bojunOracleRetailOrderStore interface {
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
 	UpdateSyncStatus(context.Context, uint, int) error
+	ListDetailBackfillDocNos(context.Context, time.Time, time.Time, string, int) ([]string, error)
+	UpdateDetailJSONByDocNo(context.Context, string, string, string) (bool, error)
 }
 
 type BojunOracleOrderService struct {
-	datasourceStore bojunOracleDatasourceStore
-	decryptor       bojunOracleCredentialDecryptor
-	openOracle      bojunOracleConnectionOpener
-	stateStore      bojunOracleSyncStateStore
-	rawDataDAO      rawDataCreator
-	retailOrderDAO  bojunOracleRetailOrderStore
-	pushService     bojunOrderPusher
-	skipPolicy      orderPushSkipConfigGetter
-	now             func() time.Time
-	newLeaseToken   func() string
-	batchSize       int
-	maxPages        int
-	leaseTTL        time.Duration
+	datasourceStore         bojunOracleDatasourceStore
+	decryptor               bojunOracleCredentialDecryptor
+	openOracle              bojunOracleConnectionOpener
+	detailBackfillConfig    appConfig.ReportInputOracleConfig
+	detailBackfillConfigErr error
+	stateStore              bojunOracleSyncStateStore
+	rawDataDAO              rawDataCreator
+	retailOrderDAO          bojunOracleRetailOrderStore
+	pushService             bojunOrderPusher
+	skipPolicy              orderPushSkipConfigGetter
+	now                     func() time.Time
+	newLeaseToken           func() string
+	batchSize               int
+	maxPages                int
+	leaseTTL                time.Duration
 }
 
 func NewBojunOracleOrderService() *BojunOracleOrderService {
-	return &BojunOracleOrderService{
+	defaultOracle, defaultOracleErr := appConfig.LoadReportInputQueryConfig()
+	service := &BojunOracleOrderService{
 		datasourceStore: reportrepo.New(),
 		decryptor:       reportsecret.EnvironmentKeyring{},
 		openOracle: func(ctx context.Context, oracleConfig reportoracle.Config) (bojunOracleConnection, error) {
@@ -105,6 +111,14 @@ func NewBojunOracleOrderService() *BojunOracleOrderService {
 			int(bojunOracleDefaultLeaseTTL/time.Second),
 		)) * time.Second,
 	}
+	if defaultOracleErr != nil {
+		service.detailBackfillConfigErr = fmt.Errorf("load default Oracle configuration: %w", defaultOracleErr)
+	} else if !validDefaultOracleConfig(defaultOracle.Oracle) {
+		service.detailBackfillConfigErr = fmt.Errorf("default Oracle configuration is incomplete")
+	} else {
+		service.detailBackfillConfig = defaultOracle.Oracle
+	}
+	return service
 }
 
 func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (result *BojunOrderSyncResult, resultErr error) {
@@ -207,6 +221,30 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 	return result, nil
 }
 
+func (service *BojunOracleOrderService) openDetailBackfill(
+	ctx context.Context,
+) (bojunOracleConnection, time.Duration, error) {
+	if service == nil || ctx == nil || service.openOracle == nil || service.retailOrderDAO == nil ||
+		service.batchSize <= 0 || service.maxPages <= 0 {
+		return nil, 0, fmt.Errorf("bojun Oracle detail backfill dependencies are unavailable")
+	}
+	if service.detailBackfillConfigErr != nil {
+		return nil, 0, service.detailBackfillConfigErr
+	}
+	if !validDefaultOracleConfig(service.detailBackfillConfig) {
+		return nil, 0, fmt.Errorf("default Oracle configuration is incomplete")
+	}
+	connection, err := service.openOracle(ctx, defaultOracleAdapterConfig(service.detailBackfillConfig))
+	if err != nil {
+		return nil, 0, fmt.Errorf("open default Oracle for bojun detail backfill: %w", err)
+	}
+	queryTimeout := service.detailBackfillConfig.QueryTimeout
+	if queryTimeout <= 0 {
+		queryTimeout = 30 * time.Second
+	}
+	return connection, queryTimeout, nil
+}
+
 func (service *BojunOracleOrderService) PreviewByStatusTime(ctx context.Context, startTime, endTime string) (*BojunOrderSyncResult, error) {
 	return service.runByStatusTime(ctx, startTime, endTime, false)
 }
@@ -231,7 +269,7 @@ func (service *BojunOracleOrderService) runByStatusTime(
 	}
 	start, _ := parseBojunOrderTime(normalizedStart)
 	end, _ := parseBojunOrderTime(normalizedEnd)
-	connection, datasource, err := service.open(ctx)
+	connection, queryTimeout, err := service.openDetailBackfill(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -240,33 +278,87 @@ func (service *BojunOracleOrderService) runByStatusTime(
 			resultErr = errors.Join(resultErr, fmt.Errorf("close bojun Oracle connection: %w", closeErr))
 		}
 	}()
-	pushSkipConfig, err := service.bojunPushSkipConfig(ctx, confirmWrite)
-	if err != nil {
-		return result, err
-	}
 
-	var afterID uint64
+	var afterDocNo string
 	for page := 1; page <= service.maxPages; page++ {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		queryCtx, cancel := reportOracleQueryContext(ctx, *datasource)
-		rows, queryErr := connection.QueryBojunRetailByStatusTime(queryCtx, start, end, afterID, service.batchSize)
+		docNos, listErr := service.retailOrderDAO.ListDetailBackfillDocNos(
+			ctx,
+			start,
+			end,
+			afterDocNo,
+			service.batchSize,
+		)
+		if listErr != nil {
+			return result, fmt.Errorf("list bojun retail detail backfill docnos: %w", listErr)
+		}
+		result.FetchPages++
+		if len(docNos) == 0 {
+			break
+		}
+
+		queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+		details, queryErr := connection.QueryBojunRetailDetailsByDocNos(queryCtx, docNos)
 		cancel()
 		if queryErr != nil {
 			return result, queryErr
 		}
-		result.FetchPages++
-		if len(rows) == 0 {
-			break
+		detailsByDocNo := make(map[string]reportoracle.BojunRetailDetailRow, len(details))
+		for _, detail := range details {
+			detailsByDocNo[detail.DocNo] = detail
 		}
-		for _, row := range rows {
-			if err := service.processRow(ctx, connection, row, page, confirmWrite, result, pushSkipConfig); err != nil {
-				return result, err
+
+		for _, docNo := range docNos {
+			result.TotalCount++
+			result.ExistingCount++
+			result.WritableCount++
+			sample := BojunOrderPreviewItem{DocNo: docNo}
+			detail, exists := detailsByDocNo[docNo]
+			if !exists {
+				result.FailedCount++
+				sample.Status = "failed"
+				sample.Reason = "Oracle 明细查询结果缺少订单"
+				addBojunOrderFailedSample(result, sample)
+				return result, fmt.Errorf("query bojun Oracle retail details %s: result is missing", docNo)
 			}
+			if !confirmWrite {
+				result.PreviewCount++
+				sample.Status = "pending"
+				sample.Reason = "可更新商品与付款明细"
+				addBojunOrderSample(result, sample)
+				continue
+			}
+
+			updated, updateErr := service.retailOrderDAO.UpdateDetailJSONByDocNo(
+				ctx,
+				docNo,
+				detail.ItemsJSON,
+				detail.PayItemsJSON,
+			)
+			if updateErr != nil {
+				result.FailedCount++
+				sample.Status = "failed"
+				sample.Reason = "更新商品与付款明细失败"
+				addBojunOrderFailedSample(result, sample)
+				return result, fmt.Errorf("update bojun retail details %s: %w", docNo, updateErr)
+			}
+			if !updated {
+				result.SkippedCount++
+				sample.Status = "exists"
+				sample.Reason = "本地订单已不存在"
+				addBojunOrderSample(result, sample)
+				continue
+			}
+			result.UpdatedCount++
+			result.RetailCount++
+			sample.Status = "updated"
+			sample.Reason = "已更新商品与付款明细"
+			addBojunOrderSample(result, sample)
 		}
-		afterID = rows[len(rows)-1].RetailID
-		if len(rows) < service.batchSize {
+		afterDocNo = docNos[len(docNos)-1]
+		if len(docNos) < service.batchSize {
 			break
 		}
 	}

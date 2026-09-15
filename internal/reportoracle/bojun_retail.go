@@ -78,7 +78,7 @@ UPDATE ` + BojunRetailTable + `
 SET STATUS = :1, PUSH_DATE = :2
 WHERE M_RETAIL_ID = :3`
 
-const bojunRetailItemsSQLPrefix = `
+const bojunRetailItemsSelectSQL = `
 SELECT a.M_RETAIL_ID,
        a.DOCNO,
        b.TYPE,
@@ -100,23 +100,27 @@ SELECT a.M_RETAIL_ID,
        b.PRICEACTUAL
 FROM ` + BojunRetailTable + ` a
 JOIN ` + bojunRetailItemTable + ` b ON a.M_RETAIL_ID = b.M_RETAIL_ID
-JOIN ` + BojunProductView + ` c ON b.M_PRODUCTALIAS_ID = c.M_PRODUCTALIAS_ID
+JOIN ` + BojunProductView + ` c ON b.M_PRODUCTALIAS_ID = c.M_PRODUCTALIAS_ID`
+
+const bojunRetailItemsSQLPrefix = bojunRetailItemsSelectSQL + `
 WHERE b.ISACTIVE = 'Y'
   AND a.M_RETAIL_ID IN (`
 
 const bojunRetailItemsSQLSuffix = `)
 ORDER BY a.M_RETAIL_ID, c.NO`
 
-const bojunRetailPayItemsSQLPrefix = `
-SELECT b.ID AS M_RETAIL_ID,
-       a.C_PAYWAY_ID,
-       k.NAME AS C_PAYWAY_NAME,
-       SUM(a.PAYAMOUNT) AS TOT_AMT_CX
+const bojunRetailPayItemsFromSQL = `
 FROM ` + bojunRetailPayItemTable + ` a
 JOIN ` + bojunRetailPaywayTable + ` k ON k.ID = a.C_PAYWAY_ID
 LEFT JOIN ` + bojunRetailSourceHeadTable + ` b ON a.M_RETAIL_ID = b.ID
 WHERE a.ISACTIVE = 'Y'
-  AND b.STATUS = 2
+  AND b.STATUS = 2`
+
+const bojunRetailPayItemsSQLPrefix = `
+SELECT b.ID AS M_RETAIL_ID,
+       a.C_PAYWAY_ID,
+       k.NAME AS C_PAYWAY_NAME,
+       SUM(a.PAYAMOUNT) AS TOT_AMT_CX` + bojunRetailPayItemsFromSQL + `
   AND b.ID IN (`
 
 const bojunRetailPayItemsSQLSuffix = `)

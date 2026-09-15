@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
@@ -42,6 +43,9 @@ type fakeBojunOracleConnection struct {
 	statusEnd     time.Time
 	statusAfter   uint64
 	statusCalls   int
+	detailRows    []reportoracle.BojunRetailDetailRow
+	detailDocNos  []string
+	detailCalls   int
 }
 
 func (connection *fakeBojunOracleConnection) QueryBojunRetailAfterID(_ context.Context, afterID uint64, _ int) ([]reportoracle.BojunRetailRow, error) {
@@ -56,6 +60,12 @@ func (connection *fakeBojunOracleConnection) QueryBojunRetailByStatusTime(_ cont
 	connection.statusAfter = afterID
 	connection.statusCalls++
 	return append([]reportoracle.BojunRetailRow(nil), connection.rows...), nil
+}
+
+func (connection *fakeBojunOracleConnection) QueryBojunRetailDetailsByDocNos(_ context.Context, docNos []string) ([]reportoracle.BojunRetailDetailRow, error) {
+	connection.detailCalls++
+	connection.detailDocNos = append(connection.detailDocNos, docNos...)
+	return append([]reportoracle.BojunRetailDetailRow(nil), connection.detailRows...), nil
 }
 
 func (connection *fakeBojunOracleConnection) MaxBojunRetailID(context.Context) (uint64, error) {
@@ -91,6 +101,11 @@ type fakeBojunOracleRetailStore struct {
 	updates         map[uint]int
 	supplementCalls int
 	supplementNoop  bool
+	backfillDocNos  []string
+	backfillStart   time.Time
+	backfillEnd     time.Time
+	backfillAfter   string
+	backfillUpdates int
 }
 
 func (store *fakeBojunOracleRetailStore) ExistsByDocNo(_ context.Context, docNo string) (bool, error) {
@@ -148,6 +163,45 @@ func (store *fakeBojunOracleRetailStore) UpdateSyncStatus(_ context.Context, id 
 		}
 	}
 	return nil
+}
+
+func (store *fakeBojunOracleRetailStore) ListDetailBackfillDocNos(
+	_ context.Context,
+	start time.Time,
+	end time.Time,
+	afterDocNo string,
+	limit int,
+) ([]string, error) {
+	store.backfillStart = start
+	store.backfillEnd = end
+	store.backfillAfter = afterDocNo
+	result := make([]string, 0, limit)
+	for _, docNo := range store.backfillDocNos {
+		if docNo <= afterDocNo {
+			continue
+		}
+		result = append(result, docNo)
+		if len(result) == limit {
+			break
+		}
+	}
+	return result, nil
+}
+
+func (store *fakeBojunOracleRetailStore) UpdateDetailJSONByDocNo(
+	_ context.Context,
+	docNo string,
+	itemsJSON string,
+	payItemsJSON string,
+) (bool, error) {
+	order, exists := store.orders[docNo]
+	if !exists {
+		return false, nil
+	}
+	store.backfillUpdates++
+	order.ItemsJSON = itemsJSON
+	order.PayItemsJSON = payItemsJSON
+	return true, nil
 }
 
 type fakeBojunOraclePusher struct {
@@ -466,32 +520,71 @@ func TestBojunOracleSupplementCASNoopDoesNotAdvanceWatermark(t *testing.T) {
 }
 
 func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
-	statusTime := time.Date(2026, 8, 25, 15, 42, 21, 0, time.Local)
-	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
-		RetailID: 132, DocNo: "API-ORDER-132", StatusTime: statusTime,
-		PaidAmount: 100, PushAmount: 60, IsToShop: "Y",
+	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
+		DocNo: "API-ORDER-132", ItemsJSON: `[{"no":"SKU-132"}]`, PayItemsJSON: `[]`,
 	}}}
 	service := newTestBojunOracleOrderService(connection, &fakeBojunOracleStateStore{})
 	service.batchSize = 2
 	pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
 	service.pushService = pusher
 	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
-	store.orders["API-ORDER-132"] = &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1320}, DocNo: "API-ORDER-132"}
+	store.backfillDocNos = []string{"API-ORDER-132"}
+	store.orders["API-ORDER-132"] = &model.BojunRetailOrder{
+		BaseModel: model.BaseModel{ID: 1320}, DocNo: "API-ORDER-132", ItemsJSON: `[{"no":"OLD"}]`, PayItemsJSON: `[]`,
+	}
 
 	result, err := service.PreviewByStatusTime(t.Context(), "2026-08-25T10:00", "2026-08-25T11:00")
 	if err != nil {
 		t.Fatalf("PreviewByStatusTime() error = %v", err)
 	}
-	if store.supplementCalls != 0 || store.orders["API-ORDER-132"].OracleRetailID != nil || result.PreviewCount != 1 ||
+	if store.supplementCalls != 0 || store.backfillUpdates != 0 || store.orders["API-ORDER-132"].ItemsJSON != `[{"no":"OLD"}]` || result.PreviewCount != 1 ||
 		pusher.calls != 0 || len(connection.writeBackIDs) != 0 {
 		t.Fatalf(
-			"preview mutated existing order: supplements=%d order=%+v pushes=%d write-backs=%v result=%+v",
+			"preview mutated existing order: supplements=%d detail updates=%d order=%+v pushes=%d write-backs=%v result=%+v",
 			store.supplementCalls,
+			store.backfillUpdates,
 			store.orders["API-ORDER-132"],
 			pusher.calls,
 			connection.writeBackIDs,
 			result,
 		)
+	}
+}
+
+func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
+	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
+		DocNo:        "SALE-132",
+		ItemsJSON:    `[{"no":"SKU-132"}]`,
+		PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
+	}}}
+	service := newTestBojunOracleOrderService(connection, &fakeBojunOracleStateStore{})
+	service.batchSize = 2
+	pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
+	service.pushService = pusher
+	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
+	store.backfillDocNos = []string{"SALE-132"}
+	store.orders["SALE-132"] = &model.BojunRetailOrder{
+		BaseModel: model.BaseModel{ID: 1320}, DocNo: "SALE-132",
+		PaidAmount: 100, PushAmount: 60, Synced: 3,
+		ItemsJSON: `[{"no":"OLD"}]`, PayItemsJSON: `[{"cPaywayName":"OLD"}]`,
+	}
+
+	result, err := service.SyncByStatusTime(t.Context(), "2026-08-25T10:00", "2026-08-25T11:00")
+	if err != nil {
+		t.Fatalf("SyncByStatusTime() error = %v", err)
+	}
+	order := store.orders["SALE-132"]
+	if order.ItemsJSON != `[{"no":"SKU-132"}]` ||
+		order.PayItemsJSON != `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]` {
+		t.Fatalf("detail JSON was not updated: %+v", order)
+	}
+	if order.PaidAmount != 100 || order.PushAmount != 60 || order.Synced != 3 ||
+		store.supplementCalls != 0 || pusher.calls != 0 || len(connection.writeBackIDs) != 0 {
+		t.Fatalf("detail backfill changed unrelated order state: %+v", order)
+	}
+	if result.TotalCount != 1 || result.ExistingCount != 1 || result.WritableCount != 1 ||
+		result.UpdatedCount != 1 || result.RetailCount != 1 || store.backfillUpdates != 1 {
+		t.Fatalf("result=%+v updates=%d", result, store.backfillUpdates)
 	}
 }
 
@@ -526,22 +619,34 @@ func TestBojunOracleSuccessfulPushWithFailedWriteBackDoesNotAdvance(t *testing.T
 }
 
 func TestBojunOraclePreviewQueriesStatusTimeWithoutWritingOrAdvancing(t *testing.T) {
-	statusTime := time.Date(2026, 8, 25, 15, 42, 21, 0, time.Local)
-	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
-		RetailID: 15, StoreCode: "ABCN001A001", DocNo: "SALE-15", StatusTime: statusTime,
-		PaidAmount: 20, PushAmount: 20, IsToShop: "Y",
+	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
+		DocNo: "SALE-15", ItemsJSON: `[]`, PayItemsJSON: `[]`,
 	}}}
 	state := &fakeBojunOracleStateStore{}
 	service := newTestBojunOracleOrderService(connection, state)
 	service.batchSize = 2
 	rawStore := service.rawDataDAO.(*fakeBojunRawDataCreator)
+	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
+	store.backfillDocNos = []string{"SALE-15"}
+	store.orders["SALE-15"] = &model.BojunRetailOrder{DocNo: "SALE-15"}
+	var openedConfig reportoracle.Config
+	service.openOracle = func(_ context.Context, config reportoracle.Config) (bojunOracleConnection, error) {
+		openedConfig = config
+		return connection, nil
+	}
 
 	result, err := service.PreviewByStatusTime(t.Context(), "2026-08-25T10:00", "2026-08-25T11:00")
 	if err != nil {
 		t.Fatalf("PreviewByStatusTime() error = %v", err)
 	}
-	if connection.statusCalls != 1 || connection.statusStart.Hour() != 10 || connection.statusEnd.Hour() != 11 || connection.statusAfter != 0 {
-		t.Fatalf("status time query start=%v end=%v after=%d calls=%d", connection.statusStart, connection.statusEnd, connection.statusAfter, connection.statusCalls)
+	if connection.statusCalls != 0 || connection.detailCalls != 1 || len(connection.detailDocNos) != 1 || connection.detailDocNos[0] != "SALE-15" {
+		t.Fatalf("Oracle queries = status:%d detail:%d docnos:%v", connection.statusCalls, connection.detailCalls, connection.detailDocNos)
+	}
+	if store.backfillStart.Hour() != 10 || store.backfillEnd.Hour() != 11 || store.backfillAfter != "" {
+		t.Fatalf("local range query start=%v end=%v after=%q", store.backfillStart, store.backfillEnd, store.backfillAfter)
+	}
+	if openedConfig.Host != "default-oracle" || openedConfig.Username != "default-user" {
+		t.Fatalf("opened Oracle config = %+v", openedConfig)
 	}
 	if result.PreviewCount != 1 || result.WritableCount != 1 || rawStore.created != 0 || state.advancedTo != 0 {
 		t.Fatalf("result=%+v raw writes=%d state=%+v", result, rawStore.created, state)
@@ -554,8 +659,12 @@ func newTestBojunOracleOrderService(connection bojunOracleConnection, state boju
 			Code: bojunOracleDatasourceCode, Driver: model.ReportDatasourceDriverOracle, Enabled: true,
 			CredentialKeyVersion: "v1", PasswordCiphertext: "ciphertext", QueryTimeoutSeconds: 1,
 		}},
-		decryptor:      fakeBojunOracleDecryptor{},
-		openOracle:     func(context.Context, reportoracle.Config) (bojunOracleConnection, error) { return connection, nil },
+		decryptor:  fakeBojunOracleDecryptor{},
+		openOracle: func(context.Context, reportoracle.Config) (bojunOracleConnection, error) { return connection, nil },
+		detailBackfillConfig: appConfig.ReportInputOracleConfig{
+			Host: "default-oracle", Port: 1521, ServiceName: "ORCL", Username: "default-user", Password: "password",
+			QueryTimeout: time.Second,
+		},
 		stateStore:     state,
 		rawDataDAO:     &fakeBojunRawDataCreator{nextID: 100},
 		retailOrderDAO: &fakeBojunOracleRetailStore{orders: map[string]*model.BojunRetailOrder{}},

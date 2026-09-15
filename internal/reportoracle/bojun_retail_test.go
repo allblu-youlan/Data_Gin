@@ -118,17 +118,78 @@ func TestBojunRetailPayItemsSQLUsesFixedSourcesAndBoundIDs(t *testing.T) {
 	}
 }
 
+func TestBojunRetailDetailSQLUsesFixedSourcesAndBoundDocNos(t *testing.T) {
+	docNos, err := normalizeBojunRetailDocNos([]string{" ORDER-1 ", "ORDER-2", "ORDER-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docNos) != 2 || docNos[0] != "ORDER-1" || docNos[1] != "ORDER-2" {
+		t.Fatalf("normalized docnos = %#v", docNos)
+	}
+
+	itemSQL, itemArguments := buildBojunRetailDocNoQuery(
+		bojunRetailItemsByDocNoSQLPrefix,
+		bojunRetailItemsByDocNoSQLSuffix,
+		docNos,
+	)
+	for _, fragment := range []string{
+		BojunRetailTable,
+		bojunRetailItemTable,
+		BojunProductView,
+		"b.ISACTIVE = 'Y'",
+		"a.DOCNO IN (:1, :2)",
+	} {
+		if !strings.Contains(itemSQL, fragment) {
+			t.Fatalf("retail item by docno SQL is missing %q: %s", fragment, itemSQL)
+		}
+	}
+
+	payItemSQL, payItemArguments := buildBojunRetailDocNoQuery(
+		bojunRetailPayItemsByDocNoSQLPrefix,
+		bojunRetailPayItemsByDocNoSQLSuffix,
+		docNos,
+	)
+	for _, fragment := range []string{
+		bojunRetailPayItemTable,
+		bojunRetailPaywayTable,
+		bojunRetailSourceHeadTable,
+		"k.ID = a.C_PAYWAY_ID",
+		"a.ISACTIVE = 'Y'",
+		"b.STATUS = 2",
+		"b.DOCNO IN (:1, :2)",
+		"GROUP BY b.DOCNO, a.C_PAYWAY_ID, k.NAME",
+	} {
+		if !strings.Contains(payItemSQL, fragment) {
+			t.Fatalf("retail pay item by docno SQL is missing %q: %s", fragment, payItemSQL)
+		}
+	}
+
+	for _, statement := range []string{itemSQL, payItemSQL} {
+		if strings.Contains(statement, "ORDER-1") || strings.Contains(statement, "ORDER-2") || strings.Contains(statement, ";") {
+			t.Fatalf("detail SQL contains unbound values or stacked statement: %s", statement)
+		}
+	}
+	for name, arguments := range map[string][]interface{}{"items": itemArguments, "pay items": payItemArguments} {
+		if len(arguments) != 2 || arguments[0] != "ORDER-1" || arguments[1] != "ORDER-2" {
+			t.Fatalf("%s arguments = %#v", name, arguments)
+		}
+	}
+}
+
 const bojunRetailQueryTestDriverName = "bojun-retail-query-test"
 
 var registerBojunRetailQueryTestDriver sync.Once
 var activeBojunRetailQueryTestState *bojunRetailQueryTestState
 
 type bojunRetailQueryTestState struct {
-	headerCalls  int
-	itemCalls    int
-	payItemCalls int
-	headerRows   *bojunRetailQueryTestRows
-	itemRows     *bojunRetailQueryTestRows
+	headerCalls     int
+	itemCalls       int
+	payItemCalls    int
+	docItemCalls    int
+	docPayItemCalls int
+	headerRows      *bojunRetailQueryTestRows
+	itemRows        *bojunRetailQueryTestRows
+	docItemRows     *bojunRetailQueryTestRows
 }
 
 type bojunRetailQueryTestDriver struct{}
@@ -207,8 +268,73 @@ func (connection *bojunRetailQueryTestConn) QueryContext(
 				{int64(45077), int64(24), "微信", 20.5},
 			},
 		}, nil
+	case strings.HasPrefix(query, bojunRetailItemsByDocNoSQLPrefix):
+		connection.state.docItemCalls++
+		if len(arguments) != 4 || arguments[0].Value != "ORDER-1" || arguments[1].Value != "ORDER-2" {
+			return nil, fmt.Errorf("retail item by docno query arguments = %#v", arguments)
+		}
+		rows := &bojunRetailQueryTestRows{
+			columns: []string{
+				"M_RETAIL_ID", "DOCNO", "TYPE", "MARKDIS", "PRODUCT_NAME", "PRODUCT_VALUE", "PROD_COLOR", "NO",
+				"VALUE1", "VALUE2", "QTY", "DM_AMT_RETAIL", "TOT_AMT_ACTUAL", "TOT_AMT_LIST", "AMT_ACC",
+				"TOT_AMT_ACC", "DISCOUNT", "PRICELIST", "PRICEACTUAL",
+			},
+			values: [][]driver.Value{
+				{int64(45077), "ORDER-1", 1.0, 0.0, "C41H1079A", "儿童|家居服", "C41H1079AG265", "C41H1079AG265130", "中灰蓝", "130CM", 1.0, nil, 160.65, 189.0, 0.0, 0.0, 0.85, 189.0, 160.65},
+			},
+		}
+		connection.state.docItemRows = rows
+		return rows, nil
+	case strings.HasPrefix(query, bojunRetailPayItemsByDocNoSQLPrefix):
+		connection.state.docPayItemCalls++
+		if connection.state.docItemRows == nil || !connection.state.docItemRows.closed {
+			return nil, fmt.Errorf("retail item by docno rows were not closed before pay item query")
+		}
+		if len(arguments) != 4 || arguments[0].Value != "ORDER-1" || arguments[1].Value != "ORDER-2" {
+			return nil, fmt.Errorf("retail pay item by docno query arguments = %#v", arguments)
+		}
+		return &bojunRetailQueryTestRows{
+			columns: []string{"DOCNO", "C_PAYWAY_ID", "C_PAYWAY_NAME", "TOT_AMT_CX"},
+			values: [][]driver.Value{
+				{"ORDER-1", int64(25), " 支付宝 ", 250.2},
+				{"ORDER-1", int64(24), "微信", 20.5},
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unexpected statement: %s", query)
+	}
+}
+
+func TestQueryBojunRetailDetailsByDocNosUsesOnlyTwoDetailQueries(t *testing.T) {
+	registerBojunRetailQueryTestDriver.Do(func() {
+		sql.Register(bojunRetailQueryTestDriverName, bojunRetailQueryTestDriver{})
+	})
+	state := &bojunRetailQueryTestState{}
+	activeBojunRetailQueryTestState = state
+	defer func() { activeBojunRetailQueryTestState = nil }()
+	db, err := sql.Open(bojunRetailQueryTestDriverName, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	adapter := &Adapter{db: db, prefetchRows: 100, fetchArraySize: 100}
+	details, err := adapter.QueryBojunRetailDetailsByDocNos(t.Context(), []string{" ORDER-1 ", "ORDER-2", "ORDER-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.headerCalls != 0 || state.docItemCalls != 1 || state.docPayItemCalls != 1 {
+		t.Fatalf("query calls = header:%d items:%d pay items:%d, want 0/1/1", state.headerCalls, state.docItemCalls, state.docPayItemCalls)
+	}
+	if len(details) != 2 || details[0].DocNo != "ORDER-1" || details[1].DocNo != "ORDER-2" {
+		t.Fatalf("details = %#v", details)
+	}
+	if !strings.Contains(details[0].ItemsJSON, `"no":"C41H1079AG265130"`) ||
+		!strings.Contains(details[0].PayItemsJSON, `"cPaywayName":"支付宝"`) {
+		t.Fatalf("first detail = %#v", details[0])
+	}
+	if details[1].ItemsJSON != "[]" || details[1].PayItemsJSON != "[]" {
+		t.Fatalf("second detail = %#v, want empty arrays", details[1])
 	}
 }
 

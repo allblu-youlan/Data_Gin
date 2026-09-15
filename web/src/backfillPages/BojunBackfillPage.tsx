@@ -100,8 +100,8 @@ export function BojunBackfillPage({ client, loading, onCompletedRefresh }: { cli
   }
 
   return <PageCanvas>
-    <PageHeader eyebrow="DATA BACKFILL" title="伯俊订单补拉" description="先真实拉取并预览，再按相同时间范围投递后台补拉任务；已有 docno 不覆盖。" />
-    <Section title="补拉范围" description="Oracle 模式按订单完成时间查询（结束时间不包含），API 模式按上游接口时间查询；预览阶段不会写入数据库。" actions={<StatusTag tone={preview ? 'success' : 'neutral'}>{preview ? '预览已就绪' : '等待预览'}</StatusTag>}>
+    <PageHeader eyebrow="DATA BACKFILL" title="伯俊订单补拉" description="先真实查询并预览，再按相同时间范围投递后台补拉任务。" />
+    <Section title="补拉范围" description="Oracle 模式从本地订单按完成时间读取 docno，查询默认 Oracle 后只更新商品和付款明细；API 模式保持原有补拉流程。预览阶段不会写入数据库。" actions={<StatusTag tone={preview ? 'success' : 'neutral'}>{preview ? '预览已就绪' : '等待预览'}</StatusTag>}>
       <form className={styles.form} onSubmit={submit}>
         <Field label="开始时间" name="start_time" defaultValue={datetimeLocalMinutesAgo(60)} onChange={invalidatePreview} />
         <Field label="结束时间" name="end_time" defaultValue={datetimeLocalMinutesAgo(0)} onChange={invalidatePreview} />
@@ -112,7 +112,7 @@ export function BojunBackfillPage({ client, loading, onCompletedRefresh }: { cli
     {error ? <FeedbackState kind="error" title="伯俊补拉未完成" description={error} /> : null}
     {preview ? <BackfillResult title="预览结果" result={preview} /> : <FeedbackState kind="empty" title="等待补拉预览" description="选择时间范围并预览后，可在这里核对订单样例与写入数量。" />}
     {queuedTask ? <FeedbackState kind="empty" title="补拉任务已投递" description={`任务 ID ${queuedTask.id}，队列 ${queuedTask.queue}，类型 ${queuedTask.type}。后台完成后可刷新数据查看结果。`} /> : null}
-    <Dialog open={confirmingWrite && Boolean(preview)} title="确认投递伯俊补拉任务" role="alertdialog" closeDisabled={loading || writing} onClose={() => { if (!loading && !writing) setConfirmingWrite(false) }} footer={<><button type="button" disabled={loading || writing} onClick={() => setConfirmingWrite(false)}>取消</button><button className={styles.primary} type="button" disabled={loading || writing} onClick={() => void confirmWrite()}>{writing ? '投递中…' : '确认并投递'}</button></>}><p>确认投递预计写入 {preview?.writable_count ?? 0} 条订单的后台任务？系统会按 docno 判重，已有订单不会覆盖。</p></Dialog>
+    <Dialog open={confirmingWrite && Boolean(preview)} title="确认投递伯俊补拉任务" role="alertdialog" closeDisabled={loading || writing} onClose={() => { if (!loading && !writing) setConfirmingWrite(false) }} footer={<><button type="button" disabled={loading || writing} onClick={() => setConfirmingWrite(false)}>取消</button><button className={styles.primary} type="button" disabled={loading || writing} onClick={() => void confirmWrite()}>{writing ? '投递中…' : '确认并投递'}</button></>}><p>确认投递预计处理 {preview?.writable_count ?? 0} 条订单的后台任务？Oracle 模式只覆盖 items_json 和 pay_items_json。</p></Dialog>
   </PageCanvas>
 }
 
