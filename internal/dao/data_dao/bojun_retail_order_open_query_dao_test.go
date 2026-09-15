@@ -112,45 +112,6 @@ func TestBojunRetailOrderDAOUpdateCompletedAtIfEmptyUsesNarrowUpdate(t *testing.
 	}
 }
 
-func TestBojunRetailOrderDAOListDetailBackfillDocNosUsesLocalCompletedAtRange(t *testing.T) {
-	t.Parallel()
-	db := dryRunWeatherDAOTestDB(t)
-	var statement string
-	if err := db.Callback().Query().After("gorm:query").Register("test:capture_bojun_detail_backfill_list_sql", func(tx *gorm.DB) {
-		statement = tx.Statement.SQL.String()
-	}); err != nil {
-		t.Fatalf("register SQL capture callback: %v", err)
-	}
-	location := time.FixedZone("Asia/Shanghai", 8*60*60)
-	docNos, err := NewBojunRetailOrderDAO(db).ListDetailBackfillDocNos(
-		t.Context(),
-		time.Date(2026, 6, 1, 0, 0, 0, 0, location),
-		time.Date(2026, 7, 1, 0, 0, 0, 0, location),
-		"E202606010001",
-		100,
-	)
-	if err != nil {
-		t.Fatalf("ListDetailBackfillDocNos() error=%v", err)
-	}
-	if docNos == nil {
-		t.Fatal("ListDetailBackfillDocNos() returned nil slice")
-	}
-	for _, fragment := range []string{
-		"SELECT `docno` FROM `bojun_retail_orders`",
-		"completed_at >= ? AND completed_at < ?",
-		"docno > ?",
-		"ORDER BY docno ASC",
-		"LIMIT 100",
-	} {
-		if !strings.Contains(statement, fragment) {
-			t.Fatalf("statement missing %q: %s", fragment, statement)
-		}
-	}
-	if strings.Contains(statement, "E202606010001") || strings.Contains(statement, "items_json") || strings.Contains(statement, "pay_items_json") {
-		t.Fatalf("statement selects or interpolates unexpected values: %s", statement)
-	}
-}
-
 func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *testing.T) {
 	t.Parallel()
 	db := dryRunWeatherDAOTestDB(t)
@@ -160,7 +121,7 @@ func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *tes
 	}); err != nil {
 		t.Fatalf("register SQL capture callback: %v", err)
 	}
-	updated, err := NewBojunRetailOrderDAO(db).UpdateDetailJSONByDocNo(
+	err := NewBojunRetailOrderDAO(db).UpdateDetailJSONByDocNo(
 		t.Context(),
 		"E20260619153626009000081",
 		`[{"no":"SKU-1"}]`,
@@ -168,9 +129,6 @@ func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *tes
 	)
 	if err != nil {
 		t.Fatalf("UpdateDetailJSONByDocNo() error=%v", err)
-	}
-	if updated {
-		t.Fatal("dry-run update unexpectedly reported rows affected")
 	}
 	for _, fragment := range []string{
 		"UPDATE `bojun_retail_orders`",

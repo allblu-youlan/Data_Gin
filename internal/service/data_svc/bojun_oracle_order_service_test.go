@@ -43,9 +43,6 @@ type fakeBojunOracleConnection struct {
 	statusEnd     time.Time
 	statusAfter   uint64
 	statusCalls   int
-	detailRows    []reportoracle.BojunRetailDetailRow
-	detailDocNos  []string
-	detailCalls   int
 }
 
 func (connection *fakeBojunOracleConnection) QueryBojunRetailAfterID(_ context.Context, afterID uint64, _ int) ([]reportoracle.BojunRetailRow, error) {
@@ -60,12 +57,6 @@ func (connection *fakeBojunOracleConnection) QueryBojunRetailByStatusTime(_ cont
 	connection.statusAfter = afterID
 	connection.statusCalls++
 	return append([]reportoracle.BojunRetailRow(nil), connection.rows...), nil
-}
-
-func (connection *fakeBojunOracleConnection) QueryBojunRetailDetailsByDocNos(_ context.Context, docNos []string) ([]reportoracle.BojunRetailDetailRow, error) {
-	connection.detailCalls++
-	connection.detailDocNos = append(connection.detailDocNos, docNos...)
-	return append([]reportoracle.BojunRetailDetailRow(nil), connection.detailRows...), nil
 }
 
 func (connection *fakeBojunOracleConnection) MaxBojunRetailID(context.Context) (uint64, error) {
@@ -101,10 +92,6 @@ type fakeBojunOracleRetailStore struct {
 	updates         map[uint]int
 	supplementCalls int
 	supplementNoop  bool
-	backfillDocNos  []string
-	backfillStart   time.Time
-	backfillEnd     time.Time
-	backfillAfter   string
 	backfillUpdates int
 }
 
@@ -165,43 +152,20 @@ func (store *fakeBojunOracleRetailStore) UpdateSyncStatus(_ context.Context, id 
 	return nil
 }
 
-func (store *fakeBojunOracleRetailStore) ListDetailBackfillDocNos(
-	_ context.Context,
-	start time.Time,
-	end time.Time,
-	afterDocNo string,
-	limit int,
-) ([]string, error) {
-	store.backfillStart = start
-	store.backfillEnd = end
-	store.backfillAfter = afterDocNo
-	result := make([]string, 0, limit)
-	for _, docNo := range store.backfillDocNos {
-		if docNo <= afterDocNo {
-			continue
-		}
-		result = append(result, docNo)
-		if len(result) == limit {
-			break
-		}
-	}
-	return result, nil
-}
-
 func (store *fakeBojunOracleRetailStore) UpdateDetailJSONByDocNo(
 	_ context.Context,
 	docNo string,
 	itemsJSON string,
 	payItemsJSON string,
-) (bool, error) {
+) error {
 	order, exists := store.orders[docNo]
 	if !exists {
-		return false, nil
+		return nil
 	}
 	store.backfillUpdates++
 	order.ItemsJSON = itemsJSON
 	order.PayItemsJSON = payItemsJSON
-	return true, nil
+	return nil
 }
 
 type fakeBojunOraclePusher struct {
@@ -520,15 +484,15 @@ func TestBojunOracleSupplementCASNoopDoesNotAdvanceWatermark(t *testing.T) {
 }
 
 func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
-	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
-		DocNo: "API-ORDER-132", ItemsJSON: `[{"no":"SKU-132"}]`, PayItemsJSON: `[]`,
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID: 132, DocNo: "API-ORDER-132", StatusTime: time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local),
+		ItemsJSON: `[{"no":"SKU-132"}]`, PayItemsJSON: `[]`,
 	}}}
 	service := newTestBojunOracleOrderService(connection, &fakeBojunOracleStateStore{})
 	service.batchSize = 2
 	pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
 	service.pushService = pusher
 	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
-	store.backfillDocNos = []string{"API-ORDER-132"}
 	store.orders["API-ORDER-132"] = &model.BojunRetailOrder{
 		BaseModel: model.BaseModel{ID: 1320}, DocNo: "API-ORDER-132", ItemsJSON: `[{"no":"OLD"}]`, PayItemsJSON: `[]`,
 	}
@@ -552,8 +516,10 @@ func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
 }
 
 func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
-	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID:     132,
 		DocNo:        "SALE-132",
+		StatusTime:   time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local),
 		ItemsJSON:    `[{"no":"SKU-132"}]`,
 		PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
 	}}}
@@ -562,7 +528,6 @@ func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
 	pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
 	service.pushService = pusher
 	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
-	store.backfillDocNos = []string{"SALE-132"}
 	store.orders["SALE-132"] = &model.BojunRetailOrder{
 		BaseModel: model.BaseModel{ID: 1320}, DocNo: "SALE-132",
 		PaidAmount: 100, PushAmount: 60, Synced: 3,
@@ -583,8 +548,41 @@ func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
 		t.Fatalf("detail backfill changed unrelated order state: %+v", order)
 	}
 	if result.TotalCount != 1 || result.ExistingCount != 1 || result.WritableCount != 1 ||
-		result.UpdatedCount != 1 || result.RetailCount != 1 || store.backfillUpdates != 1 {
+		result.UpdatedCount != 1 || result.RetailCount != 0 || store.backfillUpdates != 1 {
 		t.Fatalf("result=%+v updates=%d", result, store.backfillUpdates)
+	}
+}
+
+func TestBojunOracleDetailBackfillCreatesAndPushesMissingOrder(t *testing.T) {
+	statusTime := time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local)
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID: 134, StoreCode: "ABCN001A001", DocNo: "SALE-134", StatusTime: statusTime,
+		PaidAmount: 250.2, PushAmount: 250.2, IsToShop: "Y",
+		ItemsJSON:    `[{"no":"SKU-134"}]`,
+		PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
+	}}}
+	service := newTestBojunOracleOrderService(connection, &fakeBojunOracleStateStore{})
+	service.batchSize = 2
+	pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
+	service.pushService = pusher
+	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
+	rawStore := service.rawDataDAO.(*fakeBojunRawDataCreator)
+
+	result, err := service.SyncByStatusTime(t.Context(), "2026-08-25T10:00", "2026-08-25T11:00")
+	if err != nil {
+		t.Fatalf("SyncByStatusTime() error = %v", err)
+	}
+	order := store.orders["SALE-134"]
+	if order == nil || order.OracleRetailID == nil || *order.OracleRetailID != 134 ||
+		order.ItemsJSON != `[{"no":"SKU-134"}]` ||
+		order.PayItemsJSON != `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]` {
+		t.Fatalf("created order = %+v", order)
+	}
+	if rawStore.created != 1 || pusher.calls != 1 || len(connection.writeBackIDs) != 1 || connection.writeBackIDs[0] != 134 {
+		t.Fatalf("raw=%d push=%d write-backs=%v", rawStore.created, pusher.calls, connection.writeBackIDs)
+	}
+	if result.TotalCount != 1 || result.WritableCount != 1 || result.RetailCount != 1 || result.ExistingCount != 0 {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -619,15 +617,15 @@ func TestBojunOracleSuccessfulPushWithFailedWriteBackDoesNotAdvance(t *testing.T
 }
 
 func TestBojunOraclePreviewQueriesStatusTimeWithoutWritingOrAdvancing(t *testing.T) {
-	connection := &fakeBojunOracleConnection{detailRows: []reportoracle.BojunRetailDetailRow{{
-		DocNo: "SALE-15", ItemsJSON: `[]`, PayItemsJSON: `[]`,
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID: 15, DocNo: "SALE-15", StatusTime: time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local),
+		ItemsJSON: `[]`, PayItemsJSON: `[]`,
 	}}}
 	state := &fakeBojunOracleStateStore{}
 	service := newTestBojunOracleOrderService(connection, state)
 	service.batchSize = 2
 	rawStore := service.rawDataDAO.(*fakeBojunRawDataCreator)
 	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
-	store.backfillDocNos = []string{"SALE-15"}
 	store.orders["SALE-15"] = &model.BojunRetailOrder{DocNo: "SALE-15"}
 	var openedConfig reportoracle.Config
 	service.openOracle = func(_ context.Context, config reportoracle.Config) (bojunOracleConnection, error) {
@@ -639,11 +637,11 @@ func TestBojunOraclePreviewQueriesStatusTimeWithoutWritingOrAdvancing(t *testing
 	if err != nil {
 		t.Fatalf("PreviewByStatusTime() error = %v", err)
 	}
-	if connection.statusCalls != 0 || connection.detailCalls != 1 || len(connection.detailDocNos) != 1 || connection.detailDocNos[0] != "SALE-15" {
-		t.Fatalf("Oracle queries = status:%d detail:%d docnos:%v", connection.statusCalls, connection.detailCalls, connection.detailDocNos)
+	if connection.statusCalls != 1 || connection.statusAfter != 0 || connection.queryCalls != 0 {
+		t.Fatalf("Oracle queries = status:%d after:%d incremental:%d", connection.statusCalls, connection.statusAfter, connection.queryCalls)
 	}
-	if store.backfillStart.Hour() != 10 || store.backfillEnd.Hour() != 11 || store.backfillAfter != "" {
-		t.Fatalf("local range query start=%v end=%v after=%q", store.backfillStart, store.backfillEnd, store.backfillAfter)
+	if connection.statusStart.Hour() != 10 || connection.statusEnd.Hour() != 11 {
+		t.Fatalf("Oracle range query start=%v end=%v", connection.statusStart, connection.statusEnd)
 	}
 	if openedConfig.Host != "default-oracle" || openedConfig.Username != "default-user" {
 		t.Fatalf("opened Oracle config = %+v", openedConfig)

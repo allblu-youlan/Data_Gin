@@ -119,46 +119,24 @@ func (dao *BojunRetailOrderDAO) UpdateSyncStatus(ctx context.Context, id uint, s
 		Error
 }
 
-func (dao *BojunRetailOrderDAO) ListDetailBackfillDocNos(
-	ctx context.Context,
-	start time.Time,
-	end time.Time,
-	afterDocNo string,
-	limit int,
-) ([]string, error) {
-	if dao == nil || dao.db == nil || ctx == nil || start.IsZero() || !end.After(start) || limit <= 0 || limit > 1000 {
-		return nil, gorm.ErrInvalidData
-	}
-	docNos := make([]string, 0, limit)
-	err := dao.db.WithContext(ctx).
-		Model(&model.BojunRetailOrder{}).
-		Where("completed_at >= ? AND completed_at < ?", start, end).
-		Where("docno > ?", strings.TrimSpace(afterDocNo)).
-		Order("docno ASC").
-		Limit(limit).
-		Pluck("docno", &docNos).
-		Error
-	return docNos, err
-}
-
 func (dao *BojunRetailOrderDAO) UpdateDetailJSONByDocNo(
 	ctx context.Context,
 	docNo string,
 	itemsJSON string,
 	payItemsJSON string,
-) (bool, error) {
+) error {
 	docNo = strings.TrimSpace(docNo)
 	if dao == nil || dao.db == nil || ctx == nil || docNo == "" || itemsJSON == "" || payItemsJSON == "" {
-		return false, gorm.ErrInvalidData
+		return gorm.ErrInvalidData
 	}
-	result := dao.db.WithContext(ctx).
+	return dao.db.WithContext(ctx).
 		Model(&model.BojunRetailOrder{}).
 		Where("docno = ?", docNo).
 		UpdateColumns(map[string]interface{}{
 			"items_json":     itemsJSON,
 			"pay_items_json": payItemsJSON,
-		})
-	return result.RowsAffected > 0, result.Error
+		}).
+		Error
 }
 
 func (dao *BojunRetailOrderDAO) SupplementOracleFieldsIfMissing(

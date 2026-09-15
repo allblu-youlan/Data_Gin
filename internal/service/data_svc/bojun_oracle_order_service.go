@@ -38,7 +38,7 @@ type bojunOracleCredentialDecryptor interface {
 
 type bojunOracleConnection interface {
 	QueryBojunRetailAfterID(context.Context, uint64, int) ([]reportoracle.BojunRetailRow, error)
-	QueryBojunRetailDetailsByDocNos(context.Context, []string) ([]reportoracle.BojunRetailDetailRow, error)
+	QueryBojunRetailByStatusTime(context.Context, time.Time, time.Time, uint64, int) ([]reportoracle.BojunRetailRow, error)
 	MaxBojunRetailID(context.Context) (uint64, error)
 	UpdateBojunRetailPushStatus(context.Context, uint64, bool, int) error
 	Close() error
@@ -61,9 +61,15 @@ type bojunOracleRetailOrderStore interface {
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
 	UpdateSyncStatus(context.Context, uint, int) error
-	ListDetailBackfillDocNos(context.Context, time.Time, time.Time, string, int) ([]string, error)
-	UpdateDetailJSONByDocNo(context.Context, string, string, string) (bool, error)
+	UpdateDetailJSONByDocNo(context.Context, string, string, string) error
 }
+
+type bojunOracleExistingOrderMode uint8
+
+const (
+	bojunOracleExistingOrderSync bojunOracleExistingOrderMode = iota
+	bojunOracleExistingOrderBackfillDetails
+)
 
 type BojunOracleOrderService struct {
 	datasourceStore         bojunOracleDatasourceStore
@@ -197,7 +203,9 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 			break
 		}
 		for _, row := range rows {
-			if err := service.processRow(ctx, connection, row, page, true, result, pushSkipConfig); err != nil {
+			if err := service.processRow(
+				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
+			); err != nil {
 				return result, err
 			}
 			if err := service.stateStore.RenewLease(
@@ -279,86 +287,37 @@ func (service *BojunOracleOrderService) runByStatusTime(
 		}
 	}()
 
-	var afterDocNo string
+	pushSkipConfig, err := service.bojunPushSkipConfig(ctx, confirmWrite)
+	if err != nil {
+		return result, err
+	}
+	var afterID uint64
 	for page := 1; page <= service.maxPages; page++ {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		docNos, listErr := service.retailOrderDAO.ListDetailBackfillDocNos(
-			ctx,
-			start,
-			end,
-			afterDocNo,
-			service.batchSize,
-		)
-		if listErr != nil {
-			return result, fmt.Errorf("list bojun retail detail backfill docnos: %w", listErr)
-		}
-		result.FetchPages++
-		if len(docNos) == 0 {
-			break
-		}
-
 		queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
-		details, queryErr := connection.QueryBojunRetailDetailsByDocNos(queryCtx, docNos)
+		rows, queryErr := connection.QueryBojunRetailByStatusTime(
+			queryCtx, start, end, afterID, service.batchSize,
+		)
 		cancel()
 		if queryErr != nil {
 			return result, queryErr
 		}
-		detailsByDocNo := make(map[string]reportoracle.BojunRetailDetailRow, len(details))
-		for _, detail := range details {
-			detailsByDocNo[detail.DocNo] = detail
+		result.FetchPages++
+		if len(rows) == 0 {
+			break
 		}
-
-		for _, docNo := range docNos {
-			result.TotalCount++
-			result.ExistingCount++
-			result.WritableCount++
-			sample := BojunOrderPreviewItem{DocNo: docNo}
-			detail, exists := detailsByDocNo[docNo]
-			if !exists {
-				result.FailedCount++
-				sample.Status = "failed"
-				sample.Reason = "Oracle 明细查询结果缺少订单"
-				addBojunOrderFailedSample(result, sample)
-				return result, fmt.Errorf("query bojun Oracle retail details %s: result is missing", docNo)
+		for _, row := range rows {
+			if err := service.processRow(
+				ctx, connection, row, page, confirmWrite, bojunOracleExistingOrderBackfillDetails,
+				result, pushSkipConfig,
+			); err != nil {
+				return result, err
 			}
-			if !confirmWrite {
-				result.PreviewCount++
-				sample.Status = "pending"
-				sample.Reason = "可更新商品与付款明细"
-				addBojunOrderSample(result, sample)
-				continue
-			}
-
-			updated, updateErr := service.retailOrderDAO.UpdateDetailJSONByDocNo(
-				ctx,
-				docNo,
-				detail.ItemsJSON,
-				detail.PayItemsJSON,
-			)
-			if updateErr != nil {
-				result.FailedCount++
-				sample.Status = "failed"
-				sample.Reason = "更新商品与付款明细失败"
-				addBojunOrderFailedSample(result, sample)
-				return result, fmt.Errorf("update bojun retail details %s: %w", docNo, updateErr)
-			}
-			if !updated {
-				result.SkippedCount++
-				sample.Status = "exists"
-				sample.Reason = "本地订单已不存在"
-				addBojunOrderSample(result, sample)
-				continue
-			}
-			result.UpdatedCount++
-			result.RetailCount++
-			sample.Status = "updated"
-			sample.Reason = "已更新商品与付款明细"
-			addBojunOrderSample(result, sample)
 		}
-		afterDocNo = docNos[len(docNos)-1]
-		if len(docNos) < service.batchSize {
+		afterID = rows[len(rows)-1].RetailID
+		if len(rows) < service.batchSize {
 			break
 		}
 	}
@@ -392,6 +351,7 @@ func (service *BojunOracleOrderService) processRow(
 	row reportoracle.BojunRetailRow,
 	page int,
 	confirmWrite bool,
+	existingMode bojunOracleExistingOrderMode,
 	result *BojunOrderSyncResult,
 	pushSkipConfig OrderPushSkipConfig,
 ) error {
@@ -409,6 +369,9 @@ func (service *BojunOracleOrderService) processRow(
 	}
 	if exists {
 		result.ExistingCount++
+		if existingMode == bojunOracleExistingOrderBackfillDetails {
+			return service.processExistingDetailBackfill(ctx, order, confirmWrite, result, sample)
+		}
 		existing, findErr := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
 		if findErr != nil {
 			result.FailedCount++
@@ -467,6 +430,37 @@ func (service *BojunOracleOrderService) processRow(
 		return nil
 	}
 	return service.pushAndWriteBack(ctx, connection, row, order, result, pushSkipConfig)
+}
+
+func (service *BojunOracleOrderService) processExistingDetailBackfill(
+	ctx context.Context,
+	order *model.BojunRetailOrder,
+	confirmWrite bool,
+	result *BojunOrderSyncResult,
+	sample BojunOrderPreviewItem,
+) error {
+	result.WritableCount++
+	if !confirmWrite {
+		result.PreviewCount++
+		sample.Status = "exists"
+		sample.Reason = "将只更新商品与付款明细"
+		addBojunOrderSample(result, sample)
+		return nil
+	}
+	if err := service.retailOrderDAO.UpdateDetailJSONByDocNo(
+		ctx, order.DocNo, order.ItemsJSON, order.PayItemsJSON,
+	); err != nil {
+		result.FailedCount++
+		sample.Status = "failed"
+		sample.Reason = "更新商品与付款明细失败"
+		addBojunOrderFailedSample(result, sample)
+		return fmt.Errorf("update bojun retail details %s: %w", order.DocNo, err)
+	}
+	result.UpdatedCount++
+	sample.Status = "updated"
+	sample.Reason = "已更新商品与付款明细"
+	addBojunOrderSample(result, sample)
+	return nil
 }
 
 func (service *BojunOracleOrderService) processExistingRow(
