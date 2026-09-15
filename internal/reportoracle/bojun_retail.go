@@ -3,8 +3,9 @@ package reportoracle
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 const (
 	BojunRetailTable        = "YL_DBS.BJ_REPORT_RETAIL_SF"
+	bojunRetailItemTable    = "BOSNDS3.M_RETAILITEM@LINK_TO_BOJUN"
 	maxBojunRetailBatchSize = 1000
 )
 
@@ -32,14 +34,14 @@ type BojunRetailRow struct {
 }
 
 const bojunRetailProjectedColumns = `
-M_RETAIL_ID, STORE_CODE, STORE_NAME, DOCNO, RETAILSALETYPE, STATUSTIME,
-DM_VP_C_VIP_MOBILE, TOT_AMT_SF, TOT_AMT_TS, IS_TOSHOP,
-STATUS, JSON_ITEM`
+	M_RETAIL_ID, STORE_CODE, STORE_NAME, DOCNO, RETAILSALETYPE, STATUSTIME,
+	DM_VP_C_VIP_MOBILE, TOT_AMT_SF, TOT_AMT_TS, IS_TOSHOP,
+	STATUS`
 
 const bojunRetailSourceColumns = `
-M_RETAIL_ID, STORE_CODE, STORE_NAME, DOCNO, RETAILSALETYPE, STATUSTIME,
-DM_VP_C_VIP_MOBILE, TOT_AMT_SF, TOT_AMT_TS, IS_TOSHOP,
-NVL(STATUS, '0') AS STATUS, JSON_ITEM`
+	M_RETAIL_ID, STORE_CODE, STORE_NAME, DOCNO, RETAILSALETYPE, STATUSTIME,
+	DM_VP_C_VIP_MOBILE, TOT_AMT_SF, TOT_AMT_TS, IS_TOSHOP,
+	NVL(STATUS, '0') AS STATUS`
 
 const bojunRetailAfterIDSQL = `
 SELECT ` + bojunRetailProjectedColumns + `
@@ -71,6 +73,57 @@ const bojunRetailPushStatusSQL = `
 UPDATE ` + BojunRetailTable + `
 SET STATUS = :1, PUSH_DATE = :2
 WHERE M_RETAIL_ID = :3`
+
+const bojunRetailItemsSQLPrefix = `
+SELECT a.M_RETAIL_ID,
+       a.DOCNO,
+       b.TYPE,
+       b.MARKDIS,
+       c.PRODUCT_NAME,
+       c.VALUE AS PRODUCT_VALUE,
+       c.PROD_COLOR,
+       c.NO,
+       c.VALUE1,
+       c.VALUE2,
+       b.QTY,
+       b.DM_AMT_RETAIL,
+       b.TOT_AMT_ACTUAL,
+       b.TOT_AMT_LIST,
+       b.AMT_ACC,
+       b.TOT_AMT_ACC,
+       b.DISCOUNT,
+       b.PRICELIST,
+       b.PRICEACTUAL
+FROM ` + BojunRetailTable + ` a
+JOIN ` + bojunRetailItemTable + ` b ON a.M_RETAIL_ID = b.M_RETAIL_ID
+JOIN ` + BojunProductView + ` c ON b.M_PRODUCTALIAS_ID = c.M_PRODUCTALIAS_ID
+WHERE b.ISACTIVE = 'Y'
+  AND a.M_RETAIL_ID IN (`
+
+const bojunRetailItemsSQLSuffix = `)
+ORDER BY a.M_RETAIL_ID, c.NO`
+
+type bojunRetailItem struct {
+	RetailID     uint64   `json:"-"`
+	DocNo        string   `json:"docno"`
+	Type         *float64 `json:"type"`
+	MarkDis      *float64 `json:"markdis"`
+	ProductName  string   `json:"mProductName"`
+	ProductValue string   `json:"productValue"`
+	ProductColor string   `json:"prodColor"`
+	No           string   `json:"no"`
+	Value1       string   `json:"value1"`
+	Value2       string   `json:"value2"`
+	Qty          *float64 `json:"qty"`
+	DMAmtRetail  *float64 `json:"dmAmtRetail"`
+	TotAmtActual *float64 `json:"totAmtActual"`
+	TotAmtList   *float64 `json:"totAmtList"`
+	AmtAcc       *float64 `json:"amtAcc"`
+	TotAmtAcc    *float64 `json:"totAmtAcc"`
+	Discount     *float64 `json:"discount"`
+	PriceList    *float64 `json:"pricelist"`
+	PriceActual  *float64 `json:"priceactual"`
+}
 
 func (adapter *Adapter) QueryBojunRetailAfterID(ctx context.Context, afterID uint64, limit int) ([]BojunRetailRow, error) {
 	if adapter == nil || adapter.db == nil {
@@ -147,7 +200,6 @@ func (adapter *Adapter) queryBojunRetailRows(ctx context.Context, statement stri
 	arguments = append(arguments,
 		godror.PrefetchCount(adapter.prefetchRows),
 		godror.FetchArraySize(adapter.fetchArraySize),
-		godror.ClobAsString(),
 	)
 	rows, err := adapter.db.QueryContext(ctx, statement, arguments...)
 	if err != nil {
@@ -166,6 +218,12 @@ func (adapter *Adapter) queryBojunRetailRows(ctx context.Context, statement stri
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate bojun Oracle retail orders: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close bojun Oracle retail orders: %w", err)
+	}
+	if err := adapter.attachBojunRetailItems(ctx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -181,21 +239,16 @@ func scanBojunRetailRow(scanner bojunRetailScanner) (BojunRetailRow, error) {
 		orderPhone, isToShop                    sql.NullString
 		paidAmount, pushAmount                  sql.NullFloat64
 		pushStatus                              sql.NullInt64
-		itemsJSON                               interface{}
 	)
 	if err := scanner.Scan(
 		&retailID, &storeCode, &storeName, &docNo, &retailType, &statusTime,
 		&orderPhone, &paidAmount, &pushAmount, &isToShop,
-		&pushStatus, &itemsJSON,
+		&pushStatus,
 	); err != nil {
 		return BojunRetailRow{}, fmt.Errorf("scan bojun Oracle retail order: %w", err)
 	}
 	if retailID <= 0 || strings.TrimSpace(docNo.String) == "" || !statusTime.Valid {
 		return BojunRetailRow{}, fmt.Errorf("scan bojun Oracle retail order: required field is empty")
-	}
-	jsonText, err := bojunRetailText(itemsJSON)
-	if err != nil {
-		return BojunRetailRow{}, fmt.Errorf("scan bojun Oracle retail order JSON_ITEM: %w", err)
 	}
 	return BojunRetailRow{
 		RetailID: uint64(retailID), StoreCode: strings.TrimSpace(storeCode.String), StoreName: strings.TrimSpace(storeName.String),
@@ -203,39 +256,115 @@ func scanBojunRetailRow(scanner bojunRetailScanner) (BojunRetailRow, error) {
 		RetailSaleType: strings.TrimSpace(retailType.String), StatusTime: statusTime.Time,
 		OrderPhone: strings.TrimSpace(orderPhone.String), PaidAmount: paidAmount.Float64, PushAmount: pushAmount.Float64,
 		IsToShop: strings.ToUpper(strings.TrimSpace(isToShop.String)), PushStatus: int(pushStatus.Int64),
-		ItemsJSON: strings.TrimSpace(jsonText),
 	}, nil
 }
 
-func bojunRetailText(value interface{}) (string, error) {
-	switch typed := value.(type) {
-	case nil:
-		return "", nil
-	case string:
-		return typed, nil
-	case []byte:
-		return string(typed), nil
-	case godror.Lob:
-		return readBojunRetailLOB(typed.Reader)
-	case *godror.Lob:
-		if typed == nil {
-			return "", nil
-		}
-		return readBojunRetailLOB(typed.Reader)
-	default:
-		return "", fmt.Errorf("unsupported Oracle text type %T", value)
+func (adapter *Adapter) attachBojunRetailItems(ctx context.Context, orders []BojunRetailRow) error {
+	if len(orders) == 0 {
+		return nil
 	}
+	statement, arguments, err := buildBojunRetailItemsQuery(orders)
+	if err != nil {
+		return err
+	}
+	queryArguments := append(arguments,
+		godror.PrefetchCount(adapter.prefetchRows),
+		godror.FetchArraySize(adapter.fetchArraySize),
+	)
+	rows, err := adapter.db.QueryContext(ctx, statement, queryArguments...)
+	if err != nil {
+		return fmt.Errorf("query bojun Oracle retail items: %w", err)
+	}
+	defer rows.Close()
+
+	itemsByRetailID := make(map[uint64][]bojunRetailItem, len(orders))
+	for rows.Next() {
+		item, scanErr := scanBojunRetailItem(rows)
+		if scanErr != nil {
+			return scanErr
+		}
+		itemsByRetailID[item.RetailID] = append(itemsByRetailID[item.RetailID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate bojun Oracle retail items: %w", err)
+	}
+	return setBojunRetailItemsJSON(orders, itemsByRetailID)
 }
 
-func readBojunRetailLOB(reader io.Reader) (string, error) {
-	if reader == nil {
-		return "", nil
+func setBojunRetailItemsJSON(orders []BojunRetailRow, itemsByRetailID map[uint64][]bojunRetailItem) error {
+	for index := range orders {
+		items := itemsByRetailID[orders[index].RetailID]
+		if items == nil {
+			items = []bojunRetailItem{}
+		}
+		encoded, marshalErr := json.Marshal(items)
+		if marshalErr != nil {
+			return fmt.Errorf("marshal bojun Oracle retail items %d: %w", orders[index].RetailID, marshalErr)
+		}
+		orders[index].ItemsJSON = string(encoded)
 	}
-	value, err := io.ReadAll(reader)
-	if err != nil {
-		return "", err
+	return nil
+}
+
+func buildBojunRetailItemsQuery(orders []BojunRetailRow) (string, []interface{}, error) {
+	if len(orders) == 0 || len(orders) > maxBojunRetailBatchSize {
+		return "", nil, fmt.Errorf("query bojun Oracle retail items: order count must be between 1 and %d", maxBojunRetailBatchSize)
 	}
-	return string(value), nil
+	placeholders := make([]string, 0, len(orders))
+	arguments := make([]interface{}, 0, len(orders))
+	seen := make(map[uint64]struct{}, len(orders))
+	for _, order := range orders {
+		if order.RetailID == 0 {
+			return "", nil, fmt.Errorf("query bojun Oracle retail items: retail id is required")
+		}
+		if _, exists := seen[order.RetailID]; exists {
+			continue
+		}
+		seen[order.RetailID] = struct{}{}
+		placeholders = append(placeholders, ":"+strconv.Itoa(len(placeholders)+1))
+		arguments = append(arguments, order.RetailID)
+	}
+	return bojunRetailItemsSQLPrefix + strings.Join(placeholders, ", ") + bojunRetailItemsSQLSuffix, arguments, nil
+}
+
+func scanBojunRetailItem(scanner bojunRetailScanner) (bojunRetailItem, error) {
+	var (
+		retailID                                                           int64
+		docNo, productName, productValue, productColor, no, value1, value2 sql.NullString
+		itemType, markDis, qty, dmAmtRetail, totAmtActual, totAmtList      sql.NullFloat64
+		amtAcc, totAmtAcc, discount, priceList, priceActual                sql.NullFloat64
+	)
+	if err := scanner.Scan(
+		&retailID, &docNo, &itemType, &markDis,
+		&productName, &productValue, &productColor, &no, &value1, &value2,
+		&qty, &dmAmtRetail, &totAmtActual, &totAmtList, &amtAcc, &totAmtAcc,
+		&discount, &priceList, &priceActual,
+	); err != nil {
+		return bojunRetailItem{}, fmt.Errorf("scan bojun Oracle retail item: %w", err)
+	}
+	if retailID <= 0 || strings.TrimSpace(docNo.String) == "" {
+		return bojunRetailItem{}, fmt.Errorf("scan bojun Oracle retail item: required field is empty")
+	}
+	return bojunRetailItem{
+		RetailID: uint64(retailID), DocNo: strings.TrimSpace(docNo.String),
+		Type: nullableBojunFloat(itemType), MarkDis: nullableBojunFloat(markDis),
+		ProductName: strings.TrimSpace(productName.String), ProductValue: strings.TrimSpace(productValue.String),
+		ProductColor: strings.TrimSpace(productColor.String), No: strings.TrimSpace(no.String),
+		Value1: strings.TrimSpace(value1.String), Value2: strings.TrimSpace(value2.String),
+		Qty: nullableBojunFloat(qty), DMAmtRetail: nullableBojunFloat(dmAmtRetail),
+		TotAmtActual: nullableBojunFloat(totAmtActual), TotAmtList: nullableBojunFloat(totAmtList),
+		AmtAcc: nullableBojunFloat(amtAcc), TotAmtAcc: nullableBojunFloat(totAmtAcc),
+		Discount: nullableBojunFloat(discount), PriceList: nullableBojunFloat(priceList),
+		PriceActual: nullableBojunFloat(priceActual),
+	}, nil
+}
+
+func nullableBojunFloat(value sql.NullFloat64) *float64 {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Float64
+	return &result
 }
 
 func validateBojunRetailBatchSize(limit int) error {
