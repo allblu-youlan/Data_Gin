@@ -89,7 +89,7 @@ func NewBusinessOverviewService() (*BusinessOverviewService, error) {
 	)
 	if configErr != nil {
 		service.oracleConfigErr = fmt.Errorf("%w: load default Oracle configuration: %v", ErrBusinessOverviewUnavailable, configErr)
-	} else if !validBusinessOverviewOracleConfig(configured.Oracle) {
+	} else if !validDefaultOracleConfig(configured.Oracle) {
 		service.oracleConfigErr = fmt.Errorf("%w: default Oracle configuration is incomplete", ErrBusinessOverviewUnavailable)
 	}
 	return service, nil
@@ -215,7 +215,7 @@ func businessOverviewQueryTimeout(configured time.Duration) time.Duration {
 	return configured
 }
 
-func validBusinessOverviewOracleConfig(config appConfig.ReportInputOracleConfig) bool {
+func validDefaultOracleConfig(config appConfig.ReportInputOracleConfig) bool {
 	return strings.TrimSpace(config.Host) != "" && strings.TrimSpace(config.Username) != "" && config.Password != "" &&
 		(strings.TrimSpace(config.ServiceName) != "" || strings.TrimSpace(config.SID) != "") &&
 		!(strings.TrimSpace(config.ServiceName) != "" && strings.TrimSpace(config.SID) != "")

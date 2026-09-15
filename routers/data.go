@@ -15,7 +15,11 @@ func apiData(api *gin.RouterGroup) {
 	weatherCtrl := data_ctrl.NewMallWeatherController()
 	registerMallWeatherRoutes(api, weatherCtrl)
 	registerOpenWeatherRoutes(api, weatherCtrl, data_ctrl.NewOpenWeatherMallController())
-	registerOpenBojunOrderRoutes(api, data_ctrl.NewOpenBojunOrderController())
+	registerOpenBojunRoutes(
+		api,
+		data_ctrl.NewOpenBojunOrderController(),
+		data_ctrl.NewOpenBojunProductController(),
+	)
 	registerMallWeatherRefreshRoutes(api, data_ctrl.NewMallWeatherRefreshController())
 	registerMallWeatherExportProfileRoutes(api, data_ctrl.NewMallWeatherExportProfileController())
 	registerMallWeatherExportJobRoutes(api, data_ctrl.NewMallWeatherExportJobController())
@@ -335,9 +339,10 @@ const (
 	openBojunUserRouteRateLimit = "30-M"
 )
 
-func registerOpenBojunOrderRoutes(
+func registerOpenBojunRoutes(
 	api *gin.RouterGroup,
-	controller *data_ctrl.OpenBojunOrderController,
+	orderController *data_ctrl.OpenBojunOrderController,
+	productController *data_ctrl.OpenBojunProductController,
 ) {
 	bojunGroup := api.Group("/open/bojun")
 	bojunGroup.Use(
@@ -346,7 +351,8 @@ func registerOpenBojunOrderRoutes(
 		middleware.RequirePermission(model.PermissionBojunOrderRead),
 		middleware.LimitOpenAPIUserRoute("bojun", openBojunUserRouteRateLimit),
 	)
-	bojunGroup.POST("/orders/query", controller.Query)
+	bojunGroup.POST("/orders/query", orderController.Query)
+	bojunGroup.POST("/products/query", productController.Query)
 }
 
 const (
