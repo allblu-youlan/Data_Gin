@@ -248,7 +248,7 @@ func TestBojunRetailOrderDAOFindOpenOrderDetailsUsesNarrowProjection(t *testing.
 	_, err := NewBojunRetailOrderDAO(db).FindOpenOrderDetails(
 		t.Context(),
 		" ORDER-1 ",
-		[]string{" STORE-1 ", "STORE-2"},
+		[]string{"STORE-1", "STORE-2"},
 	)
 	if err != nil {
 		t.Fatalf("FindOpenOrderDetails() error=%v", err)
@@ -273,6 +273,24 @@ func TestBojunRetailOrderDAOFindOpenOrderDetailsUsesNarrowProjection(t *testing.
 		if strings.Contains(statement, value) {
 			t.Fatalf("statement interpolates filter %q: %s", value, statement)
 		}
+	}
+}
+
+func TestBojunRetailOrderDAOFindOpenOrderDetailsAllowsAllStores(t *testing.T) {
+	t.Parallel()
+	db := dryRunWeatherDAOTestDB(t)
+	var statement string
+	if err := db.Callback().Query().After("gorm:query").Register("test:capture_open_bojun_order_details_all_stores_sql", func(tx *gorm.DB) {
+		statement = tx.Statement.SQL.String()
+	}); err != nil {
+		t.Fatalf("register SQL capture callback: %v", err)
+	}
+	_, err := NewBojunRetailOrderDAO(db).FindOpenOrderDetails(t.Context(), "ORDER-1", nil)
+	if err != nil {
+		t.Fatalf("FindOpenOrderDetails() error=%v", err)
+	}
+	if strings.Contains(statement, "c_store_code IN") {
+		t.Fatalf("statement unexpectedly restricts all-store account: %s", statement)
 	}
 }
 

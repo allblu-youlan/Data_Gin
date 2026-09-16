@@ -26,6 +26,8 @@ const (
 	openBojunOrderDetailMaxPageSize     = 200
 	openBojunOrderDetailCursorVersion   = 1
 	openBojunOrderDetailCursorMaxBytes  = 1024
+	openBojunOrderDetailHashChunkBytes  = 64 * 1024
+	openBojunOrderDetailContextRows     = 64
 )
 
 var ErrOpenBojunOrderNotFound = errors.New("open bojun order: not found")
@@ -136,16 +138,19 @@ func (service *OpenBojunOrderDetailQueryService) Query(
 	if err != nil {
 		return nil, fmt.Errorf("open bojun order detail query: find order: %w", err)
 	}
-	payloadHash := openBojunOrderDetailPayloadHash(order.ItemsJSON, order.PayItemsJSON)
+	payloadHash, err := openBojunOrderDetailPayloadHash(queryCtx, order.ItemsJSON, order.PayItemsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("open bojun order detail query: hash payload: %w", err)
+	}
 	if cursor != nil && cursor.PayloadHash != payloadHash {
 		return nil, ErrOpenBojunOrderInvalidQuery
 	}
 	offset := (page - 1) * pageSize
-	itemValues, itemTotal, err := pageOpenBojunOrderDetailValues(order.ItemsJSON, offset, pageSize)
+	itemValues, itemTotal, err := pageOpenBojunOrderDetailValues(queryCtx, order.ItemsJSON, offset, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("open bojun order detail query: decode items: %w", err)
 	}
-	paymentValues, paymentTotal, err := pageOpenBojunOrderDetailValues(order.PayItemsJSON, offset, pageSize)
+	paymentValues, paymentTotal, err := pageOpenBojunOrderDetailValues(queryCtx, order.PayItemsJSON, offset, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("open bojun order detail query: decode payments: %w", err)
 	}
@@ -214,12 +219,16 @@ func normalizeOpenBojunOrderDetailQuery(
 }
 
 func pageOpenBojunOrderDetailValues(
+	ctx context.Context,
 	raw string,
 	offset int,
 	pageSize int,
 ) ([]map[string]interface{}, int, error) {
-	if strings.TrimSpace(raw) == "" || offset < 0 || pageSize < 1 {
+	if ctx == nil || strings.TrimSpace(raw) == "" || offset < 0 || pageSize < 1 {
 		return nil, 0, fmt.Errorf("detail payload is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	token, err := decoder.Token()
@@ -229,6 +238,11 @@ func pageOpenBojunOrderDetailValues(
 	values := make([]map[string]interface{}, 0, pageSize)
 	total := 0
 	for decoder.More() {
+		if total%openBojunOrderDetailContextRows == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, err
+			}
+		}
 		var value map[string]interface{}
 		if err := decoder.Decode(&value); err != nil {
 			return nil, 0, err
@@ -237,6 +251,9 @@ func pageOpenBojunOrderDetailValues(
 			values = append(values, value)
 		}
 		total++
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
 	}
 	if _, err := decoder.Token(); err != nil {
 		return nil, 0, err
@@ -274,9 +291,41 @@ func openBojunOrderDetailQueryHash(orderNo string, pageSize int) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func openBojunOrderDetailPayloadHash(itemsJSON string, paymentsJSON string) string {
-	sum := sha256.Sum256([]byte(itemsJSON + "\x00" + paymentsJSON))
-	return hex.EncodeToString(sum[:])
+func openBojunOrderDetailPayloadHash(
+	ctx context.Context,
+	itemsJSON string,
+	paymentsJSON string,
+) (string, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("detail payload hash: nil context")
+	}
+	hasher := sha256.New()
+	if err := writeOpenBojunOrderDetailHash(ctx, hasher, itemsJSON); err != nil {
+		return "", err
+	}
+	if _, err := hasher.Write([]byte{0}); err != nil {
+		return "", fmt.Errorf("detail payload hash: write separator: %w", err)
+	}
+	if err := writeOpenBojunOrderDetailHash(ctx, hasher, paymentsJSON); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func writeOpenBojunOrderDetailHash(ctx context.Context, writer io.Writer, value string) error {
+	for start := 0; start < len(value); start += openBojunOrderDetailHashChunkBytes {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		end := start + openBojunOrderDetailHashChunkBytes
+		if end > len(value) {
+			end = len(value)
+		}
+		if _, err := io.WriteString(writer, value[start:end]); err != nil {
+			return fmt.Errorf("detail payload hash: write content: %w", err)
+		}
+	}
+	return ctx.Err()
 }
 
 func encodeOpenBojunOrderDetailCursor(cursor openBojunOrderDetailCursor) (string, error) {

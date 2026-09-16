@@ -51,6 +51,7 @@ func (reader *fakeOpenBojunOrderReader) ListOpenOrders(
 type fakeOpenBojunPermissionReader struct {
 	allowed    bool
 	permission string
+	err        error
 }
 
 func (reader *fakeOpenBojunPermissionReader) HasPermission(
@@ -60,7 +61,7 @@ func (reader *fakeOpenBojunPermissionReader) HasPermission(
 	_ time.Time,
 ) (bool, error) {
 	reader.permission = permission
-	return reader.allowed, nil
+	return reader.allowed, reader.err
 }
 
 func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {

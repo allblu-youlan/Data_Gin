@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +125,7 @@ func TestOpenBojunOrderDetailQueryServicePagesEveryDetail(t *testing.T) {
 }
 
 func TestOpenBojunOrderDetailQueryServiceChecksScopeBeforeReadingOrder(t *testing.T) {
+	scopeErr := errors.New("database unavailable")
 	tests := []struct {
 		name    string
 		scope   *fakeOpenBojunOrderDetailMallScope
@@ -138,8 +138,8 @@ func TestOpenBojunOrderDetailQueryServiceChecksScopeBeforeReadingOrder(t *testin
 		},
 		{
 			name:    "scope lookup failed",
-			scope:   &fakeOpenBojunOrderDetailMallScope{err: errors.New("database unavailable")},
-			wantErr: errors.New("database unavailable"),
+			scope:   &fakeOpenBojunOrderDetailMallScope{err: scopeErr},
+			wantErr: scopeErr,
 		},
 	}
 	for _, test := range tests {
@@ -152,8 +152,8 @@ func TestOpenBojunOrderDetailQueryServiceChecksScopeBeforeReadingOrder(t *testin
 				time.Now,
 			)
 			_, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1"})
-			if err == nil || !strings.Contains(err.Error(), test.wantErr.Error()) {
-				t.Fatalf("Query() error=%v want containing %q", err, test.wantErr)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Query() error=%v want=%v", err, test.wantErr)
 			}
 			if test.scope.calls != 1 || len(test.scope.requested) != 0 {
 				t.Fatalf("scope calls=%d requested=%v", test.scope.calls, test.scope.requested)
@@ -166,20 +166,74 @@ func TestOpenBojunOrderDetailQueryServiceChecksScopeBeforeReadingOrder(t *testin
 }
 
 func TestOpenBojunOrderDetailQueryServiceRejectsBeforeScopeAndOrderWithoutPermission(t *testing.T) {
-	reader := &fakeOpenBojunOrderDetailReader{}
-	scope := &fakeOpenBojunOrderDetailMallScope{}
+	permissionErr := errors.New("permission database unavailable")
+	tests := []struct {
+		name        string
+		permissions *fakeOpenBojunPermissionReader
+		wantErr     error
+	}{
+		{name: "permission denied", permissions: &fakeOpenBojunPermissionReader{allowed: false}, wantErr: ErrOpenBojunOrderForbidden},
+		{name: "permission lookup failed", permissions: &fakeOpenBojunPermissionReader{err: permissionErr}, wantErr: permissionErr},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &fakeOpenBojunOrderDetailReader{}
+			scope := &fakeOpenBojunOrderDetailMallScope{}
+			service := newOpenBojunOrderDetailQueryService(reader, test.permissions, scope, time.Now)
+			_, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1"})
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Query() error=%v want=%v", err, test.wantErr)
+			}
+			if scope.calls != 0 || reader.calls != 0 {
+				t.Fatalf("scope calls=%d reader calls=%d", scope.calls, reader.calls)
+			}
+		})
+	}
+}
+
+func TestOpenBojunOrderDetailQueryServiceRejectsCursorForDifferentQuery(t *testing.T) {
+	reader := &fakeOpenBojunOrderDetailReader{order: &model.BojunRetailOrder{
+		DocNo: "ORDER-1", ItemsJSON: `[{"no":"SKU-1"},{"no":"SKU-2"}]`, PayItemsJSON: `[]`,
+	}}
 	service := newOpenBojunOrderDetailQueryService(
 		reader,
-		&fakeOpenBojunPermissionReader{allowed: false},
-		scope,
+		&fakeOpenBojunPermissionReader{allowed: true},
+		&fakeOpenBojunOrderDetailMallScope{},
 		time.Now,
 	)
-	_, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1"})
-	if !errors.Is(err, ErrOpenBojunOrderForbidden) {
-		t.Fatalf("Query() error=%v", err)
+	first, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1", PageSize: 1})
+	if err != nil || first.Pagination.NextCursor == "" {
+		t.Fatalf("first page=%+v error=%v", first, err)
 	}
-	if scope.calls != 0 || reader.calls != 0 {
-		t.Fatalf("scope calls=%d reader calls=%d", scope.calls, reader.calls)
+	tests := []struct {
+		name    string
+		request requestbody.OpenBojunOrderDetailQueryRequest
+	}{
+		{name: "different order", request: requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-2", PageSize: 1, Cursor: first.Pagination.NextCursor}},
+		{name: "different page size", request: requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1", PageSize: 2, Cursor: first.Pagination.NextCursor}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			callsBefore := reader.calls
+			_, err := service.Query(t.Context(), 17, test.request)
+			if !errors.Is(err, ErrOpenBojunOrderInvalidQuery) {
+				t.Fatalf("Query() error=%v", err)
+			}
+			if reader.calls != callsBefore {
+				t.Fatalf("reader calls=%d want=%d", reader.calls, callsBefore)
+			}
+		})
+	}
+}
+
+func TestOpenBojunOrderDetailPayloadProcessingHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, _, err := pageOpenBojunOrderDetailValues(ctx, `[{"no":"SKU-1"}]`, 0, 100); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pageOpenBojunOrderDetailValues() error=%v", err)
+	}
+	if _, err := openBojunOrderDetailPayloadHash(ctx, `[{"no":"SKU-1"}]`, `[]`); !errors.Is(err, context.Canceled) {
+		t.Fatalf("openBojunOrderDetailPayloadHash() error=%v", err)
 	}
 }
 
