@@ -3,6 +3,7 @@ package auth_request
 type DataAuthorizationPermissionInput struct {
 	Permission string `json:"permission"`
 	ExpiresAt  string `json:"expiresAt"`
+	Permanent  bool   `json:"permanent,omitempty"`
 }
 
 type DataAuthorizationAccountCreateRequest struct {
@@ -21,6 +22,7 @@ type DataAuthorizationAccountQueryRequest struct {
 type DataAuthorizationGrantRequest struct {
 	Permission string `json:"permission"`
 	ExpiresAt  string `json:"expiresAt"`
+	Permanent  bool   `json:"permanent,omitempty"`
 	Reason     string `json:"reason"`
 }
 

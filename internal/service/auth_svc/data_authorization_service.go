@@ -50,6 +50,7 @@ type DataAuthorizationPermissionDTO struct {
 	Label      string     `json:"label"`
 	Scope      string     `json:"scope"`
 	Status     string     `json:"status"`
+	Permanent  bool       `json:"permanent"`
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
@@ -222,7 +223,7 @@ func (service *DataAuthorizationService) CreateAccount(ctx context.Context, acto
 			if err := upsertDataPermission(ctx, tx, user.ID, actorUserID, grant.Permission, grant.ExpiresAt); err != nil {
 				return err
 			}
-			if err := createDataAuthorizationAudit(ctx, tx, user.ID, grant.Permission, model.DataAuthorizationActionGrant, nil, &grant.ExpiresAt, actorUserID, normalized.Reason, keyHash); err != nil {
+			if err := createDataAuthorizationAudit(ctx, tx, user.ID, grant.Permission, model.DataAuthorizationActionGrant, nil, grant.ExpiresAt, actorUserID, normalized.Reason, keyHash); err != nil {
 				return err
 			}
 		}
@@ -245,15 +246,15 @@ func createDataAuthorizationUser(ctx context.Context, db *gorm.DB, user *model.U
 }
 
 func (service *DataAuthorizationService) Grant(ctx context.Context, actorUserID, targetUserID uint, idempotencyKey string, request auth_request.DataAuthorizationGrantRequest) (*DataAuthorizationMutationResult, error) {
-	permission, expiresAt, reason, err := normalizeDataAuthorizationGrant(request.Permission, request.ExpiresAt, request.Reason, service.now())
+	permission, expiresAt, reason, err := normalizeDataAuthorizationGrant(request.Permission, request.ExpiresAt, request.Permanent, request.Reason, service.now())
 	if err != nil || targetUserID == 0 || !validDataAuthorizationKey(idempotencyKey) {
 		return nil, ErrDataAuthorizationInvalidInput
 	}
 	normalized := struct {
-		TargetUserID uint      `json:"targetUserId"`
-		Permission   string    `json:"permission"`
-		ExpiresAt    time.Time `json:"expiresAt"`
-		Reason       string    `json:"reason"`
+		TargetUserID uint       `json:"targetUserId"`
+		Permission   string     `json:"permission"`
+		ExpiresAt    *time.Time `json:"expiresAt"`
+		Reason       string     `json:"reason"`
 	}{targetUserID, permission, expiresAt, reason}
 	requestHash, keyHash, err := dataAuthorizationHashes(normalized, idempotencyKey)
 	if err != nil {
@@ -292,11 +293,11 @@ func (service *DataAuthorizationService) Grant(ctx context.Context, actorUserID,
 		if err := upsertDataPermission(ctx, tx, targetUserID, actorUserID, permission, expiresAt); err != nil {
 			return err
 		}
-		audit, err := createDataAuthorizationAuditRecord(ctx, tx, targetUserID, permission, action, old, &expiresAt, actorUserID, reason, keyHash)
+		audit, err := createDataAuthorizationAuditRecord(ctx, tx, targetUserID, permission, action, old, expiresAt, actorUserID, reason, keyHash)
 		if err != nil {
 			return err
 		}
-		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, &expiresAt, service.now()), Action: action, Changed: true}
+		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, expiresAt, true, service.now()), Action: action, Changed: true}
 		return completeDataAuthorization(ctx, tx, record.ID, audit.ID, result)
 	})
 	return result, err
@@ -352,7 +353,7 @@ func (service *DataAuthorizationService) Revoke(ctx context.Context, actorUserID
 		if err != nil {
 			return err
 		}
-		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, nil, service.now()), Action: model.DataAuthorizationActionRevoke, Changed: changed}
+		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, nil, false, service.now()), Action: model.DataAuthorizationActionRevoke, Changed: changed}
 		return completeDataAuthorization(ctx, tx, record.ID, audit.ID, result)
 	})
 	return result, err
@@ -497,7 +498,7 @@ type normalizedDataAuthorizationCreate struct {
 }
 type normalizedDataGrant struct {
 	Permission string
-	ExpiresAt  time.Time
+	ExpiresAt  *time.Time
 }
 
 func (service *DataAuthorizationService) normalizeCreate(request auth_request.DataAuthorizationAccountCreateRequest) (normalizedDataAuthorizationCreate, []normalizedDataGrant, error) {
@@ -511,7 +512,7 @@ func (service *DataAuthorizationService) normalizeCreate(request auth_request.Da
 	seen := map[string]struct{}{}
 	normalizedInputs := make([]auth_request.DataAuthorizationPermissionInput, 0, len(request.Permissions))
 	for _, input := range request.Permissions {
-		p, expiry, _, err := normalizeDataAuthorizationGrant(input.Permission, input.ExpiresAt, reason, service.now())
+		p, expiry, _, err := normalizeDataAuthorizationGrant(input.Permission, input.ExpiresAt, input.Permanent, reason, service.now())
 		if err != nil {
 			return normalizedDataAuthorizationCreate{}, nil, err
 		}
@@ -519,8 +520,12 @@ func (service *DataAuthorizationService) normalizeCreate(request auth_request.Da
 			return normalizedDataAuthorizationCreate{}, nil, ErrDataAuthorizationInvalidInput
 		}
 		seen[p] = struct{}{}
-		grants = append(grants, normalizedDataGrant{p, expiry})
-		normalizedInputs = append(normalizedInputs, auth_request.DataAuthorizationPermissionInput{Permission: p, ExpiresAt: expiry.Format(time.RFC3339Nano)})
+		grants = append(grants, normalizedDataGrant{Permission: p, ExpiresAt: expiry})
+		normalizedInput := auth_request.DataAuthorizationPermissionInput{Permission: p, Permanent: expiry == nil}
+		if expiry != nil {
+			normalizedInput.ExpiresAt = expiry.Format(time.RFC3339Nano)
+		}
+		normalizedInputs = append(normalizedInputs, normalizedInput)
 	}
 	return normalizedDataAuthorizationCreate{account, nickname, normalizedInputs, reason}, grants, nil
 }
@@ -597,31 +602,34 @@ func accountDTO(user model.User, credential model.OpenAPICredential, permissions
 func permissionDTOs(values map[string]*time.Time, now time.Time) []DataAuthorizationPermissionDTO {
 	result := make([]DataAuthorizationPermissionDTO, 0, 2)
 	for _, p := range model.GrantableDataPermissions() {
-		result = append(result, permissionDTO(p, values[p], now))
+		expiresAt, granted := values[p]
+		result = append(result, permissionDTO(p, expiresAt, granted, now))
 	}
 	return result
 }
 func permissionDTOsFromGrants(grants []normalizedDataGrant, now time.Time) []DataAuthorizationPermissionDTO {
 	values := map[string]*time.Time{}
 	for i := range grants {
-		expiry := grants[i].ExpiresAt
-		values[grants[i].Permission] = &expiry
+		values[grants[i].Permission] = grants[i].ExpiresAt
 	}
 	return permissionDTOs(values, now)
 }
-func permissionDTO(permission string, expiresAt *time.Time, now time.Time) DataAuthorizationPermissionDTO {
+func permissionDTO(permission string, expiresAt *time.Time, granted bool, now time.Time) DataAuthorizationPermissionDTO {
 	label := "天气数据查询"
 	if permission == model.PermissionBojunOrderRead {
 		label = "Bojun 订单查询"
 	}
 	status := "NOT_GRANTED"
-	if expiresAt != nil {
+	if granted {
 		status = "ACTIVE"
-		if !expiresAt.After(now.UTC()) {
+		if expiresAt != nil && !expiresAt.After(now.UTC()) {
 			status = "EXPIRED"
 		}
 	}
-	return DataAuthorizationPermissionDTO{Permission: permission, Label: label, Scope: "全模块数据", Status: status, ExpiresAt: expiresAt}
+	return DataAuthorizationPermissionDTO{
+		Permission: permission, Label: label, Scope: "全模块数据", Status: status,
+		Permanent: granted && expiresAt == nil, ExpiresAt: expiresAt,
+	}
 }
 
 func lockOpenAccount(ctx context.Context, tx *gorm.DB, targetUserID uint) error {
@@ -643,8 +651,8 @@ func lockOpenAccount(ctx context.Context, tx *gorm.DB, targetUserID uint) error 
 	}
 	return nil
 }
-func upsertDataPermission(ctx context.Context, tx *gorm.DB, userID, actorID uint, permission string, expiresAt time.Time) error {
-	grant := model.MallWeatherUserPermission{UserID: userID, Permission: permission, GrantedBy: actorID, ExpiresAt: &expiresAt}
+func upsertDataPermission(ctx context.Context, tx *gorm.DB, userID, actorID uint, permission string, expiresAt *time.Time) error {
+	grant := model.MallWeatherUserPermission{UserID: userID, Permission: permission, GrantedBy: actorID, ExpiresAt: expiresAt}
 	return tx.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "permission"}}, DoUpdates: clause.AssignmentColumns([]string{"granted_by", "expires_at", "updated_at"})}).Create(&grant).Error
 }
 
@@ -689,22 +697,32 @@ func createDataAuthorizationAuditRecord(ctx context.Context, tx *gorm.DB, target
 	return audit, nil
 }
 
-func normalizeDataAuthorizationGrant(permission, expiresAt, reason string, now time.Time) (string, time.Time, string, error) {
+func normalizeDataAuthorizationGrant(permission, expiresAt string, permanent bool, reason string, now time.Time) (string, *time.Time, string, error) {
 	permission = strings.TrimSpace(permission)
+	expiresAt = strings.TrimSpace(expiresAt)
 	reason, err := normalizeDataAuthorizationReason(reason)
 	if err != nil || !grantableDataPermission(permission) {
-		return "", time.Time{}, "", ErrDataAuthorizationInvalidInput
+		return "", nil, "", ErrDataAuthorizationInvalidInput
 	}
-	expiry, err := time.Parse(time.RFC3339, strings.TrimSpace(expiresAt))
+	if permanent {
+		if expiresAt != "" {
+			return "", nil, "", ErrDataAuthorizationInvalidInput
+		}
+		return permission, nil, reason, nil
+	}
+	if expiresAt == "" {
+		return "", nil, "", ErrDataAuthorizationInvalidInput
+	}
+	expiry, err := time.Parse(time.RFC3339, expiresAt)
 	if err != nil {
-		return "", time.Time{}, "", ErrDataAuthorizationInvalidInput
+		return "", nil, "", ErrDataAuthorizationInvalidInput
 	}
 	expiry = expiry.UTC().Truncate(time.Millisecond)
 	current := now.UTC()
 	if expiry.Before(current.Add(5*time.Minute)) || expiry.After(current.Add(365*24*time.Hour)) {
-		return "", time.Time{}, "", ErrDataAuthorizationInvalidInput
+		return "", nil, "", ErrDataAuthorizationInvalidInput
 	}
-	return permission, expiry, reason, nil
+	return permission, &expiry, reason, nil
 }
 func normalizeDataAuthorizationRevoke(permission, reason string) (string, string, error) {
 	permission = strings.TrimSpace(permission)

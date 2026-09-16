@@ -22,10 +22,15 @@ func TestNormalizeDataAuthorizationGrantEnforcesAllowlistAndExpiry(t *testing.T)
 		name       string
 		permission string
 		expiresAt  string
+		permanent  bool
+		wantExpiry bool
 		wantError  bool
 	}{
-		{name: "weather", permission: model.PermissionWeatherRead, expiresAt: now.Add(30 * 24 * time.Hour).Format(time.RFC3339)},
-		{name: "bojun", permission: model.PermissionBojunOrderRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339)},
+		{name: "weather", permission: model.PermissionWeatherRead, expiresAt: now.Add(30 * 24 * time.Hour).Format(time.RFC3339), wantExpiry: true},
+		{name: "bojun", permission: model.PermissionBojunOrderRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
+		{name: "permanent", permission: model.PermissionBojunOrderRead, permanent: true},
+		{name: "permanent conflicts with expiry", permission: model.PermissionWeatherRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), permanent: true, wantError: true},
+		{name: "non permanent requires expiry", permission: model.PermissionWeatherRead, wantError: true},
 		{name: "write permission rejected", permission: model.PermissionMallWrite, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantError: true},
 		{name: "too soon", permission: model.PermissionWeatherRead, expiresAt: now.Add(time.Minute).Format(time.RFC3339), wantError: true},
 		{name: "too long", permission: model.PermissionWeatherRead, expiresAt: now.Add(366 * 24 * time.Hour).Format(time.RFC3339), wantError: true},
@@ -33,9 +38,12 @@ func TestNormalizeDataAuthorizationGrantEnforcesAllowlistAndExpiry(t *testing.T)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, _, err := normalizeDataAuthorizationGrant(tt.permission, tt.expiresAt, "业务接入", now)
+			_, expiry, _, err := normalizeDataAuthorizationGrant(tt.permission, tt.expiresAt, tt.permanent, "业务接入", now)
 			if (err != nil) != tt.wantError {
 				t.Fatalf("error = %v, wantError %t", err, tt.wantError)
+			}
+			if err == nil && (expiry != nil) != tt.wantExpiry {
+				t.Fatalf("expiry = %v, wantExpiry %t", expiry, tt.wantExpiry)
 			}
 		})
 	}
@@ -50,6 +58,16 @@ func TestNormalizeDataAuthorizationCreateRejectsReservedAndDuplicatePermissions(
 	}
 	if _, grants, err := service.normalizeCreate(valid); err != nil || len(grants) != 1 {
 		t.Fatalf("normalizeCreate(valid) grants=%v error=%v", grants, err)
+	}
+	permanent := valid
+	permanent.Permissions = []auth_request.DataAuthorizationPermissionInput{{
+		Permission: model.PermissionBojunOrderRead,
+		Permanent:  true,
+	}}
+	normalized, grants, err := service.normalizeCreate(permanent)
+	if err != nil || len(grants) != 1 || grants[0].ExpiresAt != nil ||
+		len(normalized.Permissions) != 1 || !normalized.Permissions[0].Permanent || normalized.Permissions[0].ExpiresAt != "" {
+		t.Fatalf("normalizeCreate(permanent) normalized=%+v grants=%+v error=%v", normalized, grants, err)
 	}
 	reserved := valid
 	reserved.Account = " Admin "
@@ -170,13 +188,20 @@ func TestGenerateOpenAPITokenProducesOpaqueCredential(t *testing.T) {
 func TestPermissionDTOStates(t *testing.T) {
 	now := time.Now().UTC()
 	future, past := now.Add(time.Hour), now.Add(-time.Hour)
-	if got := permissionDTO(model.PermissionWeatherRead, nil, now).Status; got != "NOT_GRANTED" {
-		t.Fatalf("nil status = %q", got)
+	if got := permissionDTO(model.PermissionWeatherRead, nil, false, now); got.Status != "NOT_GRANTED" || got.Permanent {
+		t.Fatalf("missing permission = %+v", got)
 	}
-	if got := permissionDTO(model.PermissionWeatherRead, &future, now).Status; got != "ACTIVE" {
-		t.Fatalf("future status = %q", got)
+	if got := permissionDTO(model.PermissionWeatherRead, nil, true, now); got.Status != "ACTIVE" || !got.Permanent || got.ExpiresAt != nil {
+		t.Fatalf("permanent permission = %+v", got)
 	}
-	if got := permissionDTO(model.PermissionWeatherRead, &past, now).Status; got != "EXPIRED" {
-		t.Fatalf("past status = %q", got)
+	if got := permissionDTO(model.PermissionWeatherRead, &future, true, now); got.Status != "ACTIVE" || got.Permanent {
+		t.Fatalf("future permission = %+v", got)
+	}
+	if got := permissionDTO(model.PermissionWeatherRead, &past, true, now); got.Status != "EXPIRED" || got.Permanent {
+		t.Fatalf("expired permission = %+v", got)
+	}
+	permissions := permissionDTOs(map[string]*time.Time{model.PermissionBojunOrderRead: nil}, now)
+	if len(permissions) != len(model.GrantableDataPermissions()) || permissions[1].Status != "ACTIVE" || !permissions[1].Permanent {
+		t.Fatalf("permissionDTOs(permanent) = %+v", permissions)
 	}
 }
