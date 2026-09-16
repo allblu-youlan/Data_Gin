@@ -194,6 +194,8 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	orders, err := dao.ListOpenOrders(t.Context(), OpenBojunOrderQuery{
 		StartCompletedAt:  time.Date(2026, 7, 1, 0, 0, 0, 0, before.Location()),
 		EndCompletedAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, before.Location()),
+		StartBillDate:     20260701,
+		EndBillDate:       20260731,
 		BeforeCompletedAt: &before,
 		StoreCodes:        []string{"ABCN001P012"},
 		OrderTypes:        []string{"CMR"},
@@ -211,6 +213,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`updated_at`,`c_store_code`,`c_store_name`",
 		"`items_json`,`pay_items_json`",
 		"completed_at >= ? AND completed_at < ?",
+		"billdate BETWEEN ? AND ?",
 		"c_store_code IN (?)",
 		"order_type_code IN (?)",
 		"completed_at < ? OR (completed_at = ? AND id < ?)",

@@ -291,8 +291,9 @@ func normalizeOpenBojunOrderQuery(
 	completedAtMode := startTimeValue != "" || endTimeValue != ""
 	billDateMode := startDateValue != "" || endDateValue != ""
 	updatedAtMode := updatedStartValue != "" || updatedEndValue != ""
-	if countOpenBojunQueryModes(completedAtMode, billDateMode, updatedAtMode) != 1 {
-		return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: exactly one time range is required", ErrOpenBojunOrderInvalidQuery)
+	if (!completedAtMode && !billDateMode && !updatedAtMode) ||
+		(completedAtMode && updatedAtMode) || (billDateMode && updatedAtMode) {
+		return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid time range combination", ErrOpenBojunOrderInvalidQuery)
 	}
 	if len(request.MallCodes) > 0 && len(request.StoreCodes) > 0 {
 		return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: mallCodes and storeCodes conflict", ErrOpenBojunOrderInvalidQuery)
@@ -349,7 +350,8 @@ func normalizeOpenBojunOrderQuery(
 		}
 		query.StartUpdatedAt = startUpdatedAt.Unix()
 		query.EndUpdatedAt = endUpdatedAt.Unix()
-	} else {
+	}
+	if billDateMode {
 		start, startErr := time.Parse("2006-01-02", startDateValue)
 		end, endErr := time.Parse("2006-01-02", endDateValue)
 		if startErr != nil || endErr != nil || end.Before(start) ||
@@ -457,6 +459,7 @@ func openBojunOrderQueryHash(query data_dao.OpenBojunOrderQuery, pageSize int) s
 	mode := "completedAt"
 	start := query.StartCompletedAt.Format(openBojunOrderDateTimeFormat)
 	end := query.EndCompletedAt.Format(openBojunOrderDateTimeFormat)
+	extra := ""
 	if query.StartCompletedAt.IsZero() {
 		if query.StartUpdatedAt > 0 {
 			mode = "updatedAt"
@@ -467,15 +470,16 @@ func openBojunOrderQueryHash(query data_dao.OpenBojunOrderQuery, pageSize int) s
 			start = strconv.Itoa(query.StartBillDate)
 			end = strconv.Itoa(query.EndBillDate)
 		}
+	} else if query.StartBillDate > 0 {
+		mode = "completedAt+billDate"
+		extra = strconv.Itoa(query.StartBillDate) + ":" + strconv.Itoa(query.EndBillDate)
 	}
-	payload := strings.Join([]string{
-		mode,
-		start,
-		end,
-		strings.Join(query.StoreCodes, ","),
-		strings.Join(query.OrderTypes, ","),
-		strconv.Itoa(pageSize),
-	}, "|")
+	parts := []string{mode, start, end}
+	if extra != "" {
+		parts = append(parts, extra)
+	}
+	parts = append(parts, strings.Join(query.StoreCodes, ","), strings.Join(query.OrderTypes, ","), strconv.Itoa(pageSize))
+	payload := strings.Join(parts, "|")
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])
 }

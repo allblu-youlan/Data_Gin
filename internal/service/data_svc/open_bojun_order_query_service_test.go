@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -220,8 +221,8 @@ func TestOpenBojunOrderQueryServiceRejectsInvalidFiltersBeforeDAO(t *testing.T) 
 		{StartTime: "2026-07-01", EndTime: "2026-07-31 00:00:00"},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", MallCodes: []string{"bad code"}},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", MallCodes: []string{"A"}, StoreCodes: []string{"B"}},
-		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", StartDate: "2026-07-01", EndDate: "2026-07-31"},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", UpdatedStartTime: "2026-07-01 00:00:00", UpdatedEndTime: "2026-07-31 00:00:00"},
+		{UpdatedStartTime: "2026-07-01 00:00:00", UpdatedEndTime: "2026-07-31 00:00:00", StartDate: "2026-07-01", EndDate: "2026-07-31"},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", OrderTypes: []string{"OTHER"}},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", PageSize: 101},
 	}
@@ -232,6 +233,38 @@ func TestOpenBojunOrderQueryServiceRejectsInvalidFiltersBeforeDAO(t *testing.T) 
 	}
 	if orders.calls != 0 {
 		t.Fatalf("DAO calls=%d", orders.calls)
+	}
+}
+
+func TestNormalizeOpenBojunOrderQueryCombinesBillDateAndCompletedAt(t *testing.T) {
+	query, _, _, err := normalizeOpenBojunOrderQuery(requestbody.OpenBojunOrderQueryRequest{
+		StartDate: "2026-07-11", EndDate: "2026-07-11",
+		StartTime: "2026-07-11 00:00:00", EndTime: "2026-07-11 13:00:00",
+	})
+	if err != nil {
+		t.Fatalf("normalize combined query: %v", err)
+	}
+	if query.StartBillDate != 20260711 || query.EndBillDate != 20260711 ||
+		query.StartCompletedAt.Format(openBojunOrderDateTimeFormat) != "2026-07-11 00:00:00" ||
+		query.EndCompletedAt.Format(openBojunOrderDateTimeFormat) != "2026-07-11 13:00:00" {
+		t.Fatalf("query=%+v", query)
+	}
+}
+
+func TestOpenBojunOrderQueryHashPreservesSingleModeContract(t *testing.T) {
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	query := data_dao.OpenBojunOrderQuery{
+		StartCompletedAt: time.Date(2026, 7, 11, 0, 0, 0, 0, location),
+		EndCompletedAt:   time.Date(2026, 7, 12, 0, 0, 0, 0, location),
+		StoreCodes:       []string{"ABCN001P014"},
+		OrderTypes:       []string{"CMR"},
+	}
+	payload := strings.Join([]string{
+		"completedAt", "2026-07-11 00:00:00", "2026-07-12 00:00:00", "ABCN001P014", "CMR", "50",
+	}, "|")
+	expected := sha256.Sum256([]byte(payload))
+	if got := openBojunOrderQueryHash(query, 50); got != fmt.Sprintf("%x", expected) {
+		t.Fatalf("hash=%q want=%x", got, expected)
 	}
 }
 

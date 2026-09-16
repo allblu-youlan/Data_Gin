@@ -308,7 +308,7 @@ func (dao *BojunRetailOrderDAO) openOrdersQuery(ctx context.Context, query OpenB
 	completedAtMode := !query.StartCompletedAt.IsZero() || !query.EndCompletedAt.IsZero()
 	updatedAtMode := query.StartUpdatedAt > 0 || query.EndUpdatedAt > 0
 	billDateMode := query.StartBillDate > 0 || query.EndBillDate > 0
-	if boolCount(completedAtMode, updatedAtMode, billDateMode) != 1 {
+	if (!completedAtMode && !updatedAtMode && !billDateMode) || (completedAtMode && updatedAtMode) || (updatedAtMode && billDateMode) {
 		return nil, gorm.ErrInvalidData
 	}
 	dbQuery := dao.db.WithContext(ctx).Model(&model.BojunRetailOrder{})
@@ -326,7 +326,8 @@ func (dao *BojunRetailOrderDAO) openOrdersQuery(ctx context.Context, query OpenB
 			return nil, gorm.ErrInvalidData
 		}
 		dbQuery = dbQuery.Where("updated_at >= ? AND updated_at < ?", query.StartUpdatedAt, query.EndUpdatedAt)
-	} else {
+	}
+	if billDateMode {
 		if query.StartBillDate <= 0 || query.EndBillDate < query.StartBillDate {
 			return nil, gorm.ErrInvalidData
 		}
@@ -342,14 +343,4 @@ func (dao *BojunRetailOrderDAO) openOrdersQuery(ctx context.Context, query OpenB
 		dbQuery = dbQuery.Where("id <= ?", *query.SnapshotMaxID)
 	}
 	return dbQuery, nil
-}
-
-func boolCount(values ...bool) int {
-	count := 0
-	for _, value := range values {
-		if value {
-			count++
-		}
-	}
-	return count
 }
