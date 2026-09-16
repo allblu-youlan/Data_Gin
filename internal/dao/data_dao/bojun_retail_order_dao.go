@@ -25,6 +25,8 @@ type OpenBojunOrderQuery struct {
 	StoreCodes        []string
 	OrderTypes        []string
 	BeforeID          uint
+	SnapshotMaxID     *uint
+	SnapshotAt        time.Time
 	Limit             int
 }
 
@@ -230,6 +232,20 @@ func (dao *BojunRetailOrderDAO) ListOpenOrders(
 	return orders, err
 }
 
+func (dao *BojunRetailOrderDAO) MaxOpenOrderID(ctx context.Context, query OpenBojunOrderQuery) (uint, error) {
+	dbQuery, err := dao.openOrdersQuery(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	var result struct {
+		MaxID uint `gorm:"column:max_id"`
+	}
+	if err := dbQuery.Select("COALESCE(MAX(id), 0) AS max_id").Find(&result).Error; err != nil {
+		return 0, err
+	}
+	return result.MaxID, nil
+}
+
 func (dao *BojunRetailOrderDAO) CountOpenOrders(ctx context.Context, query OpenBojunOrderQuery) (int64, error) {
 	dbQuery, err := dao.openOrdersQuery(ctx, query)
 	if err != nil {
@@ -272,6 +288,9 @@ func (dao *BojunRetailOrderDAO) openOrdersQuery(ctx context.Context, query OpenB
 	}
 	if len(query.OrderTypes) > 0 {
 		dbQuery = dbQuery.Where("order_type_code IN ?", query.OrderTypes)
+	}
+	if query.SnapshotMaxID != nil {
+		dbQuery = dbQuery.Where("id <= ?", *query.SnapshotMaxID)
 	}
 	return dbQuery, nil
 }

@@ -163,6 +163,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	}
 	dao := NewBojunRetailOrderDAO(db)
 	before := time.Date(2026, 7, 20, 12, 30, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60))
+	snapshotMaxID := uint(120)
 	orders, err := dao.ListOpenOrders(t.Context(), OpenBojunOrderQuery{
 		StartCompletedAt:  time.Date(2026, 7, 1, 0, 0, 0, 0, before.Location()),
 		EndCompletedAt:    time.Date(2026, 8, 1, 0, 0, 0, 0, before.Location()),
@@ -170,6 +171,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 		StoreCodes:        []string{"ABCN001P012"},
 		OrderTypes:        []string{"CMR"},
 		BeforeID:          99,
+		SnapshotMaxID:     &snapshotMaxID,
 		Limit:             51,
 	})
 	if err != nil {
@@ -185,6 +187,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 		"c_store_code IN (?)",
 		"order_type_code IN (?)",
 		"completed_at < ? OR (completed_at = ? AND id < ?)",
+		"id <= ?",
 		"ORDER BY completed_at DESC,id DESC",
 		"LIMIT 51",
 	} {
@@ -199,6 +202,31 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	}
 	if strings.Contains(statement, "ABCN001P012") || strings.Contains(statement, "CMR") {
 		t.Fatalf("statement interpolates filters: %s", statement)
+	}
+}
+
+func TestBojunRetailOrderDAOMaxOpenOrderIDUsesSameFilters(t *testing.T) {
+	t.Parallel()
+	db := dryRunWeatherDAOTestDB(t)
+	var statement string
+	if err := db.Callback().Query().After("gorm:query").Register("test:capture_open_bojun_snapshot_sql", func(tx *gorm.DB) {
+		statement = tx.Statement.SQL.String()
+	}); err != nil {
+		t.Fatalf("register SQL capture callback: %v", err)
+	}
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	_, err := NewBojunRetailOrderDAO(db).MaxOpenOrderID(t.Context(), OpenBojunOrderQuery{
+		StartCompletedAt: time.Date(2026, 7, 11, 0, 0, 0, 0, location),
+		EndCompletedAt:   time.Date(2026, 7, 12, 0, 0, 0, 0, location),
+		StoreCodes:       []string{"ABCN001P014"}, OrderTypes: []string{"CMR"},
+	})
+	if err != nil {
+		t.Fatalf("MaxOpenOrderID() error=%v", err)
+	}
+	for _, fragment := range []string{"SELECT COALESCE(MAX(id), 0) AS max_id", "completed_at >= ? AND completed_at < ?", "c_store_code IN (?)", "order_type_code IN (?)"} {
+		if !strings.Contains(statement, fragment) {
+			t.Fatalf("statement missing %q: %s", fragment, statement)
+		}
 	}
 }
 

@@ -18,6 +18,20 @@ type fakeOpenBojunOrderReader struct {
 	query  data_dao.OpenBojunOrderQuery
 	orders []model.BojunRetailOrder
 	calls  int
+	maxID  uint
+}
+
+func (reader *fakeOpenBojunOrderReader) MaxOpenOrderID(_ context.Context, query data_dao.OpenBojunOrderQuery) (uint, error) {
+	reader.query = query
+	if reader.maxID != 0 {
+		return reader.maxID, nil
+	}
+	for _, order := range reader.orders {
+		if order.ID > reader.maxID {
+			reader.maxID = order.ID
+		}
+	}
+	return reader.maxID, nil
 }
 
 func (reader *fakeOpenBojunOrderReader) CountOpenOrders(context.Context, data_dao.OpenBojunOrderQuery) (int64, error) {
@@ -158,9 +172,36 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		}
 	}
 	cursor, err := decodeOpenBojunOrderCursor(result.Pagination.NextCursor)
-	if err != nil || cursor.Version != 2 || len(cursor.QueryHash) != sha256.Size*2 ||
+	if err != nil || cursor.Version != 3 || len(cursor.QueryHash) != sha256.Size*2 ||
 		cursor.CompletedAtUnix != completedAt.Unix() || cursor.BillDate != 0 || cursor.ID != 9 || cursor.Page != 2 {
 		t.Fatalf("cursor=%+v error=%v", cursor, err)
+	}
+}
+
+func TestOpenBojunOrderQueryServiceRestoresSnapshotFromCursor(t *testing.T) {
+	snapshotAt := time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)
+	request := requestbody.OpenBojunOrderQueryRequest{
+		StartTime: "2026-09-01 00:00:00", EndTime: "2026-09-17 00:00:00", PageSize: 10,
+	}
+	query, _, pageSize, err := normalizeOpenBojunOrderQuery(request)
+	if err != nil {
+		t.Fatalf("normalize initial query: %v", err)
+	}
+	request.Cursor, err = encodeOpenBojunOrderCursor(openBojunOrderCursor{
+		Version: 3, QueryHash: openBojunOrderQueryHash(query, pageSize),
+		CompletedAtUnix: time.Date(2026, 9, 15, 9, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60)).Unix(),
+		ID:              90, Page: 2, SnapshotMaxID: 100, SnapshotAtUnix: snapshotAt.Unix(),
+	})
+	if err != nil {
+		t.Fatalf("encode cursor: %v", err)
+	}
+	restored, page, _, err := normalizeOpenBojunOrderQuery(request)
+	if err != nil {
+		t.Fatalf("normalize continued query: %v", err)
+	}
+	if restored.SnapshotMaxID == nil || *restored.SnapshotMaxID != 100 ||
+		!restored.SnapshotAt.Equal(snapshotAt) || page != 2 {
+		t.Fatalf("query=%+v page=%d", restored, page)
 	}
 }
 

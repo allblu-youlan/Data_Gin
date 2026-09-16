@@ -53,6 +53,7 @@ type OpenBojunOrderQueryService struct {
 }
 
 type openBojunOrderReader interface {
+	MaxOpenOrderID(context.Context, data_dao.OpenBojunOrderQuery) (uint, error)
 	ListOpenOrders(context.Context, data_dao.OpenBojunOrderQuery) ([]model.BojunRetailOrder, error)
 	CountOpenOrders(context.Context, data_dao.OpenBojunOrderQuery) (int64, error)
 }
@@ -71,6 +72,7 @@ type OpenBojunOrderPagination struct {
 	CurrentItems int    `json:"currentItems"`
 	NextCursor   string `json:"nextCursor"`
 	HasMore      bool   `json:"hasMore"`
+	SnapshotAt   string `json:"snapshotAt,omitempty"`
 }
 
 type OpenBojunOrderDTO struct {
@@ -137,6 +139,8 @@ type openBojunOrderCursor struct {
 	BillDate        int    `json:"billDate,omitempty"`
 	ID              uint   `json:"id"`
 	Page            int    `json:"page,omitempty"`
+	SnapshotMaxID   uint   `json:"snapshotMaxId,omitempty"`
+	SnapshotAtUnix  int64  `json:"snapshotAtUnix,omitempty"`
 }
 
 func NewOpenBojunOrderQueryService() *OpenBojunOrderQueryService {
@@ -187,6 +191,14 @@ func (service *OpenBojunOrderQueryService) Query(
 
 	queryCtx, cancel := context.WithTimeout(ctx, openBojunOrderQueryTimeout)
 	defer cancel()
+	if query.SnapshotMaxID == nil && strings.TrimSpace(request.Cursor) == "" {
+		snapshotMaxID, snapshotErr := service.orders.MaxOpenOrderID(queryCtx, query)
+		if snapshotErr != nil {
+			return nil, fmt.Errorf("open bojun order query: create snapshot: %w", snapshotErr)
+		}
+		query.SnapshotMaxID = &snapshotMaxID
+		query.SnapshotAt = service.now().UTC()
+	}
 	totalItems, err := service.orders.CountOpenOrders(queryCtx, query)
 	if err != nil {
 		return nil, fmt.Errorf("open bojun order query: count orders: %w", err)
@@ -216,6 +228,11 @@ func (service *OpenBojunOrderQueryService) Query(
 			ID:        orders[len(orders)-1].ID,
 			Page:      nextPage,
 		}
+		if query.SnapshotMaxID != nil && !query.SnapshotAt.IsZero() {
+			cursor.Version = 3
+			cursor.SnapshotMaxID = *query.SnapshotMaxID
+			cursor.SnapshotAtUnix = query.SnapshotAt.Unix()
+		}
 		if !query.StartCompletedAt.IsZero() {
 			if orders[len(orders)-1].CompletedAt == nil {
 				return nil, fmt.Errorf("open bojun order query: completed-at row has no completion time")
@@ -234,6 +251,7 @@ func (service *OpenBojunOrderQueryService) Query(
 		Pagination: OpenBojunOrderPagination{
 			OpenPagination: newOpenPagination(page, pageSize, totalItems),
 			CurrentItems:   len(items), NextCursor: nextCursor, HasMore: hasMore,
+			SnapshotAt: formatOpenBojunSnapshotAt(query.SnapshotAt),
 		},
 	}, nil
 }
@@ -331,7 +349,7 @@ func normalizeOpenBojunOrderQuery(
 			return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid cursor", ErrOpenBojunOrderInvalidQuery)
 		}
 		expectedQueryHash := openBojunOrderQueryHash(query, pageSize)
-		if cursor.Version == 2 {
+		if cursor.Version == 2 || cursor.Version == 3 {
 			if cursor.QueryHash != expectedQueryHash {
 				return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: cursor filters changed", ErrOpenBojunOrderInvalidQuery)
 			}
@@ -351,6 +369,11 @@ func normalizeOpenBojunOrderQuery(
 			query.BeforeBillDate = cursor.BillDate
 		}
 		query.BeforeID = cursor.ID
+		if cursor.Version == 3 {
+			snapshotMaxID := cursor.SnapshotMaxID
+			query.SnapshotMaxID = &snapshotMaxID
+			query.SnapshotAt = time.Unix(cursor.SnapshotAtUnix, 0).UTC()
+		}
 		page = openCursorPage(cursor.Page, true)
 	}
 	return query, page, pageSize, nil
@@ -612,6 +635,14 @@ func formatOpenBojunCompletedAt(value *time.Time) *string {
 	return &formatted
 }
 
+func formatOpenBojunSnapshotAt(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	return value.In(location).Format(openBojunOrderDateTimeFormat)
+}
+
 func encodeOpenBojunOrderCursor(cursor openBojunOrderCursor) (string, error) {
 	encoded, err := json.Marshal(cursor)
 	if err != nil {
@@ -634,8 +665,10 @@ func decodeOpenBojunOrderCursor(value string) (openBojunOrderCursor, error) {
 	}
 	hasCompletedAt := cursor.CompletedAtUnix > 0
 	hasBillDate := cursor.BillDate > 0
-	validVersion := (cursor.Version == 0 && cursor.QueryHash == "") ||
-		(cursor.Version == 2 && len(cursor.QueryHash) == sha256.Size*2)
+	validVersion := (cursor.Version == 0 && cursor.QueryHash == "" && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
+		(cursor.Version == 2 && len(cursor.QueryHash) == sha256.Size*2 && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
+		(cursor.Version == 3 && len(cursor.QueryHash) == sha256.Size*2 && cursor.SnapshotMaxID > 0 &&
+			cursor.ID <= cursor.SnapshotMaxID && cursor.SnapshotAtUnix > 0)
 	if !validVersion || hasCompletedAt == hasBillDate || cursor.ID == 0 || invalidOpenCursorPage(cursor.Page) {
 		return openBojunOrderCursor{}, ErrOpenBojunOrderInvalidQuery
 	}
