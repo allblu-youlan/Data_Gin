@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/pkg/auth"
 	"gin-biz-web-api/pkg/errcode"
@@ -18,6 +19,7 @@ import (
 
 type BusinessOverviewQueryService interface {
 	QueryPayments(context.Context, uint, string, string) (*data_svc.BusinessOverviewPaymentResult, error)
+	QueryOpenPayments(context.Context, uint, requestbody.OpenBusinessOverviewPaymentQueryRequest) (*data_svc.OpenBusinessOverviewPaymentResult, error)
 	ListMalls(context.Context, uint, uint, int) (*data_svc.BusinessOverviewMallListResult, error)
 }
 
@@ -98,6 +100,42 @@ func (controller *BusinessOverviewController) QueryPayments(c *gin.Context) {
 		return
 	}
 	responses.New(c).ToResponseWithStatus(http.StatusOK, result)
+}
+
+func (controller *BusinessOverviewController) OpenQueryPayments(c *gin.Context) {
+	if len(c.Request.URL.Query()) > 0 {
+		writeOpenBusinessOverviewError(c, data_svc.ErrBusinessOverviewInvalid)
+		return
+	}
+	var request requestbody.OpenBusinessOverviewPaymentQueryRequest
+	if err := decodeMallJSON(c, &request); err != nil {
+		writeOpenBusinessOverviewError(c, data_svc.ErrBusinessOverviewInvalid)
+		return
+	}
+	if controller.initErr != nil || controller.service == nil {
+		writeOpenBusinessOverviewError(c, fmt.Errorf("%w: initialization failed", data_svc.ErrBusinessOverviewUnavailable))
+		return
+	}
+	result, err := controller.service.QueryOpenPayments(c.Request.Context(), auth.CurrentUserID(c), request)
+	if err != nil {
+		writeOpenBusinessOverviewError(c, err)
+		return
+	}
+	responses.New(c).ToResponseWithStatus(http.StatusOK, result)
+}
+
+func writeOpenBusinessOverviewError(c *gin.Context, err error) {
+	if c != nil && err != nil {
+		_ = c.Error(err).SetType(gin.ErrorTypePrivate)
+	}
+	switch {
+	case errors.Is(err, data_svc.ErrBusinessOverviewForbidden):
+		responses.New(c).ToSafeErrorResponse(errcode.Forbidden, "无权查询该商场营业金额")
+	case errors.Is(err, data_svc.ErrBusinessOverviewInvalid):
+		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, "营业金额查询参数校验失败")
+	default:
+		responses.New(c).ToSafeErrorResponse(errcode.ServiceUnavailable, "营业金额查询服务暂时不可用")
+	}
 }
 
 func writeBusinessOverviewError(c *gin.Context, err error) {

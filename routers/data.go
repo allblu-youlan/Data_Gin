@@ -11,7 +11,9 @@ import (
 
 func apiData(api *gin.RouterGroup) {
 	registerMallRoutes(api, data_ctrl.NewMallController())
-	registerBusinessOverviewRoutes(api, data_ctrl.NewBusinessOverviewController())
+	businessOverviewController := data_ctrl.NewBusinessOverviewController()
+	registerBusinessOverviewRoutes(api, businessOverviewController)
+	registerOpenBusinessOverviewRoutes(api, businessOverviewController)
 	weatherCtrl := data_ctrl.NewMallWeatherController()
 	registerMallWeatherRoutes(api, weatherCtrl)
 	registerOpenWeatherRoutes(api, weatherCtrl, data_ctrl.NewOpenWeatherMallController())
@@ -237,6 +239,22 @@ func registerBusinessOverviewRoutes(api *gin.RouterGroup, controller *data_ctrl.
 		middleware.LimitRoute("120-M"),
 		controller.QueryPayments,
 	)
+}
+
+const (
+	openBusinessOverviewPreAuthIPRateLimit = "300-M"
+	openBusinessOverviewUserRouteRateLimit = "30-M"
+)
+
+func registerOpenBusinessOverviewRoutes(api *gin.RouterGroup, controller *data_ctrl.BusinessOverviewController) {
+	group := api.Group("/open/business-overview")
+	group.Use(
+		middleware.LimitOpenAPIIP("business-overview", openBusinessOverviewPreAuthIPRateLimit),
+		middleware.AuthOpenToken(),
+		middleware.RequirePermission(model.PermissionBusinessOverviewRead),
+		middleware.LimitOpenAPIUserRoute("business-overview", openBusinessOverviewUserRouteRateLimit),
+	)
+	group.POST("/payments/query", controller.OpenQueryPayments)
 }
 
 func registerOfficeMessageRoutes(api *gin.RouterGroup, controller *data_ctrl.OfficeMessageController) {

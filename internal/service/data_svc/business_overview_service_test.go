@@ -8,6 +8,7 @@ import (
 
 	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/reportoracle"
+	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 )
@@ -122,6 +123,45 @@ func TestBusinessOverviewServiceRejectsInvalidDateAndMallCode(t *testing.T) {
 	} {
 		if _, err := service.QueryPayments(t.Context(), 17, query.date, query.mallCode); !errors.Is(err, ErrBusinessOverviewInvalid) {
 			t.Fatalf("QueryPayments(%q, %q) error = %v", query.date, query.mallCode, err)
+		}
+	}
+}
+
+func TestBusinessOverviewServiceBuildsOpenPaymentResult(t *testing.T) {
+	oracle := &fakeBusinessOverviewOracle{rows: []reportoracle.BusinessOverviewPaymentRow{
+		{PaywayID: 24, PayAmount: 3164.76, PaywayName: "微信"},
+		{PaywayID: 25, PayAmount: 3463.42, PaywayName: "支付宝"},
+	}}
+	service := newBusinessOverviewService(
+		businessOverviewOracleConfig(),
+		func(context.Context, reportoracle.Config) (businessOverviewOracle, error) { return oracle, nil },
+		&fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A002"}},
+	)
+	result, err := service.QueryOpenPayments(t.Context(), 17, requestbody.OpenBusinessOverviewPaymentQueryRequest{
+		Date: "2026-09-01", MallCode: " abcn001a002 ",
+	})
+	if err != nil {
+		t.Fatalf("QueryOpenPayments() error = %v", err)
+	}
+	if oracle.billDate != 20260901 || result.Date != "2026-09-01" || result.MallCode != "ABCN001A002" ||
+		result.Currency != "CNY" || result.BusinessAmount != "6628.18" || len(result.Payments) != 2 ||
+		result.Payments[0].PaymentMethodID != 24 || result.Payments[0].PaymentMethodName != "微信" || result.Payments[0].Amount != "3164.76" {
+		t.Fatalf("oracle=%+v result=%+v", oracle, result)
+	}
+}
+
+func TestBusinessOverviewServiceRejectsInvalidOpenDate(t *testing.T) {
+	service := newBusinessOverviewService(
+		businessOverviewOracleConfig(),
+		func(context.Context, reportoracle.Config) (businessOverviewOracle, error) {
+			return nil, errors.New("must not open")
+		},
+		&fakeBusinessOverviewMallScope{},
+	)
+	for _, date := range []string{"20260901", "2026-02-30"} {
+		_, err := service.QueryOpenPayments(t.Context(), 17, requestbody.OpenBusinessOverviewPaymentQueryRequest{Date: date, MallCode: "ABCN001A002"})
+		if !errors.Is(err, ErrBusinessOverviewInvalid) {
+			t.Fatalf("QueryOpenPayments(%q) error = %v", date, err)
 		}
 	}
 }

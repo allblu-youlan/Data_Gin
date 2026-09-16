@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
+	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/database"
@@ -64,6 +66,20 @@ type BusinessOverviewPaymentResult struct {
 	Date     string                       `json:"date"`
 	MallCode string                       `json:"mallCode"`
 	Items    []BusinessOverviewPaymentDTO `json:"items"`
+}
+
+type OpenBusinessOverviewPaymentDTO struct {
+	PaymentMethodID   int64  `json:"paymentMethodId"`
+	PaymentMethodName string `json:"paymentMethodName"`
+	Amount            string `json:"amount"`
+}
+
+type OpenBusinessOverviewPaymentResult struct {
+	Date           string                           `json:"date"`
+	MallCode       string                           `json:"mallCode"`
+	Currency       string                           `json:"currency"`
+	BusinessAmount string                           `json:"businessAmount"`
+	Payments       []OpenBusinessOverviewPaymentDTO `json:"payments"`
 }
 
 type BusinessOverviewMallDTO struct {
@@ -161,6 +177,36 @@ func (service *BusinessOverviewService) QueryPayments(
 		})
 	}
 	return result, nil
+}
+
+func (service *BusinessOverviewService) QueryOpenPayments(
+	ctx context.Context,
+	actor uint,
+	request requestbody.OpenBusinessOverviewPaymentQueryRequest,
+) (*OpenBusinessOverviewPaymentResult, error) {
+	date := strings.TrimSpace(request.Date)
+	parsed, err := time.Parse("2006-01-02", date)
+	if err != nil || parsed.Format("2006-01-02") != date {
+		return nil, ErrBusinessOverviewInvalid
+	}
+	result, err := service.QueryPayments(ctx, actor, parsed.Format("20060102"), request.MallCode)
+	if err != nil {
+		return nil, err
+	}
+	openResult := &OpenBusinessOverviewPaymentResult{
+		Date: date, MallCode: result.MallCode, Currency: "CNY",
+		Payments: make([]OpenBusinessOverviewPaymentDTO, 0, len(result.Items)),
+	}
+	var total float64
+	for _, item := range result.Items {
+		total += item.PayAmount
+		openResult.Payments = append(openResult.Payments, OpenBusinessOverviewPaymentDTO{
+			PaymentMethodID: item.PaywayID, PaymentMethodName: item.PaywayName,
+			Amount: strconv.FormatFloat(item.PayAmount, 'f', 2, 64),
+		})
+	}
+	openResult.BusinessAmount = strconv.FormatFloat(total, 'f', 2, 64)
+	return openResult, nil
 }
 
 func (service *BusinessOverviewService) ListMalls(

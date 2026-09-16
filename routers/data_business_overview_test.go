@@ -19,3 +19,13 @@ func TestRegisterBusinessOverviewRoutesUsesExpectedMethodAndPath(t *testing.T) {
 		t.Fatalf("routes = %#v", routes)
 	}
 }
+
+func TestRegisterOpenBusinessOverviewRoutesUsesPOST(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	registerOpenBusinessOverviewRoutes(router.Group("/api"), &data_ctrl.BusinessOverviewController{})
+	routes := router.Routes()
+	if len(routes) != 1 || routes[0].Method != http.MethodPost || routes[0].Path != "/api/open/business-overview/payments/query" {
+		t.Fatalf("routes = %#v", routes)
+	}
+}
