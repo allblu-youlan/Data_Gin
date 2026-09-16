@@ -213,6 +213,31 @@ func TestExtractBojunOrderRecords(t *testing.T) {
 	}
 }
 
+func TestBojunAPIPageExhaustedValidatesPaginationMetadata(t *testing.T) {
+	tests := []struct {
+		name        string
+		recordCount int
+		pageInfo    bojunOrderPageInfo
+		want        bool
+		wantErr     bool
+	}{
+		{name: "empty window", recordCount: 0, want: true},
+		{name: "empty page before reported end", recordCount: 0, pageInfo: bojunOrderPageInfo{Current: 1, TotalPage: 2}, wantErr: true},
+		{name: "last reported page", recordCount: 1, pageInfo: bojunOrderPageInfo{Current: 2, TotalPage: 2}, want: true},
+		{name: "more reported pages", recordCount: 1, pageInfo: bojunOrderPageInfo{Current: 1, TotalPage: 2}},
+		{name: "missing metadata with records", recordCount: 1, wantErr: true},
+		{name: "current beyond total", recordCount: 1, pageInfo: bojunOrderPageInfo{Current: 2, TotalPage: 1}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := bojunAPIPageExhausted(tt.recordCount, tt.pageInfo)
+			if got != tt.want || (err != nil) != tt.wantErr {
+				t.Fatalf("got=%t error=%v", got, err)
+			}
+		})
+	}
+}
+
 func TestBuildBojunOrderRawDataMarksSource(t *testing.T) {
 	record := map[string]interface{}{
 		"docno":      "ABCN001P012P12607031240270004",

@@ -75,6 +75,10 @@ type BojunOrderSyncResult struct {
 	WatermarkAfter          uint64                  `json:"watermark_after,omitempty"`
 	WatermarkInitialized    bool                    `json:"watermark_initialized,omitempty"`
 	LeaseAcquired           bool                    `json:"lease_acquired,omitempty"`
+	WindowExhausted         bool                    `json:"window_exhausted"`
+	ReportedPagesExhausted  bool                    `json:"reported_pages_exhausted"`
+	SourceCaughtUp          bool                    `json:"source_caught_up"`
+	SourceHead              uint64                  `json:"source_head,omitempty"`
 	pushPosition            int
 }
 
@@ -149,6 +153,7 @@ func (s *BojunOrderService) runOrders(ctx context.Context, startTime, endTime st
 		return result, err
 	}
 
+	windowExhausted := false
 	for page := 1; page <= maxPages; page++ {
 		if err := ctx.Err(); err != nil {
 			return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
@@ -175,9 +180,21 @@ func (s *BojunOrderService) runOrders(ctx context.Context, startTime, endTime st
 			}
 		}
 
-		if pageInfo.TotalPage <= 0 || pageInfo.Current >= pageInfo.TotalPage || len(records) == 0 {
+		pageExhausted, pageErr := bojunAPIPageExhausted(len(records), pageInfo)
+		if pageErr != nil {
+			result.FailedCount++
+			return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, pageErr)
+		}
+		if pageExhausted {
+			windowExhausted = true
 			break
 		}
+	}
+	result.ReportedPagesExhausted = windowExhausted
+	if !windowExhausted {
+		err := fmt.Errorf("bojun order sync exceeded max pages before exhausting source window")
+		result.FailedCount++
+		return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -187,6 +204,22 @@ func (s *BojunOrderService) runOrders(ctx context.Context, startTime, endTime st
 		return result, err
 	}
 	return result, nil
+}
+
+func bojunAPIPageExhausted(recordCount int, pageInfo bojunOrderPageInfo) (bool, error) {
+	if recordCount == 0 {
+		if pageInfo.TotalPage <= 0 {
+			return true, nil
+		}
+		if pageInfo.Current < 1 || pageInfo.TotalPage != pageInfo.Current {
+			return false, fmt.Errorf("bojun order sync received an empty page before the reported end")
+		}
+		return true, nil
+	}
+	if pageInfo.Current < 1 || pageInfo.TotalPage < pageInfo.Current {
+		return false, fmt.Errorf("bojun order sync received invalid pagination metadata")
+	}
+	return pageInfo.Current >= pageInfo.TotalPage, nil
 }
 
 func (s *BojunOrderService) processBojunOrderRecord(

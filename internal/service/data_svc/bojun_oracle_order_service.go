@@ -155,6 +155,9 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		}
 		result.WatermarkBefore = state.LastRetailID
 		result.WatermarkAfter = state.LastRetailID
+		result.SourceHead = maxRetailID
+		result.SourceCaughtUp = true
+		result.WindowExhausted = true
 		return result, nil
 	}
 	if err != nil {
@@ -183,6 +186,13 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		}
 	}()
 
+	queryCtx, cancel := reportOracleQueryContext(ctx, *datasource)
+	sourceHead, err := connection.MaxBojunRetailID(queryCtx)
+	cancel()
+	if err != nil {
+		return result, err
+	}
+	result.SourceHead = sourceHead
 	pushSkipConfig, err := service.bojunPushSkipConfig(ctx, true)
 	if err != nil {
 		return result, err
@@ -225,6 +235,11 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		if len(rows) < service.batchSize {
 			break
 		}
+	}
+	result.SourceCaughtUp = result.WatermarkAfter >= sourceHead
+	result.WindowExhausted = result.SourceCaughtUp
+	if !result.SourceCaughtUp {
+		return result, fmt.Errorf("bojun Oracle sync stopped before reaching source head")
 	}
 	return result, nil
 }

@@ -217,6 +217,27 @@ func TestBojunOracleSupplementPreservesExistingValuesWhenSourceIsEmpty(t *testin
 	}
 }
 
+func TestBojunOracleSyncFailsBeforeAdvancingPastUnreachedSourceHead(t *testing.T) {
+	connection := &fakeBojunOracleConnection{
+		maxID: 200,
+		rows: []reportoracle.BojunRetailRow{{
+			RetailID: 101, DocNo: "SALE-101", StatusTime: time.Date(2026, 8, 25, 10, 0, 0, 0, time.Local),
+			ItemsJSON: `[]`, PayItemsJSON: `[]`,
+		}},
+	}
+	state := &fakeBojunOracleStateStore{
+		state:         model.BojunOracleSyncState{SourceCode: bojunOracleDatasourceCode, LastRetailID: 100, Initialized: true},
+		leaseAcquired: true,
+	}
+	service := newTestBojunOracleOrderService(connection, state)
+	service.batchSize = 1
+	service.maxPages = 1
+	result, err := service.SyncIncremental(t.Context())
+	if err == nil || result.SourceCaughtUp || result.WindowExhausted || result.SourceHead != 200 || result.WatermarkAfter != 101 {
+		t.Fatalf("error=%v result=%+v", err, result)
+	}
+}
+
 func (pusher *fakeBojunOraclePusher) PushNewOrderWithPolicy(
 	_ context.Context,
 	order *model.BojunRetailOrder,
