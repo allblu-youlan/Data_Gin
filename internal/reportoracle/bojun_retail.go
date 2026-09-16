@@ -43,17 +43,21 @@ const bojunRetailProjectedColumns = `
 	STATUS`
 
 const bojunRetailSourceColumns = `
-	M_RETAIL_ID, STORE_CODE, STORE_NAME, DOCNO, RETAILSALETYPE, STATUSTIME,
-	DM_VP_C_VIP_MOBILE, TOT_AMT_SF, TOT_AMT_TS, IS_TOSHOP,
-	NVL(STATUS, '0') AS STATUS`
+	r.M_RETAIL_ID, r.STORE_CODE, r.STORE_NAME, r.DOCNO,
+	r.RETAILSALETYPE, r.STATUSTIME, r.DM_VP_C_VIP_MOBILE,
+	r.TOT_AMT_SF, r.TOT_AMT_TS, r.IS_TOSHOP,
+	NVL(r.STATUS, '0') AS STATUS`
 
 const bojunRetailAfterIDSQL = `
 SELECT ` + bojunRetailProjectedColumns + `
 FROM (
     SELECT ` + bojunRetailSourceColumns + `
-    FROM ` + BojunRetailTable + `
-    WHERE M_RETAIL_ID > :1
-    ORDER BY M_RETAIL_ID
+    FROM ` + BojunRetailTable + ` r
+    JOIN ` + bojunRetailSourceHeadTable + ` h ON h.ID = r.M_RETAIL_ID
+    WHERE h.STATUS = 2
+      AND h.ISACTIVE = 'Y'
+      AND r.M_RETAIL_ID > :1
+    ORDER BY r.M_RETAIL_ID
 )
 WHERE ROWNUM <= :2
 ORDER BY M_RETAIL_ID`
@@ -62,16 +66,24 @@ const bojunRetailStatusTimeRangeSQL = `
 SELECT ` + bojunRetailProjectedColumns + `
 FROM (
     SELECT ` + bojunRetailSourceColumns + `
-    FROM ` + BojunRetailTable + `
-    WHERE STATUSTIME >= :1
-      AND STATUSTIME < :2
-      AND M_RETAIL_ID > :3
-    ORDER BY M_RETAIL_ID
+    FROM ` + BojunRetailTable + ` r
+    JOIN ` + bojunRetailSourceHeadTable + ` h ON h.ID = r.M_RETAIL_ID
+    WHERE h.STATUS = 2
+      AND h.ISACTIVE = 'Y'
+      AND r.STATUSTIME >= :1
+      AND r.STATUSTIME < :2
+      AND r.M_RETAIL_ID > :3
+    ORDER BY r.M_RETAIL_ID
 )
 WHERE ROWNUM <= :4
 ORDER BY M_RETAIL_ID`
 
-const bojunRetailMaxIDSQL = `SELECT NVL(MAX(M_RETAIL_ID), 0) FROM ` + BojunRetailTable
+const bojunRetailMaxIDSQL = `
+SELECT NVL(MAX(r.M_RETAIL_ID), 0)
+FROM ` + BojunRetailTable + ` r
+JOIN ` + bojunRetailSourceHeadTable + ` h ON h.ID = r.M_RETAIL_ID
+WHERE h.STATUS = 2
+  AND h.ISACTIVE = 'Y'`
 
 const bojunRetailPushStatusSQL = `
 UPDATE ` + BojunRetailTable + `
@@ -114,7 +126,8 @@ FROM ` + bojunRetailPayItemTable + ` a
 JOIN ` + bojunRetailPaywayTable + ` k ON k.ID = a.C_PAYWAY_ID
 LEFT JOIN ` + bojunRetailSourceHeadTable + ` b ON a.M_RETAIL_ID = b.ID
 WHERE a.ISACTIVE = 'Y'
-  AND b.STATUS = 2`
+  AND b.STATUS = 2
+  AND b.ISACTIVE = 'Y'`
 
 const bojunRetailPayItemsSQLPrefix = `
 SELECT b.ID AS M_RETAIL_ID,

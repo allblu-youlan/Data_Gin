@@ -50,8 +50,9 @@ func TestBojunRetailSQLUsesFixedTableAndBoundFilters(t *testing.T) {
 	}
 	for _, statement := range []string{bojunRetailAfterIDSQL, bojunRetailStatusTimeRangeSQL} {
 		for _, fragment := range []string{
+			bojunRetailSourceHeadTable, "h.ID = r.M_RETAIL_ID", "h.STATUS = 2", "h.ISACTIVE = 'Y'",
 			"STORE_NAME", "DM_VP_C_VIP_MOBILE", "TOT_AMT_SF", "TOT_AMT_TS", "IS_TOSHOP",
-			"NVL(STATUS, '0') AS STATUS",
+			"NVL(r.STATUS, '0') AS STATUS",
 		} {
 			if !strings.Contains(statement, fragment) {
 				t.Fatalf("retail SQL is missing %q", fragment)
@@ -59,6 +60,13 @@ func TestBojunRetailSQLUsesFixedTableAndBoundFilters(t *testing.T) {
 		}
 		if strings.Contains(statement, "JSON_ITEM") {
 			t.Fatal("retail SQL must derive items from the retail item query")
+		}
+	}
+	for _, fragment := range []string{
+		bojunRetailSourceHeadTable, "h.ID = r.M_RETAIL_ID", "h.STATUS = 2", "h.ISACTIVE = 'Y'",
+	} {
+		if !strings.Contains(bojunRetailMaxIDSQL, fragment) {
+			t.Fatalf("maximum id SQL is missing %q", fragment)
 		}
 	}
 }
@@ -102,6 +110,7 @@ func TestBojunRetailPayItemsSQLUsesFixedSourcesAndBoundIDs(t *testing.T) {
 		"k.ID = a.C_PAYWAY_ID",
 		"a.ISACTIVE = 'Y'",
 		"b.STATUS = 2",
+		"b.ISACTIVE = 'Y'",
 		"b.ID IN (:1, :2)",
 		"GROUP BY b.ID, a.C_PAYWAY_ID, k.NAME",
 		"ORDER BY b.ID, a.C_PAYWAY_ID",
