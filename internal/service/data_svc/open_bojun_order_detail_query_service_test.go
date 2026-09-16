@@ -6,39 +6,50 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"gin-biz-web-api/internal/requestbody"
+	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 
 	"gorm.io/gorm"
 )
 
 type fakeOpenBojunOrderDetailReader struct {
-	order *model.BojunRetailOrder
-	err   error
-	calls int
+	order      *model.BojunRetailOrder
+	err        error
+	calls      int
+	orderNo    string
+	storeCodes []string
 }
 
 func (reader *fakeOpenBojunOrderDetailReader) FindOpenOrderDetails(
 	_ context.Context,
-	_ string,
+	orderNo string,
+	storeCodes []string,
 ) (*model.BojunRetailOrder, error) {
 	reader.calls++
+	reader.orderNo = orderNo
+	reader.storeCodes = append([]string(nil), storeCodes...)
 	return reader.order, reader.err
 }
 
 type fakeOpenBojunOrderDetailMallScope struct {
-	codes []string
-	err   error
+	codes     []string
+	err       error
+	calls     int
+	requested []string
 }
 
 func (scope *fakeOpenBojunOrderDetailMallScope) ConstrainMallCodes(
 	_ context.Context,
 	_ uint,
-	_ []string,
+	requested []string,
 ) ([]string, error) {
+	scope.calls++
+	scope.requested = append([]string(nil), requested...)
 	return scope.codes, scope.err
 }
 
@@ -108,6 +119,67 @@ func TestOpenBojunOrderDetailQueryServicePagesEveryDetail(t *testing.T) {
 	}
 	if reader.calls != 3 {
 		t.Fatalf("reader calls=%d", reader.calls)
+	}
+	if reader.orderNo != "ORDER-401" || len(reader.storeCodes) != 1 || reader.storeCodes[0] != "STORE-1" {
+		t.Fatalf("reader orderNo=%q storeCodes=%v", reader.orderNo, reader.storeCodes)
+	}
+}
+
+func TestOpenBojunOrderDetailQueryServiceChecksScopeBeforeReadingOrder(t *testing.T) {
+	tests := []struct {
+		name    string
+		scope   *fakeOpenBojunOrderDetailMallScope
+		wantErr error
+	}{
+		{
+			name:    "scope denied",
+			scope:   &fakeOpenBojunOrderDetailMallScope{err: auth_svc.ErrMallScopeForbidden},
+			wantErr: ErrOpenBojunOrderNotFound,
+		},
+		{
+			name:    "scope lookup failed",
+			scope:   &fakeOpenBojunOrderDetailMallScope{err: errors.New("database unavailable")},
+			wantErr: errors.New("database unavailable"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &fakeOpenBojunOrderDetailReader{}
+			service := newOpenBojunOrderDetailQueryService(
+				reader,
+				&fakeOpenBojunPermissionReader{allowed: true},
+				test.scope,
+				time.Now,
+			)
+			_, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1"})
+			if err == nil || !strings.Contains(err.Error(), test.wantErr.Error()) {
+				t.Fatalf("Query() error=%v want containing %q", err, test.wantErr)
+			}
+			if test.scope.calls != 1 || len(test.scope.requested) != 0 {
+				t.Fatalf("scope calls=%d requested=%v", test.scope.calls, test.scope.requested)
+			}
+			if reader.calls != 0 {
+				t.Fatalf("reader calls=%d", reader.calls)
+			}
+		})
+	}
+}
+
+func TestOpenBojunOrderDetailQueryServiceRejectsBeforeScopeAndOrderWithoutPermission(t *testing.T) {
+	reader := &fakeOpenBojunOrderDetailReader{}
+	scope := &fakeOpenBojunOrderDetailMallScope{}
+	service := newOpenBojunOrderDetailQueryService(
+		reader,
+		&fakeOpenBojunPermissionReader{allowed: false},
+		scope,
+		time.Now,
+	)
+	_, err := service.Query(t.Context(), 17, requestbody.OpenBojunOrderDetailQueryRequest{OrderNo: "ORDER-1"})
+	if !errors.Is(err, ErrOpenBojunOrderForbidden) {
+		t.Fatalf("Query() error=%v", err)
+	}
+	if scope.calls != 0 || reader.calls != 0 {
+		t.Fatalf("scope calls=%d reader calls=%d", scope.calls, reader.calls)
 	}
 }
 

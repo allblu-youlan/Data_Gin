@@ -245,14 +245,19 @@ func TestBojunRetailOrderDAOFindOpenOrderDetailsUsesNarrowProjection(t *testing.
 	}); err != nil {
 		t.Fatalf("register SQL capture callback: %v", err)
 	}
-	_, err := NewBojunRetailOrderDAO(db).FindOpenOrderDetails(t.Context(), " ORDER-1 ")
+	_, err := NewBojunRetailOrderDAO(db).FindOpenOrderDetails(
+		t.Context(),
+		" ORDER-1 ",
+		[]string{" STORE-1 ", "STORE-2"},
+	)
 	if err != nil {
 		t.Fatalf("FindOpenOrderDetails() error=%v", err)
 	}
 	for _, fragment := range []string{
-		"SELECT `id`,`docno`,`c_store_code`,`items_json`,`pay_items_json`",
+		"SELECT `docno`,`c_store_code`,`items_json`,`pay_items_json`",
 		"FROM `bojun_retail_orders`",
 		"docno = ?",
+		"c_store_code IN (?,?)",
 		"ORDER BY `bojun_retail_orders`.`id` LIMIT 1",
 	} {
 		if !strings.Contains(statement, fragment) {
@@ -264,8 +269,10 @@ func TestBojunRetailOrderDAOFindOpenOrderDetailsUsesNarrowProjection(t *testing.
 			t.Fatalf("statement selects sensitive column %q: %s", sensitive, statement)
 		}
 	}
-	if strings.Contains(statement, "ORDER-1") {
-		t.Fatalf("statement interpolates order number: %s", statement)
+	for _, value := range []string{"ORDER-1", "STORE-1", "STORE-2"} {
+		if strings.Contains(statement, value) {
+			t.Fatalf("statement interpolates filter %q: %s", value, statement)
+		}
 	}
 }
 

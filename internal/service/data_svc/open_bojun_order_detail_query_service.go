@@ -31,7 +31,7 @@ const (
 var ErrOpenBojunOrderNotFound = errors.New("open bojun order: not found")
 
 type openBojunOrderDetailReader interface {
-	FindOpenOrderDetails(context.Context, string) (*model.BojunRetailOrder, error)
+	FindOpenOrderDetails(context.Context, string, []string) (*model.BojunRetailOrder, error)
 }
 
 type openBojunOrderDetailMallScope interface {
@@ -122,24 +122,20 @@ func (service *OpenBojunOrderDetailQueryService) Query(
 
 	queryCtx, cancel := context.WithTimeout(ctx, openBojunOrderQueryTimeout)
 	defer cancel()
-	order, err := service.orders.FindOpenOrderDetails(queryCtx, normalized.OrderNo)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrOpenBojunOrderNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("open bojun order detail query: find order: %w", err)
-	}
-	allowedCodes, err := service.mallScope.ConstrainMallCodes(queryCtx, actorUserID, []string{order.StoreCode})
+	allowedCodes, err := service.mallScope.ConstrainMallCodes(queryCtx, actorUserID, nil)
 	if err != nil {
 		if errors.Is(err, auth_svc.ErrMallScopeForbidden) {
 			return nil, ErrOpenBojunOrderNotFound
 		}
 		return nil, fmt.Errorf("open bojun order detail query: constrain mall scope: %w", err)
 	}
-	if len(allowedCodes) != 1 || allowedCodes[0] != order.StoreCode {
+	order, err := service.orders.FindOpenOrderDetails(queryCtx, normalized.OrderNo, allowedCodes)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrOpenBojunOrderNotFound
 	}
-
+	if err != nil {
+		return nil, fmt.Errorf("open bojun order detail query: find order: %w", err)
+	}
 	payloadHash := openBojunOrderDetailPayloadHash(order.ItemsJSON, order.PayItemsJSON)
 	if cursor != nil && cursor.PayloadHash != payloadHash {
 		return nil, ErrOpenBojunOrderInvalidQuery

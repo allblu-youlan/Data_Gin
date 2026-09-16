@@ -278,15 +278,19 @@ func (dao *BojunRetailOrderDAO) ListOpenOrders(
 func (dao *BojunRetailOrderDAO) FindOpenOrderDetails(
 	ctx context.Context,
 	docNo string,
+	storeCodes []string,
 ) (*model.BojunRetailOrder, error) {
 	if dao == nil || dao.db == nil || ctx == nil || strings.TrimSpace(docNo) == "" {
 		return nil, gorm.ErrInvalidData
 	}
 	var order model.BojunRetailOrder
-	err := dao.db.WithContext(ctx).
-		Select("id", "docno", "c_store_code", "items_json", "pay_items_json").
-		Where("docno = ?", strings.TrimSpace(docNo)).
-		First(&order).Error
+	query := dao.db.WithContext(ctx).
+		Select("docno", "c_store_code", "items_json", "pay_items_json").
+		Where("docno = ?", strings.TrimSpace(docNo))
+	if len(storeCodes) > 0 {
+		query = query.Where("c_store_code IN ?", storeCodes)
+	}
+	err := query.First(&order).Error
 	if err != nil {
 		return nil, err
 	}
