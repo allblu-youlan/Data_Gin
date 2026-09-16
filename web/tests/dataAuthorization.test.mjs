@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   authorizationExpiryISO,
+  buildDataAuthorizationGrant,
   buildDataAuthorizationAuditQuery,
   dataAuthorizationMessage,
   defaultAuthorizationExpiry,
@@ -13,7 +14,7 @@ import {
 test('parses safe account envelope and rejects malformed rows', () => {
   const parsed = parseDataAuthorizationAccounts({ data: {
     accounts: [
-      { id: 7, account: 'partner', email: 'owner@example.com', nickname: '合作方', credentialStatus: 'ACTIVE', tokenPrefix: 'dg_open_abcd', issuedAt: '2026-07-28T08:00:00Z', createdAt: '2026-07-28T08:00:00Z', permissions: [{ permission: 'weather.read', label: '天气数据查询', scope: '全模块数据', status: 'ACTIVE', expiresAt: '2026-08-28T08:00:00Z' }] },
+      { id: 7, account: 'partner', email: 'owner@example.com', nickname: '合作方', credentialStatus: 'ACTIVE', tokenPrefix: 'dg_open_abcd', issuedAt: '2026-07-28T08:00:00Z', createdAt: '2026-07-28T08:00:00Z', permissions: [{ permission: 'weather.read', label: '天气数据查询', scope: '全模块数据', status: 'ACTIVE', permanent: false, expiresAt: '2026-08-28T08:00:00Z' }, { permission: 'business_overview.read', label: '营业金额查询', scope: '全模块数据', status: 'ACTIVE', permanent: true }] },
       { id: 0, account: 'invalid' },
       { id: 8, account: 'bad-permission', permissions: [{ permission: 'mall.write', status: 'ACTIVE' }] },
     ],
@@ -21,6 +22,8 @@ test('parses safe account envelope and rejects malformed rows', () => {
   } })
   assert.equal(parsed.accounts.length, 2)
   assert.equal(parsed.accounts[0].permissions[0].permission, 'weather.read')
+  assert.equal(parsed.accounts[0].permissions[1].permission, 'business_overview.read')
+  assert.equal(parsed.accounts[0].permissions[1].permanent, true)
   assert.deepEqual(parsed.accounts[1].permissions, [])
   assert.equal(parsed.pagination.nextBeforeId, 7)
 })
@@ -66,4 +69,12 @@ test('normalizes default and explicit expiry', () => {
   assert.equal(defaultAuthorizationExpiry(now).length, 16)
   assert.match(authorizationExpiryISO('2026-08-27T12:30'), /^2026-08-/)
   assert.equal(authorizationExpiryISO('invalid'), '')
+  assert.deepEqual(buildDataAuthorizationGrant('bojun.order.read', '2026-08-27T12:30', false), {
+    permission: 'bojun.order.read',
+    expiresAt: authorizationExpiryISO('2026-08-27T12:30'),
+  })
+  assert.deepEqual(buildDataAuthorizationGrant('business_overview.read', '2026-08-27T12:30', true), {
+    permission: 'business_overview.read',
+    permanent: true,
+  })
 })

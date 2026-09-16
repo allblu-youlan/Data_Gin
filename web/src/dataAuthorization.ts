@@ -1,4 +1,4 @@
-export type DataPermissionCode = 'weather.read' | 'bojun.order.read'
+export type DataPermissionCode = 'weather.read' | 'bojun.order.read' | 'business_overview.read'
 export type DataPermissionStatus = 'ACTIVE' | 'EXPIRED' | 'NOT_GRANTED'
 
 export type DataAuthorizationPermission = {
@@ -6,8 +6,13 @@ export type DataAuthorizationPermission = {
   label: string
   scope: string
   status: DataPermissionStatus
+  permanent: boolean
   expiresAt: string | null
 }
+
+export type DataAuthorizationGrantPayload =
+  | { permission: DataPermissionCode; permanent: true }
+  | { permission: DataPermissionCode; expiresAt: string }
 
 export type DataAuthorizationAccount = {
   id: number
@@ -88,13 +93,14 @@ function nullableString(value: unknown) {
 
 function parsePermission(value: unknown): DataAuthorizationPermission | null {
   const item = record(value)
-  if (!item || (item.permission !== 'weather.read' && item.permission !== 'bojun.order.read')) return null
+  if (!item || (item.permission !== 'weather.read' && item.permission !== 'bojun.order.read' && item.permission !== 'business_overview.read')) return null
   if (item.status !== 'ACTIVE' && item.status !== 'EXPIRED' && item.status !== 'NOT_GRANTED') return null
   return {
     permission: item.permission,
     label: stringValue(item.label, item.permission),
     scope: stringValue(item.scope, '全模块数据'),
     status: item.status,
+    permanent: item.permanent === true,
     expiresAt: nullableString(item.expiresAt),
   }
 }
@@ -201,6 +207,15 @@ export function defaultAuthorizationExpiry(now = new Date()) {
 export function authorizationExpiryISO(localDateTime: string) {
   const value = new Date(localDateTime)
   return Number.isNaN(value.getTime()) ? '' : value.toISOString()
+}
+
+export function buildDataAuthorizationGrant(
+  permission: DataPermissionCode,
+  localDateTime: string,
+  permanent: boolean,
+): DataAuthorizationGrantPayload {
+  if (permanent) return { permission, permanent: true }
+  return { permission, expiresAt: authorizationExpiryISO(localDateTime) }
 }
 
 export function newAuthorizationIdempotencyKey(scope: string) {
