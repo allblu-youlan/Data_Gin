@@ -20,6 +20,7 @@ func apiData(api *gin.RouterGroup) {
 	registerOpenBojunRoutes(
 		api,
 		data_ctrl.NewOpenBojunOrderController(),
+		data_ctrl.NewOpenBojunOrderDetailController(),
 		data_ctrl.NewOpenBojunProductController(),
 		data_ctrl.NewOpenBojunSyncStatusController(),
 	)
@@ -361,6 +362,7 @@ const (
 func registerOpenBojunRoutes(
 	api *gin.RouterGroup,
 	orderController *data_ctrl.OpenBojunOrderController,
+	detailController *data_ctrl.OpenBojunOrderDetailController,
 	productController *data_ctrl.OpenBojunProductController,
 	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
 ) {
@@ -372,6 +374,7 @@ func registerOpenBojunRoutes(
 		middleware.LimitOpenAPIUserRoute("bojun", openBojunUserRouteRateLimit),
 	)
 	bojunGroup.POST("/orders/query", orderController.Query)
+	bojunGroup.POST("/orders/details/query", detailController.Query)
 	bojunGroup.POST("/products/query", productController.Query)
 	bojunGroup.POST("/sync-status/query", syncStatusController.Query)
 }
