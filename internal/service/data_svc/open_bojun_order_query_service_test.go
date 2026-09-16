@@ -154,6 +154,9 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 	if !strings.Contains(string(payload), `"order_phone":"18616613488"`) {
 		t.Fatalf("response missing order_phone: %s", payload)
 	}
+	if strings.Contains(string(payload), `"totalQuantity"`) {
+		t.Fatalf("response unexpectedly contains totalQuantity: %s", payload)
+	}
 	for _, field := range []string{
 		`"businessAmount":"446.40"`, `"performanceAmount":"420.00"`,
 		`"type":"1"`, `"docNo":"B001"`, `"amtAcc":"446.40"`, `"value1":"中灰"`,

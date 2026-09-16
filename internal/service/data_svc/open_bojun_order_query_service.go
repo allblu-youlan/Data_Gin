@@ -87,7 +87,6 @@ type OpenBojunOrderDTO struct {
 	OrderTypeCode     string                     `json:"orderTypeCode"`
 	OrderTypeName     string                     `json:"orderTypeName"`
 	TotalLines        int                        `json:"totalLines"`
-	TotalQuantity     int                        `json:"totalQuantity"`
 	ListAmount        string                     `json:"listAmount"`
 	ActualAmount      string                     `json:"actualAmount"`
 	BusinessAmount    string                     `json:"businessAmount"`
@@ -502,7 +501,6 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 		OrderTypeCode:     order.OrderTypeCode,
 		OrderTypeName:     order.OrderTypeName,
 		TotalLines:        order.TotalLines,
-		TotalQuantity:     order.TotalQty,
 		ListAmount:        strconv.FormatFloat(order.TotalAmtList, 'f', 2, 64),
 		ActualAmount:      strconv.FormatFloat(order.TotalAmtActual, 'f', 2, 64),
 		BusinessAmount:    strconv.FormatFloat(order.PaidAmount, 'f', 2, 64),
