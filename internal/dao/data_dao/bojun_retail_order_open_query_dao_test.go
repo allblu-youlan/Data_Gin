@@ -236,6 +236,39 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	}
 }
 
+func TestBojunRetailOrderDAOFindOpenOrderDetailsUsesNarrowProjection(t *testing.T) {
+	t.Parallel()
+	db := dryRunWeatherDAOTestDB(t)
+	var statement string
+	if err := db.Callback().Query().After("gorm:query").Register("test:capture_open_bojun_order_details_sql", func(tx *gorm.DB) {
+		statement = tx.Statement.SQL.String()
+	}); err != nil {
+		t.Fatalf("register SQL capture callback: %v", err)
+	}
+	_, err := NewBojunRetailOrderDAO(db).FindOpenOrderDetails(t.Context(), " ORDER-1 ")
+	if err != nil {
+		t.Fatalf("FindOpenOrderDetails() error=%v", err)
+	}
+	for _, fragment := range []string{
+		"SELECT `id`,`docno`,`c_store_code`,`items_json`,`pay_items_json`",
+		"FROM `bojun_retail_orders`",
+		"docno = ?",
+		"ORDER BY `bojun_retail_orders`.`id` LIMIT 1",
+	} {
+		if !strings.Contains(statement, fragment) {
+			t.Fatalf("statement missing %q: %s", fragment, statement)
+		}
+	}
+	for _, sensitive := range []string{"raw_content_json", "vipno", "raw_data_id", "order_phone"} {
+		if strings.Contains(statement, sensitive) {
+			t.Fatalf("statement selects sensitive column %q: %s", sensitive, statement)
+		}
+	}
+	if strings.Contains(statement, "ORDER-1") {
+		t.Fatalf("statement interpolates order number: %s", statement)
+	}
+}
+
 func TestBojunRetailOrderDAOMaxOpenOrderIDUsesSameFilters(t *testing.T) {
 	t.Parallel()
 	db := dryRunWeatherDAOTestDB(t)

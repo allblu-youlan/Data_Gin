@@ -536,28 +536,32 @@ func openBojunOrderLines(raw string) ([]OpenBojunOrderLineDTO, OpenBojunDetailMe
 
 	items := make([]OpenBojunOrderLineDTO, 0, len(values))
 	for _, value := range values {
-		items = append(items, OpenBojunOrderLineDTO{
-			SKUNo:           truncateOpenBojunOrderString(stringFromAny(value["no"]), 128),
-			ProductName:     truncateOpenBojunOrderString(stringFromAny(value["mProductName"]), 500),
-			Quantity:        formatOpenBojunOrderNumber(floatFromAny(value["qty"]), -1),
-			ActualAmount:    formatOpenBojunOrderNumber(floatFromAny(value["totAmtActual"]), 2),
-			Type:            formatOpenBojunOrderNullableNumber(value["type"], -1),
-			DocNo:           truncateOpenBojunOrderString(stringFromAny(value["docno"]), 255),
-			AmtAcc:          formatOpenBojunOrderNullableNumber(value["amtAcc"], 2),
-			Value1:          truncateOpenBojunOrderString(stringFromAny(value["value1"]), 255),
-			Value2:          truncateOpenBojunOrderString(stringFromAny(value["value2"]), 255),
-			MarkDis:         formatOpenBojunOrderNullableNumber(value["markdis"], -1),
-			Discount:        formatOpenBojunOrderNullableNumber(value["discount"], 4),
-			PriceList:       formatOpenBojunOrderNullableNumber(value["pricelist"], 2),
-			ProductColor:    truncateOpenBojunOrderString(stringFromAny(value["prodColor"]), 128),
-			TotalAmtAcc:     formatOpenBojunOrderNullableNumber(value["totAmtAcc"], 2),
-			TotalListAmount: formatOpenBojunOrderNullableNumber(value["totAmtList"], 2),
-			DMAmtRetail:     formatOpenBojunOrderNullableNumber(value["dmAmtRetail"], 2),
-			ActualPrice:     formatOpenBojunOrderNullableNumber(value["priceactual"], 2),
-			ProductValue:    truncateOpenBojunOrderString(stringFromAny(value["productValue"]), 500),
-		})
+		items = append(items, openBojunOrderLineDTO(value))
 	}
 	return items, meta
+}
+
+func openBojunOrderLineDTO(value map[string]interface{}) OpenBojunOrderLineDTO {
+	return OpenBojunOrderLineDTO{
+		SKUNo:           truncateOpenBojunOrderString(stringFromAny(value["no"]), 128),
+		ProductName:     truncateOpenBojunOrderString(stringFromAny(value["mProductName"]), 500),
+		Quantity:        formatOpenBojunOrderNumber(floatFromAny(value["qty"]), -1),
+		ActualAmount:    formatOpenBojunOrderNumber(floatFromAny(value["totAmtActual"]), 2),
+		Type:            formatOpenBojunOrderNullableNumber(value["type"], -1),
+		DocNo:           truncateOpenBojunOrderString(stringFromAny(value["docno"]), 255),
+		AmtAcc:          formatOpenBojunOrderNullableNumber(value["amtAcc"], 2),
+		Value1:          truncateOpenBojunOrderString(stringFromAny(value["value1"]), 255),
+		Value2:          truncateOpenBojunOrderString(stringFromAny(value["value2"]), 255),
+		MarkDis:         formatOpenBojunOrderNullableNumber(value["markdis"], -1),
+		Discount:        formatOpenBojunOrderNullableNumber(value["discount"], 4),
+		PriceList:       formatOpenBojunOrderNullableNumber(value["pricelist"], 2),
+		ProductColor:    truncateOpenBojunOrderString(stringFromAny(value["prodColor"]), 128),
+		TotalAmtAcc:     formatOpenBojunOrderNullableNumber(value["totAmtAcc"], 2),
+		TotalListAmount: formatOpenBojunOrderNullableNumber(value["totAmtList"], 2),
+		DMAmtRetail:     formatOpenBojunOrderNullableNumber(value["dmAmtRetail"], 2),
+		ActualPrice:     formatOpenBojunOrderNullableNumber(value["priceactual"], 2),
+		ProductValue:    truncateOpenBojunOrderString(stringFromAny(value["productValue"]), 500),
+	}
 }
 
 func openBojunOrderPayments(raw string) ([]OpenBojunOrderPaymentDTO, OpenBojunDetailMeta) {
@@ -572,12 +576,16 @@ func openBojunOrderPayments(raw string) ([]OpenBojunOrderPaymentDTO, OpenBojunDe
 
 	payments := make([]OpenBojunOrderPaymentDTO, 0, len(values))
 	for _, value := range values {
-		payments = append(payments, OpenBojunOrderPaymentDTO{
-			PaymentMethodName: truncateOpenBojunOrderString(stringFromAny(value["cPaywayName"]), 255),
-			Amount:            formatOpenBojunOrderNullableNumber(value["payamount"], 2),
-		})
+		payments = append(payments, openBojunOrderPaymentDTO(value))
 	}
 	return payments, meta
+}
+
+func openBojunOrderPaymentDTO(value map[string]interface{}) OpenBojunOrderPaymentDTO {
+	return OpenBojunOrderPaymentDTO{
+		PaymentMethodName: truncateOpenBojunOrderString(stringFromAny(value["cPaywayName"]), 255),
+		Amount:            formatOpenBojunOrderNullableNumber(value["payamount"], 2),
+	}
 }
 
 func openBojunDetailValues(raw string) ([]map[string]interface{}, OpenBojunDetailMeta) {

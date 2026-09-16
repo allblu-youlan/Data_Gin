@@ -18,3 +18,11 @@ type OpenBojunOrderQueryRequest struct {
 	EndDate    string   `json:"endDate"`
 	StoreCodes []string `json:"storeCodes"`
 }
+
+// OpenBojunOrderDetailQueryRequest is the public contract for paging through
+// every item or payment row stored on one Bojun order.
+type OpenBojunOrderDetailQueryRequest struct {
+	OrderNo  string `json:"orderNo"`
+	Cursor   string `json:"cursor"`
+	PageSize int    `json:"pageSize"`
+}

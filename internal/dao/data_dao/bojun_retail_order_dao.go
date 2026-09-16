@@ -275,6 +275,24 @@ func (dao *BojunRetailOrderDAO) ListOpenOrders(
 	return orders, err
 }
 
+func (dao *BojunRetailOrderDAO) FindOpenOrderDetails(
+	ctx context.Context,
+	docNo string,
+) (*model.BojunRetailOrder, error) {
+	if dao == nil || dao.db == nil || ctx == nil || strings.TrimSpace(docNo) == "" {
+		return nil, gorm.ErrInvalidData
+	}
+	var order model.BojunRetailOrder
+	err := dao.db.WithContext(ctx).
+		Select("id", "docno", "c_store_code", "items_json", "pay_items_json").
+		Where("docno = ?", strings.TrimSpace(docNo)).
+		First(&order).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (dao *BojunRetailOrderDAO) MaxOpenOrderID(ctx context.Context, query OpenBojunOrderQuery) (uint, error) {
 	dbQuery, err := dao.openOrdersQuery(ctx, query)
 	if err != nil {
