@@ -22,7 +22,7 @@ type OpenBojunSyncStatusResult struct {
 	WatermarkField          string  `json:"watermarkField"`
 	Initialized             bool    `json:"initialized"`
 	WatermarkOracleRetailID uint64  `json:"watermarkOracleRetailId"`
-	WatermarkUpdatedAt      *string `json:"watermarkUpdatedAt,omitempty"`
+	StateUpdatedAt          *string `json:"stateUpdatedAt,omitempty"`
 	LastSuccessfulSyncAt    *string `json:"lastSuccessfulSyncAt,omitempty"`
 	CheckedAt               string  `json:"checkedAt"`
 }
@@ -78,7 +78,7 @@ func (service *OpenBojunSyncStatusService) Query(ctx context.Context, actorUserI
 	result.WatermarkOracleRetailID = state.LastRetailID
 	if state.UpdatedAt > 0 {
 		value := formatOpenBojunUpdatedAt(state.UpdatedAt)
-		result.WatermarkUpdatedAt = &value
+		result.StateUpdatedAt = &value
 	}
 	if state.LastSucceededAt != nil {
 		result.LastSuccessfulSyncAt = formatOpenBojunCompletedAt(state.LastSucceededAt)

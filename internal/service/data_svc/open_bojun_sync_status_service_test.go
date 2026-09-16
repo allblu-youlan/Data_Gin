@@ -40,7 +40,7 @@ func TestOpenBojunSyncStatusServiceReturnsCommittedOracleWatermark(t *testing.T)
 	}
 	if states.calls != 1 || states.sourceCode != bojunOracleDatasourceCode || permissions.permission != model.PermissionBojunOrderRead ||
 		!result.Initialized || result.Source != "ORACLE" || result.WatermarkField != "oracle_retail_id" ||
-		result.WatermarkOracleRetailID != 45077 || result.WatermarkUpdatedAt == nil || *result.WatermarkUpdatedAt != "2026-09-16 10:29:30" ||
+		result.WatermarkOracleRetailID != 45077 || result.StateUpdatedAt == nil || *result.StateUpdatedAt != "2026-09-16 10:29:30" ||
 		result.LastSuccessfulSyncAt == nil || *result.LastSuccessfulSyncAt != "2026-09-16 10:29:00" || result.CheckedAt != "2026-09-16 10:30:00" {
 		t.Fatalf("states=%+v permissions=%+v result=%+v", states, permissions, result)
 	}
@@ -53,7 +53,7 @@ func TestOpenBojunSyncStatusServiceReportsNotInitialized(t *testing.T) {
 		func() time.Time { return time.Date(2026, 9, 16, 2, 30, 0, 0, time.UTC) },
 	)
 	result, err := service.Query(t.Context(), 17)
-	if err != nil || result.Initialized || result.WatermarkOracleRetailID != 0 || result.WatermarkUpdatedAt != nil || result.LastSuccessfulSyncAt != nil {
+	if err != nil || result.Initialized || result.WatermarkOracleRetailID != 0 || result.StateUpdatedAt != nil || result.LastSuccessfulSyncAt != nil {
 		t.Fatalf("result=%+v error=%v", result, err)
 	}
 }
