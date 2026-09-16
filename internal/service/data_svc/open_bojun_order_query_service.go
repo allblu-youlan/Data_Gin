@@ -76,27 +76,29 @@ type OpenBojunOrderPagination struct {
 }
 
 type OpenBojunOrderDTO struct {
-	OrderNo         string                     `json:"orderNo"`
-	ExternalOrderNo string                     `json:"externalOrderNo"`
-	OrderPhone      string                     `json:"order_phone"`
-	OrderDate       string                     `json:"orderDate"`
-	CompletedAt     *string                    `json:"completedAt"`
-	UpdatedAt       string                     `json:"updatedAt"`
-	MallCode        string                     `json:"mallCode"`
-	MallName        string                     `json:"mallName"`
-	OrderTypeCode   string                     `json:"orderTypeCode"`
-	OrderTypeName   string                     `json:"orderTypeName"`
-	TotalLines      int                        `json:"totalLines"`
-	TotalQuantity   int                        `json:"totalQuantity"`
-	ListAmount      string                     `json:"listAmount"`
-	ActualAmount    string                     `json:"actualAmount"`
-	AverageDiscount string                     `json:"averageDiscount"`
-	Currency        string                     `json:"currency"`
-	RelatedOrderNo  string                     `json:"relatedOrderNo"`
-	Items           []OpenBojunOrderLineDTO    `json:"items"`
-	ItemsMeta       OpenBojunDetailMeta        `json:"itemsMeta"`
-	Payments        []OpenBojunOrderPaymentDTO `json:"payments"`
-	PaymentsMeta    OpenBojunDetailMeta        `json:"paymentsMeta"`
+	OrderNo           string                     `json:"orderNo"`
+	ExternalOrderNo   string                     `json:"externalOrderNo"`
+	OrderPhone        string                     `json:"order_phone"`
+	OrderDate         string                     `json:"orderDate"`
+	CompletedAt       *string                    `json:"completedAt"`
+	UpdatedAt         string                     `json:"updatedAt"`
+	MallCode          string                     `json:"mallCode"`
+	MallName          string                     `json:"mallName"`
+	OrderTypeCode     string                     `json:"orderTypeCode"`
+	OrderTypeName     string                     `json:"orderTypeName"`
+	TotalLines        int                        `json:"totalLines"`
+	TotalQuantity     int                        `json:"totalQuantity"`
+	ListAmount        string                     `json:"listAmount"`
+	ActualAmount      string                     `json:"actualAmount"`
+	BusinessAmount    string                     `json:"businessAmount"`
+	PerformanceAmount string                     `json:"performanceAmount"`
+	AverageDiscount   string                     `json:"averageDiscount"`
+	Currency          string                     `json:"currency"`
+	RelatedOrderNo    string                     `json:"relatedOrderNo"`
+	Items             []OpenBojunOrderLineDTO    `json:"items"`
+	ItemsMeta         OpenBojunDetailMeta        `json:"itemsMeta"`
+	Payments          []OpenBojunOrderPaymentDTO `json:"payments"`
+	PaymentsMeta      OpenBojunDetailMeta        `json:"paymentsMeta"`
 }
 
 type OpenBojunDetailMeta struct {
@@ -489,27 +491,29 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 	itemsMeta = reconcileOpenBojunItemCount(itemsMeta, order.TotalLines)
 	payments, paymentsMeta := openBojunOrderPayments(order.PayItemsJSON)
 	return OpenBojunOrderDTO{
-		OrderNo:         order.DocNo,
-		ExternalOrderNo: order.OtherDocNo,
-		OrderPhone:      order.OrderPhone,
-		OrderDate:       formatOpenBojunBillDate(order.BillDate),
-		CompletedAt:     formatOpenBojunCompletedAt(order.CompletedAt),
-		UpdatedAt:       formatOpenBojunUpdatedAt(order.UpdatedAt),
-		MallCode:        order.StoreCode,
-		MallName:        order.StoreName,
-		OrderTypeCode:   order.OrderTypeCode,
-		OrderTypeName:   order.OrderTypeName,
-		TotalLines:      order.TotalLines,
-		TotalQuantity:   order.TotalQty,
-		ListAmount:      strconv.FormatFloat(order.TotalAmtList, 'f', 2, 64),
-		ActualAmount:    strconv.FormatFloat(order.TotalAmtActual, 'f', 2, 64),
-		AverageDiscount: strconv.FormatFloat(order.AvgDiscount, 'f', 4, 64),
-		Currency:        "CNY",
-		RelatedOrderNo:  order.RelatedNormalNo,
-		Items:           items,
-		ItemsMeta:       itemsMeta,
-		Payments:        payments,
-		PaymentsMeta:    paymentsMeta,
+		OrderNo:           order.DocNo,
+		ExternalOrderNo:   order.OtherDocNo,
+		OrderPhone:        order.OrderPhone,
+		OrderDate:         formatOpenBojunBillDate(order.BillDate),
+		CompletedAt:       formatOpenBojunCompletedAt(order.CompletedAt),
+		UpdatedAt:         formatOpenBojunUpdatedAt(order.UpdatedAt),
+		MallCode:          order.StoreCode,
+		MallName:          order.StoreName,
+		OrderTypeCode:     order.OrderTypeCode,
+		OrderTypeName:     order.OrderTypeName,
+		TotalLines:        order.TotalLines,
+		TotalQuantity:     order.TotalQty,
+		ListAmount:        strconv.FormatFloat(order.TotalAmtList, 'f', 2, 64),
+		ActualAmount:      strconv.FormatFloat(order.TotalAmtActual, 'f', 2, 64),
+		BusinessAmount:    strconv.FormatFloat(order.PaidAmount, 'f', 2, 64),
+		PerformanceAmount: strconv.FormatFloat(order.PushAmount, 'f', 2, 64),
+		AverageDiscount:   strconv.FormatFloat(order.AvgDiscount, 'f', 4, 64),
+		Currency:          "CNY",
+		RelatedOrderNo:    order.RelatedNormalNo,
+		Items:             items,
+		ItemsMeta:         itemsMeta,
+		Payments:          payments,
+		PaymentsMeta:      paymentsMeta,
 	}
 }
 

@@ -236,7 +236,7 @@ func (dao *BojunRetailOrderDAO) ListOpenOrders(
 		Select([]string{
 			"id", "otherdocno", "docno", "order_phone", "billdate", "completed_at", "updated_at", "c_store_code", "c_store_name",
 			"order_type_code", "order_type_name", "tot_lines", "tot_qty", "tot_amt_list",
-			"tot_amt_actual", "avg_discount", "related_normal_docno", "items_json", "pay_items_json",
+			"tot_amt_actual", "paid_amount", "push_amount", "avg_discount", "related_normal_docno", "items_json", "pay_items_json",
 		})
 	completedAtMode := !query.StartCompletedAt.IsZero()
 	updatedAtMode := query.StartUpdatedAt > 0

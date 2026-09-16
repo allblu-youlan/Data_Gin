@@ -211,6 +211,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 	}
 	for _, fragment := range []string{
 		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`updated_at`,`c_store_code`,`c_store_name`",
+		"`tot_amt_actual`,`paid_amount`,`push_amount`,`avg_discount`",
 		"`items_json`,`pay_items_json`",
 		"completed_at >= ? AND completed_at < ?",
 		"billdate BETWEEN ? AND ?",

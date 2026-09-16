@@ -72,7 +72,7 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 			OrderPhone: "18616613488",
 			BillDate:   20260703, CompletedAt: &completedAt, StoreCode: "ABCN001P012", StoreName: "前滩",
 			OrderTypeCode: "CMR", OrderTypeName: "正常零售", TotalLines: 1, TotalQty: 2,
-			TotalAmtList: 500, TotalAmtActual: 446.4, AvgDiscount: 0.8928,
+			TotalAmtList: 500, TotalAmtActual: 446.4, PaidAmount: 446.4, PushAmount: 420, AvgDiscount: 0.8928,
 			ItemsJSON: `[{
 				"no":"SKU001","mProductName":"商品","qty":2,"totAmtActual":446.4,"vipno":"secret",
 				"type":1,"docno":"B001","amtAcc":446.4,"value1":"中灰","value2":"130CM",
@@ -108,7 +108,8 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		result.Items[0].OrderPhone != "18616613488" ||
 		result.Items[0].CompletedAt == nil || *result.Items[0].CompletedAt != "2026-07-03 12:40:27" ||
 		result.Items[0].MallCode != "ABCN001P012" || result.Items[0].MallName != "前滩" ||
-		result.Items[0].ActualAmount != "446.40" || len(result.Items[0].Items) != 1 ||
+		result.Items[0].ActualAmount != "446.40" || result.Items[0].BusinessAmount != "446.40" ||
+		result.Items[0].PerformanceAmount != "420.00" || len(result.Items[0].Items) != 1 ||
 		result.Items[0].Items[0].SKUNo != "SKU001" ||
 		result.Items[0].Items[0].ProductName != "商品" ||
 		result.Items[0].Items[0].Quantity != "2" ||
@@ -154,6 +155,7 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		t.Fatalf("response missing order_phone: %s", payload)
 	}
 	for _, field := range []string{
+		`"businessAmount":"446.40"`, `"performanceAmount":"420.00"`,
 		`"type":"1"`, `"docNo":"B001"`, `"amtAcc":"446.40"`, `"value1":"中灰"`,
 		`"value2":"130CM"`, `"markDis":"0"`, `"discount":"0.8928"`,
 		`"priceList":"250.00"`, `"productColor":"SKU001-COLOR"`,
