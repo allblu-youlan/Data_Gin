@@ -703,7 +703,7 @@ func relatedBojunNormalDocNo(record map[string]interface{}) string {
 
 func marshalBojunJSON(value interface{}) (string, error) {
 	if value == nil {
-		return "{}", nil
+		return "null", nil
 	}
 	data, err := json.Marshal(value)
 	if err != nil {

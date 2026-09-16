@@ -112,9 +112,16 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		result.Items[0].Items[0].DMAmtRetail != nil ||
 		result.Items[0].Items[0].ActualPrice == nil || *result.Items[0].Items[0].ActualPrice != "223.20" ||
 		result.Items[0].Items[0].ProductValue != "儿童|长裤" ||
+		!result.Items[0].ItemsMeta.Complete || result.Items[0].ItemsMeta.Status != "COMPLETE" ||
+		result.Items[0].ItemsMeta.ExpectedCount == nil || *result.Items[0].ItemsMeta.ExpectedCount != 1 ||
+		result.Items[0].ItemsMeta.SourceCount == nil || *result.Items[0].ItemsMeta.SourceCount != 1 ||
+		result.Items[0].ItemsMeta.ReturnedCount != 1 ||
 		len(result.Items[0].Payments) != 1 ||
 		result.Items[0].Payments[0].PaymentMethodName != "支付宝" ||
-		result.Items[0].Payments[0].Amount == nil || *result.Items[0].Payments[0].Amount != "446.40" {
+		result.Items[0].Payments[0].Amount == nil || *result.Items[0].Payments[0].Amount != "446.40" ||
+		!result.Items[0].PaymentsMeta.Complete || result.Items[0].PaymentsMeta.Status != "COMPLETE" ||
+		result.Items[0].PaymentsMeta.SourceCount == nil || *result.Items[0].PaymentsMeta.SourceCount != 1 ||
+		result.Items[0].PaymentsMeta.ReturnedCount != 1 {
 		t.Fatalf("result=%+v", result)
 	}
 	if !result.Pagination.HasMore || result.Pagination.NextCursor == "" {
@@ -137,7 +144,9 @@ func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {
 		`"priceList":"250.00"`, `"productColor":"SKU001-COLOR"`,
 		`"totalAmtAcc":"446.40"`, `"totalListAmount":"500.00"`, `"dmAmtRetail":null`,
 		`"actualPrice":"223.20"`, `"productValue":"儿童|长裤"`,
+		`"itemsMeta":{"complete":true,"status":"COMPLETE","expectedCount":1,"sourceCount":1,"returnedCount":1}`,
 		`"payments":[`, `"paymentMethodName":"支付宝"`, `"amount":"446.40"`,
+		`"paymentsMeta":{"complete":true,"status":"COMPLETE","expectedCount":null,"sourceCount":1,"returnedCount":1}`,
 	} {
 		if !strings.Contains(string(payload), field) {
 			t.Fatalf("response missing %s: %s", field, payload)
@@ -318,17 +327,74 @@ func TestOpenBojunOrderQueryServiceRequiresDedicatedPermission(t *testing.T) {
 }
 
 func TestOpenBojunOrderLinesFailsClosedOnInvalidJSON(t *testing.T) {
-	items := openBojunOrderLines(`{"vipno":"secret"}`)
-	if items == nil || len(items) != 0 {
-		t.Fatalf("items=%+v", items)
+	items, meta := openBojunOrderLines(`{"vipno":"secret"}`)
+	if items == nil || len(items) != 0 || meta.Complete || meta.Status != openBojunDetailInvalid || meta.SourceCount != nil {
+		t.Fatalf("items=%+v meta=%+v", items, meta)
 	}
 }
 
 func TestOpenBojunOrderPaymentsFailsClosedOnInvalidJSON(t *testing.T) {
-	payments := openBojunOrderPayments(`{"cPaywayName":"支付宝"}`)
-	if payments == nil || len(payments) != 0 {
-		t.Fatalf("payments=%+v", payments)
+	payments, meta := openBojunOrderPayments(`{"cPaywayName":"支付宝"}`)
+	if payments == nil || len(payments) != 0 || meta.Complete || meta.Status != openBojunDetailInvalid || meta.SourceCount != nil {
+		t.Fatalf("payments=%+v meta=%+v", payments, meta)
 	}
+}
+
+func TestOpenBojunOrderDTOReportsItemCountMismatch(t *testing.T) {
+	dto := openBojunOrderDTO(&model.BojunRetailOrder{TotalLines: 2, ItemsJSON: `[{"no":"SKU"}]`, PayItemsJSON: `[]`})
+	if dto.ItemsMeta.Complete || dto.ItemsMeta.Status != openBojunDetailCountMismatch ||
+		dto.ItemsMeta.ExpectedCount == nil || *dto.ItemsMeta.ExpectedCount != 2 ||
+		dto.ItemsMeta.SourceCount == nil || *dto.ItemsMeta.SourceCount != 1 || dto.ItemsMeta.ReturnedCount != 1 {
+		t.Fatalf("items meta=%+v", dto.ItemsMeta)
+	}
+}
+
+func TestOpenBojunDetailMetaReportsEmptyMissingLargeAndTruncatedPayloads(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		wantStatus   string
+		wantComplete bool
+		wantSource   *int
+		wantReturned int
+	}{
+		{name: "empty array", raw: `[]`, wantStatus: openBojunDetailComplete, wantComplete: true, wantSource: intPointer(0)},
+		{name: "missing", raw: "", wantStatus: openBojunDetailMissing},
+		{name: "null", raw: "null", wantStatus: openBojunDetailMissing},
+		{name: "too large", raw: strings.Repeat(" ", openBojunOrderMaxItemsBytes+1), wantStatus: openBojunDetailTooLarge},
+		{name: "truncated", raw: bojunDetailJSON(t, openBojunOrderMaxLines+1), wantStatus: openBojunDetailTruncated, wantSource: intPointer(openBojunOrderMaxLines + 1), wantReturned: openBojunOrderMaxLines},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items, meta := openBojunOrderLines(tt.raw)
+			if meta.Status != tt.wantStatus || meta.Complete != tt.wantComplete || meta.ReturnedCount != tt.wantReturned ||
+				!equalOptionalInt(meta.SourceCount, tt.wantSource) || len(items) != tt.wantReturned {
+				t.Fatalf("items=%d meta=%+v", len(items), meta)
+			}
+		})
+	}
+}
+
+func bojunDetailJSON(t *testing.T, count int) string {
+	t.Helper()
+	values := make([]map[string]interface{}, count)
+	for index := range values {
+		values[index] = map[string]interface{}{"no": "SKU"}
+	}
+	payload, err := json.Marshal(values)
+	if err != nil {
+		t.Fatalf("marshal detail JSON: %v", err)
+	}
+	return string(payload)
+}
+
+func intPointer(value int) *int { return &value }
+
+func equalOptionalInt(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func TestFormatOpenBojunOrderNullableNumberRejectsInvalidValues(t *testing.T) {

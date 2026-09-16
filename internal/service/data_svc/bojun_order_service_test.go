@@ -714,3 +714,14 @@ func TestBojunHangzhouHenglongCodesAreSeparatedFromQimai(t *testing.T) {
 		t.Fatalf("bojun hangzhou henglong item code = %s, want E6600000099", bojunHangzhouHenglongItemCode)
 	}
 }
+
+func TestMarshalBojunJSONDistinguishesMissingFromEmptyDetails(t *testing.T) {
+	missing, err := marshalBojunJSON(nil)
+	if err != nil || missing != "null" {
+		t.Fatalf("marshalBojunJSON(nil) = %q, %v", missing, err)
+	}
+	empty, err := marshalBojunJSON([]interface{}{})
+	if err != nil || empty != "[]" {
+		t.Fatalf("marshalBojunJSON(empty) = %q, %v", empty, err)
+	}
+}

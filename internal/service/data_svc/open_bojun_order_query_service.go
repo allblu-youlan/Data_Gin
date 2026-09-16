@@ -31,6 +31,12 @@ const (
 	openBojunOrderQueryTimeout    = 3 * time.Second
 	openBojunOrderMaxLines        = 200
 	openBojunOrderMaxItemsBytes   = 1 << 20
+	openBojunDetailComplete       = "COMPLETE"
+	openBojunDetailTruncated      = "TRUNCATED"
+	openBojunDetailMissing        = "MISSING"
+	openBojunDetailTooLarge       = "TOO_LARGE"
+	openBojunDetailInvalid        = "INVALID_PAYLOAD"
+	openBojunDetailCountMismatch  = "COUNT_MISMATCH"
 )
 
 var (
@@ -85,7 +91,17 @@ type OpenBojunOrderDTO struct {
 	Currency        string                     `json:"currency"`
 	RelatedOrderNo  string                     `json:"relatedOrderNo"`
 	Items           []OpenBojunOrderLineDTO    `json:"items"`
+	ItemsMeta       OpenBojunDetailMeta        `json:"itemsMeta"`
 	Payments        []OpenBojunOrderPaymentDTO `json:"payments"`
+	PaymentsMeta    OpenBojunDetailMeta        `json:"paymentsMeta"`
+}
+
+type OpenBojunDetailMeta struct {
+	Complete      bool   `json:"complete"`
+	Status        string `json:"status"`
+	ExpectedCount *int   `json:"expectedCount"`
+	SourceCount   *int   `json:"sourceCount"`
+	ReturnedCount int    `json:"returnedCount"`
 }
 
 type OpenBojunOrderLineDTO struct {
@@ -410,6 +426,9 @@ func openBojunOrderQueryHash(query data_dao.OpenBojunOrderQuery, pageSize int) s
 }
 
 func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
+	items, itemsMeta := openBojunOrderLines(order.ItemsJSON)
+	itemsMeta = reconcileOpenBojunItemCount(itemsMeta, order.TotalLines)
+	payments, paymentsMeta := openBojunOrderPayments(order.PayItemsJSON)
 	return OpenBojunOrderDTO{
 		OrderNo:         order.DocNo,
 		ExternalOrderNo: order.OtherDocNo,
@@ -427,22 +446,32 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 		AverageDiscount: strconv.FormatFloat(order.AvgDiscount, 'f', 4, 64),
 		Currency:        "CNY",
 		RelatedOrderNo:  order.RelatedNormalNo,
-		Items:           openBojunOrderLines(order.ItemsJSON),
-		Payments:        openBojunOrderPayments(order.PayItemsJSON),
+		Items:           items,
+		ItemsMeta:       itemsMeta,
+		Payments:        payments,
+		PaymentsMeta:    paymentsMeta,
 	}
 }
 
-func openBojunOrderLines(raw string) []OpenBojunOrderLineDTO {
-	if len(raw) == 0 || len(raw) > openBojunOrderMaxItemsBytes {
-		return []OpenBojunOrderLineDTO{}
+func reconcileOpenBojunItemCount(meta OpenBojunDetailMeta, expected int) OpenBojunDetailMeta {
+	meta.ExpectedCount = &expected
+	if meta.Complete && meta.SourceCount != nil && *meta.SourceCount != expected {
+		meta.Complete = false
+		meta.Status = openBojunDetailCountMismatch
 	}
-	var values []map[string]interface{}
-	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return []OpenBojunOrderLineDTO{}
+	return meta
+}
+
+func openBojunOrderLines(raw string) ([]OpenBojunOrderLineDTO, OpenBojunDetailMeta) {
+	values, meta := openBojunDetailValues(raw)
+	if !meta.Complete && meta.Status != openBojunDetailTruncated {
+		return []OpenBojunOrderLineDTO{}, meta
 	}
 	if len(values) > openBojunOrderMaxLines {
 		values = values[:openBojunOrderMaxLines]
 	}
+	meta.ReturnedCount = len(values)
+
 	items := make([]OpenBojunOrderLineDTO, 0, len(values))
 	for _, value := range values {
 		items = append(items, OpenBojunOrderLineDTO{
@@ -466,20 +495,19 @@ func openBojunOrderLines(raw string) []OpenBojunOrderLineDTO {
 			ProductValue:    truncateOpenBojunOrderString(stringFromAny(value["productValue"]), 500),
 		})
 	}
-	return items
+	return items, meta
 }
 
-func openBojunOrderPayments(raw string) []OpenBojunOrderPaymentDTO {
-	if len(raw) == 0 || len(raw) > openBojunOrderMaxItemsBytes {
-		return []OpenBojunOrderPaymentDTO{}
-	}
-	var values []map[string]interface{}
-	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return []OpenBojunOrderPaymentDTO{}
+func openBojunOrderPayments(raw string) ([]OpenBojunOrderPaymentDTO, OpenBojunDetailMeta) {
+	values, meta := openBojunDetailValues(raw)
+	if !meta.Complete && meta.Status != openBojunDetailTruncated {
+		return []OpenBojunOrderPaymentDTO{}, meta
 	}
 	if len(values) > openBojunOrderMaxLines {
 		values = values[:openBojunOrderMaxLines]
 	}
+	meta.ReturnedCount = len(values)
+
 	payments := make([]OpenBojunOrderPaymentDTO, 0, len(values))
 	for _, value := range values {
 		payments = append(payments, OpenBojunOrderPaymentDTO{
@@ -487,7 +515,36 @@ func openBojunOrderPayments(raw string) []OpenBojunOrderPaymentDTO {
 			Amount:            formatOpenBojunOrderNullableNumber(value["payamount"], 2),
 		})
 	}
-	return payments
+	return payments, meta
+}
+
+func openBojunDetailValues(raw string) ([]map[string]interface{}, OpenBojunDetailMeta) {
+	if len(raw) == 0 {
+		return nil, OpenBojunDetailMeta{Status: openBojunDetailMissing}
+	}
+	if len(raw) > openBojunOrderMaxItemsBytes {
+		return nil, OpenBojunDetailMeta{Status: openBojunDetailTooLarge}
+	}
+	var values []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, OpenBojunDetailMeta{Status: openBojunDetailInvalid}
+	}
+	if values == nil {
+		return nil, OpenBojunDetailMeta{Status: openBojunDetailMissing}
+	}
+	sourceCount := len(values)
+	meta := OpenBojunDetailMeta{
+		Complete:      true,
+		Status:        openBojunDetailComplete,
+		SourceCount:   &sourceCount,
+		ReturnedCount: sourceCount,
+	}
+	if len(values) > openBojunOrderMaxLines {
+		meta.Complete = false
+		meta.Status = openBojunDetailTruncated
+		meta.ReturnedCount = openBojunOrderMaxLines
+	}
+	return values, meta
 }
 
 func formatOpenBojunOrderNullableNumber(value interface{}, precision int) *string {
