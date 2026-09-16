@@ -30,8 +30,9 @@ type rawDataCreator interface {
 
 type bojunRetailOrderWriter interface {
 	ExistsByDocNo(ctx context.Context, docNo string) (bool, error)
+	FindByDocNo(ctx context.Context, docNo string) (*model.BojunRetailOrder, error)
 	CreateIfNotExists(ctx context.Context, order *model.BojunRetailOrder) (bool, error)
-	UpdateCompletedAtIfEmpty(ctx context.Context, docNo string, completedAt time.Time) (bool, error)
+	UpdateAPIBusinessFields(ctx context.Context, order *model.BojunRetailOrder) error
 }
 
 type pipelineRunRecorder interface {
@@ -209,10 +210,9 @@ func (s *BojunOrderService) processBojunOrderRecord(
 		addBojunOrderFailedSample(result, sample)
 		return nil
 	}
-	completedAt, err := parseBojunOrderCompletedAt(record["extendedFields1"])
+	_, err := parseBojunOrderCompletedAt(record["extendedFields1"])
 	if err != nil {
 		result.InvalidCompletedAtCount++
-		completedAt = nil
 	}
 
 	exists, err := s.retailOrderDAO.ExistsByDocNo(ctx, docNo)
@@ -224,22 +224,35 @@ func (s *BojunOrderService) processBojunOrderRecord(
 		return fmt.Errorf("check bojun order %s existence: %w", docNo, err)
 	}
 	if exists {
-		if confirmWrite && completedAt != nil {
-			updated, updateErr := s.retailOrderDAO.UpdateCompletedAtIfEmpty(ctx, docNo, *completedAt)
-			if updateErr != nil {
-				result.FailedCount++
-				sample.Status = "failed"
-				sample.Reason = "补充订单完成时间失败: " + updateErr.Error()
-				addBojunOrderFailedSample(result, sample)
-				return fmt.Errorf("update bojun order %s completed time: %w", docNo, updateErr)
-			}
-			if updated {
-				result.UpdatedCount++
-				sample.Status = "updated"
-				sample.Reason = "已补充订单完成时间"
+		incoming, buildErr := buildBojunRetailOrder(0, record)
+		if buildErr != nil {
+			result.FailedCount++
+			return fmt.Errorf("build existing bojun order %s: %w", docNo, buildErr)
+		}
+		existing, findErr := s.retailOrderDAO.FindByDocNo(ctx, docNo)
+		if findErr != nil {
+			result.FailedCount++
+			return fmt.Errorf("load existing bojun order %s: %w", docNo, findErr)
+		}
+		preserveMissingBojunAPIFields(record, incoming, existing)
+		if !sameBojunAPIBusinessFields(existing, incoming) {
+			result.WritableCount++
+			if !confirmWrite {
+				result.PreviewCount++
+				sample.Status = "pending_update"
+				sample.Reason = "已存在订单的业务字段将更新"
 				addBojunOrderSample(result, sample)
 				return nil
 			}
+			if updateErr := s.retailOrderDAO.UpdateAPIBusinessFields(ctx, incoming); updateErr != nil {
+				result.FailedCount++
+				return fmt.Errorf("update existing bojun order %s: %w", docNo, updateErr)
+			}
+			result.UpdatedCount++
+			sample.Status = "updated"
+			sample.Reason = "已更新订单业务字段"
+			addBojunOrderSample(result, sample)
+			return nil
 		}
 		result.SkippedCount++
 		result.ExistingCount++
@@ -322,6 +335,98 @@ func (s *BojunOrderService) processBojunOrderRecord(
 		}
 	}
 	return nil
+}
+
+func preserveMissingBojunAPIFields(record map[string]interface{}, incoming, existing *model.BojunRetailOrder) {
+	if incoming == nil || existing == nil {
+		return
+	}
+	if !bojunRecordHasValue(record, "otherdocno") {
+		incoming.OtherDocNo = existing.OtherDocNo
+	}
+	if !bojunRecordHasValue(record, "billdate") {
+		incoming.BillDate = existing.BillDate
+	}
+	if !bojunRecordHasValue(record, "extendedFields1") || incoming.CompletedAt == nil {
+		incoming.CompletedAt = existing.CompletedAt
+	}
+	if !bojunRecordHasValue(record, "cStoreCode") {
+		incoming.StoreCode = existing.StoreCode
+	}
+	if !bojunRecordHasValue(record, "cStoreName") {
+		incoming.StoreName = existing.StoreName
+	}
+	if !bojunRecordHasValue(record, "retailsaletype") {
+		incoming.RetailSaleType = existing.RetailSaleType
+		incoming.OrderTypeCode = existing.OrderTypeCode
+		incoming.OrderTypeName = existing.OrderTypeName
+	}
+	if !bojunRecordHasValue(record, "totLines") {
+		incoming.TotalLines = existing.TotalLines
+	}
+	if !bojunRecordHasValue(record, "totQty") {
+		incoming.TotalQty = existing.TotalQty
+	}
+	if !bojunRecordHasValue(record, "totAmtList") {
+		incoming.TotalAmtList = existing.TotalAmtList
+	}
+	if !bojunRecordHasValue(record, "totAmtActual") {
+		incoming.TotalAmtActual = existing.TotalAmtActual
+	}
+	if !bojunRecordHasValue(record, "avgDiscount") {
+		incoming.AvgDiscount = existing.AvgDiscount
+	}
+	if !bojunRecordHasValue(record, "totAmtAcc") {
+		incoming.TotalAmtAcc = existing.TotalAmtAcc
+	}
+	if !bojunRecordHasValue(record, "totAmtAcc1") {
+		incoming.TotalAmtAcc1 = existing.TotalAmtAcc1
+	}
+	if !bojunRecordHasValue(record, "items") {
+		incoming.ItemsJSON = existing.ItemsJSON
+	}
+	if !bojunRecordHasValue(record, "payItems") {
+		incoming.PayItemsJSON = existing.PayItemsJSON
+	}
+	if !bojunRecordHasAnyValue(record, "otherdocno", "o2oSoDocno", "orgdocno", "description", "items") {
+		incoming.RelatedNormalNo = existing.RelatedNormalNo
+	}
+}
+
+func bojunRecordHasValue(record map[string]interface{}, key string) bool {
+	value, exists := record[key]
+	return exists && value != nil
+}
+
+func bojunRecordHasAnyValue(record map[string]interface{}, keys ...string) bool {
+	for _, key := range keys {
+		if bojunRecordHasValue(record, key) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameBojunAPIBusinessFields(left, right *model.BojunRetailOrder) bool {
+	if left == nil || right == nil {
+		return false
+	}
+	return left.OtherDocNo == right.OtherDocNo && left.BillDate == right.BillDate &&
+		sameBojunTime(left.CompletedAt, right.CompletedAt) && left.StoreCode == right.StoreCode &&
+		left.StoreName == right.StoreName && left.RetailSaleType == right.RetailSaleType &&
+		left.OrderTypeCode == right.OrderTypeCode && left.OrderTypeName == right.OrderTypeName &&
+		left.TotalLines == right.TotalLines && left.TotalQty == right.TotalQty &&
+		left.TotalAmtList == right.TotalAmtList && left.TotalAmtActual == right.TotalAmtActual &&
+		left.AvgDiscount == right.AvgDiscount && left.TotalAmtAcc == right.TotalAmtAcc &&
+		left.TotalAmtAcc1 == right.TotalAmtAcc1 && left.RelatedNormalNo == right.RelatedNormalNo &&
+		left.ItemsJSON == right.ItemsJSON && left.PayItemsJSON == right.PayItemsJSON
+}
+
+func sameBojunTime(left, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.Equal(*right)
 }
 
 func (r *BojunOrderSyncResult) nextPushPosition() int {

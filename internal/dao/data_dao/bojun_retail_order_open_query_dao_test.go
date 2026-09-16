@@ -112,7 +112,7 @@ func TestBojunRetailOrderDAOUpdateCompletedAtIfEmptyUsesNarrowUpdate(t *testing.
 	}
 }
 
-func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoMarksOrderChanged(t *testing.T) {
+func TestBojunRetailOrderDAOUpdateOracleBusinessFieldsMarksOrderChanged(t *testing.T) {
 	t.Parallel()
 	db := dryRunWeatherDAOTestDB(t)
 	var statement string
@@ -121,35 +121,61 @@ func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoMarksOrderChanged(t *testing.
 	}); err != nil {
 		t.Fatalf("register SQL capture callback: %v", err)
 	}
-	err := NewBojunRetailOrderDAO(db).UpdateDetailJSONByDocNo(
-		t.Context(),
-		"E20260619153626009000081",
-		`[{"no":"SKU-1"}]`,
-		`[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
-	)
+	retailID := uint64(81)
+	err := NewBojunRetailOrderDAO(db).UpdateOracleBusinessFields(t.Context(), &model.BojunRetailOrder{
+		OracleRetailID: &retailID, DocNo: "E20260619153626009000081",
+		ItemsJSON: `[{"no":"SKU-1"}]`, PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
+	})
 	if err != nil {
-		t.Fatalf("UpdateDetailJSONByDocNo() error=%v", err)
+		t.Fatalf("UpdateOracleBusinessFields() error=%v", err)
 	}
 	for _, fragment := range []string{
 		"UPDATE `bojun_retail_orders`",
 		"`items_json`=?",
 		"`pay_items_json`=?",
 		"`updated_at`=?",
-		"WHERE docno = ?",
+		"WHERE docno = ? AND (oracle_retail_id = ? OR oracle_retail_id IS NULL)",
 	} {
 		if !strings.Contains(statement, fragment) {
 			t.Fatalf("statement missing %q: %s", fragment, statement)
 		}
 	}
-	for _, forbidden := range []string{
-		"`paid_amount`=", "`push_amount`=", "`synced`=", "`raw_content_json`=", "`raw_data_id`=", "`oracle_retail_id`=",
-	} {
+	for _, forbidden := range []string{"`synced`=", "`raw_data_id`="} {
 		if strings.Contains(statement, forbidden) {
 			t.Fatalf("statement updates %q: %s", forbidden, statement)
 		}
 	}
 	if strings.Contains(statement, "E20260619153626009000081") || strings.Contains(statement, "支付宝") {
 		t.Fatalf("statement interpolates detail values: %s", statement)
+	}
+}
+
+func TestBojunRetailOrderDAOUpdateAPIBusinessFieldsPreservesInternalState(t *testing.T) {
+	t.Parallel()
+	db := dryRunWeatherDAOTestDB(t)
+	var statement string
+	if err := db.Callback().Update().After("gorm:update").Register("test:capture_bojun_api_reconcile_sql", func(tx *gorm.DB) {
+		statement = tx.Statement.SQL.String()
+	}); err != nil {
+		t.Fatalf("register SQL capture callback: %v", err)
+	}
+	err := NewBojunRetailOrderDAO(db).UpdateAPIBusinessFields(t.Context(), &model.BojunRetailOrder{
+		DocNo: "B001", TotalAmtActual: 20.5, ItemsJSON: `[{"no":"NEW"}]`, PayItemsJSON: `[]`,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAPIBusinessFields() error=%v", err)
+	}
+	for _, fragment := range []string{
+		"UPDATE `bojun_retail_orders`", "`tot_amt_actual`=?", "`items_json`=?", "`pay_items_json`=?", "`updated_at`=?", "WHERE docno = ?",
+	} {
+		if !strings.Contains(statement, fragment) {
+			t.Fatalf("statement missing %q: %s", fragment, statement)
+		}
+	}
+	for _, forbidden := range []string{"`synced`=", "`raw_data_id`=", "`oracle_retail_id`=", "`paid_amount`=", "`push_amount`="} {
+		if strings.Contains(statement, forbidden) {
+			t.Fatalf("statement updates %q: %s", forbidden, statement)
+		}
 	}
 }
 

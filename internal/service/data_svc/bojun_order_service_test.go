@@ -28,10 +28,11 @@ func (f *fakeBojunRawDataCreator) Create(ctx context.Context, rawData *model.Raw
 }
 
 type fakeBojunRetailOrderWriter struct {
-	existing           map[string]bool
-	created            []string
-	completedAtUpdates map[string]time.Time
-	failFind           bool
+	existing map[string]bool
+	orders   map[string]*model.BojunRetailOrder
+	created  []string
+	updated  []string
+	failFind bool
 }
 
 func (f *fakeBojunRetailOrderWriter) ExistsByDocNo(ctx context.Context, docNo string) (bool, error) {
@@ -49,22 +50,33 @@ func (f *fakeBojunRetailOrderWriter) CreateIfNotExists(ctx context.Context, orde
 	}
 	f.created = append(f.created, order.DocNo)
 	f.existing[order.DocNo] = true
+	if f.orders == nil {
+		f.orders = make(map[string]*model.BojunRetailOrder)
+	}
+	copyOrder := *order
+	f.orders[order.DocNo] = &copyOrder
 	return true, nil
 }
 
-func (f *fakeBojunRetailOrderWriter) UpdateCompletedAtIfEmpty(
-	_ context.Context,
-	docNo string,
-	completedAt time.Time,
-) (bool, error) {
-	if f.completedAtUpdates == nil {
-		f.completedAtUpdates = make(map[string]time.Time)
+func (f *fakeBojunRetailOrderWriter) FindByDocNo(_ context.Context, docNo string) (*model.BojunRetailOrder, error) {
+	if order := f.orders[docNo]; order != nil {
+		copyOrder := *order
+		return &copyOrder, nil
 	}
-	if _, exists := f.completedAtUpdates[docNo]; exists {
-		return false, nil
+	if f.existing[docNo] {
+		return &model.BojunRetailOrder{DocNo: docNo}, nil
 	}
-	f.completedAtUpdates[docNo] = completedAt
-	return true, nil
+	return nil, errors.New("order not found")
+}
+
+func (f *fakeBojunRetailOrderWriter) UpdateAPIBusinessFields(_ context.Context, order *model.BojunRetailOrder) error {
+	if f.orders == nil {
+		f.orders = make(map[string]*model.BojunRetailOrder)
+	}
+	copyOrder := *order
+	f.orders[order.DocNo] = &copyOrder
+	f.updated = append(f.updated, order.DocNo)
+	return nil
 }
 
 type fakeBojunSyncUpdater struct {
@@ -424,7 +436,12 @@ func TestProcessBojunOrderRecordConfirmWritesOnlyNewRows(t *testing.T) {
 
 func TestProcessBojunOrderRecordSkipsExistingRows(t *testing.T) {
 	rawCreator := &fakeBojunRawDataCreator{}
-	orderWriter := &fakeBojunRetailOrderWriter{existing: map[string]bool{"B001": true}}
+	orderWriter := &fakeBojunRetailOrderWriter{
+		existing: map[string]bool{"B001": true},
+		orders: map[string]*model.BojunRetailOrder{
+			"B001": {DocNo: "B001", OrderTypeCode: "CMR", OrderTypeName: "正常零售"},
+		},
+	}
 	service := &BojunOrderService{
 		rawDataDAO:     rawCreator,
 		retailOrderDAO: orderWriter,
@@ -577,8 +594,86 @@ func TestProcessBojunOrderRecordBackfillsExistingCompletedAt(t *testing.T) {
 	if result.UpdatedCount != 1 || result.ExistingCount != 0 || result.FailedCount != 0 {
 		t.Fatalf("result=%+v", result)
 	}
-	if got := orderWriter.completedAtUpdates["B001"].Format("2006-01-02 15:04:05"); got != "2026-07-03 12:40:27" {
-		t.Fatalf("completed at=%s", got)
+	if len(orderWriter.updated) != 1 || orderWriter.orders["B001"].CompletedAt == nil ||
+		orderWriter.orders["B001"].CompletedAt.Format("2006-01-02 15:04:05") != "2026-07-03 12:40:27" {
+		t.Fatalf("updated=%v order=%+v", orderWriter.updated, orderWriter.orders["B001"])
+	}
+}
+
+func TestProcessBojunOrderRecordReconcilesExistingBusinessFields(t *testing.T) {
+	orderWriter := &fakeBojunRetailOrderWriter{
+		existing: map[string]bool{"B001": true},
+		orders: map[string]*model.BojunRetailOrder{
+			"B001": {
+				DocNo: "B001", OrderTypeCode: "CMR", OrderTypeName: "正常零售",
+				TotalAmtActual: 10, ItemsJSON: `[{"no":"OLD"}]`, PayItemsJSON: `[]`,
+			},
+		},
+	}
+	service := &BojunOrderService{retailOrderDAO: orderWriter}
+	result := &BojunOrderSyncResult{}
+	err := service.processBojunOrderRecord(
+		context.Background(),
+		map[string]interface{}{
+			"docno": "B001", "totAmtActual": 20.5,
+			"items":    []interface{}{map[string]interface{}{"no": "NEW", "totAmtActual": 20.5}},
+			"payItems": []interface{}{map[string]interface{}{"cPaywayName": "支付宝", "payamount": 20.5}},
+		},
+		defaultBojunOrderMethod, "", "", 1, true, result, OrderPushSkipConfig{},
+	)
+	if err != nil {
+		t.Fatalf("processBojunOrderRecord() error=%v", err)
+	}
+	updated := orderWriter.orders["B001"]
+	if result.UpdatedCount != 1 || result.FailedCount != 0 || updated.TotalAmtActual != 20.5 ||
+		!strings.Contains(updated.ItemsJSON, `"no":"NEW"`) || !strings.Contains(updated.PayItemsJSON, `"cPaywayName":"支付宝"`) {
+		t.Fatalf("result=%+v updated=%+v", result, updated)
+	}
+}
+
+func TestProcessBojunOrderRecordDoesNotClearFieldsMissingFromPayload(t *testing.T) {
+	completedAt := time.Date(2026, 7, 3, 12, 40, 27, 0, time.Local)
+	existing := &model.BojunRetailOrder{
+		DocNo: "B001", OtherDocNo: "EXT-1", BillDate: 20260703, CompletedAt: &completedAt,
+		StoreCode: "STORE-1", StoreName: "门店一", RetailSaleType: "RET",
+		OrderTypeCode: "RET", OrderTypeName: "退货", TotalLines: 1, TotalQty: -1,
+		TotalAmtList: -100, TotalAmtActual: -90, AvgDiscount: 0.9, TotalAmtAcc: -90, TotalAmtAcc1: -90,
+		RelatedNormalNo: "NORMAL-1", ItemsJSON: `[{"no":"SKU-1"}]`, PayItemsJSON: `[{"cPaywayName":"支付宝"}]`,
+	}
+	orderWriter := &fakeBojunRetailOrderWriter{
+		existing: map[string]bool{"B001": true}, orders: map[string]*model.BojunRetailOrder{"B001": existing},
+	}
+	service := &BojunOrderService{retailOrderDAO: orderWriter}
+	result := &BojunOrderSyncResult{}
+	err := service.processBojunOrderRecord(
+		context.Background(), map[string]interface{}{"docno": "B001"},
+		defaultBojunOrderMethod, "", "", 1, true, result, OrderPushSkipConfig{},
+	)
+	if err != nil {
+		t.Fatalf("processBojunOrderRecord() error=%v", err)
+	}
+	if result.SkippedCount != 1 || result.UpdatedCount != 0 || len(orderWriter.updated) != 0 {
+		t.Fatalf("result=%+v updated=%v", result, orderWriter.updated)
+	}
+}
+
+func TestProcessBojunOrderRecordUpdatesRelatedOrderFromO2OSODocNo(t *testing.T) {
+	orderWriter := &fakeBojunRetailOrderWriter{
+		existing: map[string]bool{"R001": true},
+		orders: map[string]*model.BojunRetailOrder{
+			"R001": {DocNo: "R001", RetailSaleType: "RET", OrderTypeCode: "RET", OrderTypeName: "退货", RelatedNormalNo: "OLD"},
+		},
+	}
+	service := &BojunOrderService{retailOrderDAO: orderWriter}
+	result := &BojunOrderSyncResult{}
+	err := service.processBojunOrderRecord(
+		context.Background(), map[string]interface{}{
+			"docno": "R001", "retailsaletype": "RET", "o2oSoDocno": "NEW",
+		},
+		defaultBojunOrderMethod, "", "", 1, true, result, OrderPushSkipConfig{},
+	)
+	if err != nil || result.UpdatedCount != 1 || orderWriter.orders["R001"].RelatedNormalNo != "NEW" {
+		t.Fatalf("error=%v result=%+v order=%+v", err, result, orderWriter.orders["R001"])
 	}
 }
 

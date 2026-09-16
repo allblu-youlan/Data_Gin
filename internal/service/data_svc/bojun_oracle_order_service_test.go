@@ -152,19 +152,16 @@ func (store *fakeBojunOracleRetailStore) UpdateSyncStatus(_ context.Context, id 
 	return nil
 }
 
-func (store *fakeBojunOracleRetailStore) UpdateDetailJSONByDocNo(
+func (store *fakeBojunOracleRetailStore) UpdateOracleBusinessFields(
 	_ context.Context,
-	docNo string,
-	itemsJSON string,
-	payItemsJSON string,
+	incoming *model.BojunRetailOrder,
 ) error {
-	order, exists := store.orders[docNo]
+	order, exists := store.orders[incoming.DocNo]
 	if !exists {
 		return nil
 	}
 	store.backfillUpdates++
-	order.ItemsJSON = itemsJSON
-	order.PayItemsJSON = payItemsJSON
+	applyBojunOracleBusinessFields(order, incoming)
 	return nil
 }
 
@@ -172,6 +169,52 @@ type fakeBojunOraclePusher struct {
 	result bojunOrderPushResult
 	calls  int
 	orders []model.BojunRetailOrder
+}
+
+func TestPreserveMissingBojunOracleFieldsKeepsExistingValues(t *testing.T) {
+	existing := &model.BojunRetailOrder{
+		StoreCode: "STORE-1", StoreName: "门店一", RetailBillType: "RET",
+		RetailSaleType: "RET", OrderTypeCode: "RET", OrderTypeName: "退货",
+		OrderPhone: "18616613488", IsToShop: "Y",
+	}
+	incoming := &model.BojunRetailOrder{RetailSaleType: "CMR", OrderTypeCode: "CMR", OrderTypeName: "正常零售"}
+	preserveMissingBojunOracleFields(incoming, existing)
+	if incoming.StoreCode != existing.StoreCode || incoming.StoreName != existing.StoreName ||
+		incoming.RetailBillType != existing.RetailBillType || incoming.RetailSaleType != existing.RetailSaleType ||
+		incoming.OrderTypeCode != existing.OrderTypeCode || incoming.OrderTypeName != existing.OrderTypeName ||
+		incoming.OrderPhone != existing.OrderPhone || incoming.IsToShop != existing.IsToShop {
+		t.Fatalf("incoming=%+v", incoming)
+	}
+}
+
+func TestBojunOracleSupplementPreservesExistingValuesWhenSourceIsEmpty(t *testing.T) {
+	statusTime := time.Date(2026, 8, 25, 15, 42, 21, 0, time.Local)
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID: 140, DocNo: "API-ORDER-140", StatusTime: statusTime,
+	}}}
+	state := &fakeBojunOracleStateStore{
+		state:         model.BojunOracleSyncState{SourceCode: bojunOracleDatasourceCode, LastRetailID: 139, Initialized: true},
+		leaseAcquired: true,
+	}
+	service := newTestBojunOracleOrderService(connection, state)
+	service.batchSize = 2
+	store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
+	store.orders["API-ORDER-140"] = &model.BojunRetailOrder{
+		BaseModel: model.BaseModel{ID: 1400}, DocNo: "API-ORDER-140",
+		StoreCode: "STORE-1", StoreName: "门店一", RetailBillType: "RET",
+		RetailSaleType: "RET", OrderTypeCode: "RET", OrderTypeName: "退货",
+		OrderPhone: "18616613488", IsToShop: "Y", Synced: 0,
+	}
+	result, err := service.SyncIncremental(t.Context())
+	if err != nil {
+		t.Fatalf("SyncIncremental() error=%v", err)
+	}
+	updated := store.orders["API-ORDER-140"]
+	if updated.StoreCode != "STORE-1" || updated.StoreName != "门店一" || updated.RetailBillType != "RET" ||
+		updated.RetailSaleType != "RET" || updated.OrderPhone != "18616613488" || updated.IsToShop != "Y" ||
+		updated.Synced != 0 || result.UpdatedCount != 1 {
+		t.Fatalf("updated=%+v result=%+v", updated, result)
+	}
 }
 
 func (pusher *fakeBojunOraclePusher) PushNewOrderWithPolicy(
@@ -375,7 +418,7 @@ func TestBojunOracleExistingSuccessfulOrderRetriesOnlyWriteBack(t *testing.T) {
 	}
 }
 
-func TestBojunOracleExistingAPIOrderSupplementsFieldsAndOnlyWritesBack(t *testing.T) {
+func TestBojunOracleExistingAPIOrderReconcilesFieldsAndOnlyWritesBack(t *testing.T) {
 	statusTime := time.Date(2026, 8, 25, 15, 42, 21, 0, time.Local)
 	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
 		RetailID: 130, StoreCode: "ORACLE-STORE", StoreName: "Oracle 商场", DocNo: "API-ORDER-130", RetailSaleType: "RET", StatusTime: statusTime,
@@ -414,9 +457,9 @@ func TestBojunOracleExistingAPIOrderSupplementsFieldsAndOnlyWritesBack(t *testin
 	if updated.TotalAmtList != 88.8 || updated.TotalAmtActual != 88.8 || updated.TotalAmtAcc != 88.8 || updated.TotalAmtAcc1 != 88.8 {
 		t.Fatalf("supplemented amount fields=%+v", updated)
 	}
-	if updated.StoreCode != "API-STORE" || updated.RetailSaleType != "API-TYPE" || updated.RawDataID != 99 || updated.ItemsJSON != `[{"sku":"API-SKU"}]` ||
-		updated.CompletedAt == nil || !updated.CompletedAt.Equal(completedAt) {
-		t.Fatalf("existing base fields were overwritten: %+v", updated)
+	if updated.StoreCode != "ORACLE-STORE" || updated.RetailSaleType != "RET" || updated.RawDataID != 99 || updated.ItemsJSON != `[]` ||
+		updated.CompletedAt == nil || !updated.CompletedAt.Equal(statusTime) {
+		t.Fatalf("business fields were not reconciled: %+v", updated)
 	}
 	if pusher.calls != 0 || len(connection.writeBackIDs) != 1 || connection.writeBackIDs[0] != 130 || result.WatermarkAfter != 130 {
 		t.Fatalf("push/write-back/result = calls:%d ids:%v result:%+v", pusher.calls, connection.writeBackIDs, result)
@@ -515,11 +558,12 @@ func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
 	}
 }
 
-func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
+func TestBojunOracleDetailBackfillReconcilesBusinessFields(t *testing.T) {
 	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
-		RetailID:     132,
-		DocNo:        "SALE-132",
-		StatusTime:   time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local),
+		RetailID:   132,
+		DocNo:      "SALE-132",
+		StatusTime: time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local),
+		PaidAmount: 250.2, PushAmount: 200.2, OrderPhone: "18616613488",
 		ItemsJSON:    `[{"no":"SKU-132"}]`,
 		PayItemsJSON: `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]`,
 	}}}
@@ -543,7 +587,7 @@ func TestBojunOracleDetailBackfillUpdatesOnlyJSONFields(t *testing.T) {
 		order.PayItemsJSON != `[{"cPaywayId":25,"cPaywayName":"支付宝","payamount":250.2}]` {
 		t.Fatalf("detail JSON was not updated: %+v", order)
 	}
-	if order.PaidAmount != 100 || order.PushAmount != 60 || order.Synced != 3 ||
+	if order.PaidAmount != 250.2 || order.PushAmount != 200.2 || order.OrderPhone != "18616613488" || order.Synced != 3 ||
 		store.supplementCalls != 0 || pusher.calls != 0 || len(connection.writeBackIDs) != 0 {
 		t.Fatalf("detail backfill changed unrelated order state: %+v", order)
 	}

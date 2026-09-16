@@ -61,7 +61,7 @@ type bojunOracleRetailOrderStore interface {
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
 	UpdateSyncStatus(context.Context, uint, int) error
-	UpdateDetailJSONByDocNo(context.Context, string, string, string) error
+	UpdateOracleBusinessFields(context.Context, *model.BojunRetailOrder) error
 }
 
 type bojunOracleExistingOrderMode uint8
@@ -440,25 +440,29 @@ func (service *BojunOracleOrderService) processExistingDetailBackfill(
 	sample BojunOrderPreviewItem,
 ) error {
 	result.WritableCount++
+	existing, err := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
+	if err != nil {
+		result.FailedCount++
+		return fmt.Errorf("load existing bojun Oracle order %s: %w", order.DocNo, err)
+	}
+	preserveMissingBojunOracleFields(order, existing)
 	if !confirmWrite {
 		result.PreviewCount++
 		sample.Status = "exists"
-		sample.Reason = "将只更新商品与付款明细"
+		sample.Reason = "将更新 Oracle 订单业务字段"
 		addBojunOrderSample(result, sample)
 		return nil
 	}
-	if err := service.retailOrderDAO.UpdateDetailJSONByDocNo(
-		ctx, order.DocNo, order.ItemsJSON, order.PayItemsJSON,
-	); err != nil {
+	if err := service.retailOrderDAO.UpdateOracleBusinessFields(ctx, order); err != nil {
 		result.FailedCount++
 		sample.Status = "failed"
-		sample.Reason = "更新商品与付款明细失败"
+		sample.Reason = "更新 Oracle 订单业务字段失败"
 		addBojunOrderFailedSample(result, sample)
-		return fmt.Errorf("update bojun retail details %s: %w", order.DocNo, err)
+		return fmt.Errorf("update bojun Oracle business fields %s: %w", order.DocNo, err)
 	}
 	result.UpdatedCount++
 	sample.Status = "updated"
-	sample.Reason = "已更新商品与付款明细"
+	sample.Reason = "已更新 Oracle 订单业务字段"
 	addBojunOrderSample(result, sample)
 	return nil
 }
@@ -477,6 +481,8 @@ func (service *BojunOracleOrderService) processExistingRow(
 		result.SkippedCount++
 		return nil
 	}
+	businessUpdated := false
+	preserveMissingBojunOracleFields(incoming, existing)
 	if existing.OracleRetailID == nil {
 		updated, err := service.retailOrderDAO.SupplementOracleFieldsIfMissing(ctx, existing.ID, incoming)
 		if err != nil {
@@ -496,10 +502,7 @@ func (service *BojunOracleOrderService) processExistingRow(
 			existing = reloaded
 		} else {
 			applyBojunOracleSupplement(existing, incoming)
-			result.UpdatedCount++
-			sample.Status = "updated"
-			sample.Reason = "已补充 Oracle 字段"
-			addBojunOrderSample(result, sample)
+			businessUpdated = true
 		}
 	}
 	if existing.OracleRetailID == nil || *existing.OracleRetailID != row.RetailID {
@@ -509,7 +512,21 @@ func (service *BojunOracleOrderService) processExistingRow(
 		addBojunOrderSample(result, sample)
 		return nil
 	}
-	if strings.ToUpper(strings.TrimSpace(row.IsToShop)) != "Y" || row.PushStatus == 1 {
+	if !sameBojunOracleBusinessFields(existing, incoming) {
+		if err := service.retailOrderDAO.UpdateOracleBusinessFields(ctx, incoming); err != nil {
+			result.FailedCount++
+			return fmt.Errorf("reconcile existing bojun Oracle order %s: %w", incoming.DocNo, err)
+		}
+		applyBojunOracleBusinessFields(existing, incoming)
+		businessUpdated = true
+	}
+	if businessUpdated {
+		result.UpdatedCount++
+		sample.Status = "updated"
+		sample.Reason = "已同步 Oracle 订单业务字段"
+		addBojunOrderSample(result, sample)
+	}
+	if strings.ToUpper(strings.TrimSpace(existing.IsToShop)) != "Y" || row.PushStatus == 1 {
 		if existing.Synced != 1 {
 			if err := service.retailOrderDAO.UpdateSyncStatus(ctx, existing.ID, 1); err != nil {
 				return err
@@ -526,6 +543,69 @@ func (service *BojunOracleOrderService) processExistingRow(
 		return nil
 	}
 	return service.pushAndWriteBack(ctx, connection, row, existing, result, pushSkipConfig)
+}
+
+func preserveMissingBojunOracleFields(incoming, existing *model.BojunRetailOrder) {
+	if incoming == nil || existing == nil {
+		return
+	}
+	if incoming.StoreCode == "" {
+		incoming.StoreCode = existing.StoreCode
+	}
+	if incoming.StoreName == "" {
+		incoming.StoreName = existing.StoreName
+	}
+	if incoming.RetailBillType == "" {
+		incoming.RetailBillType = existing.RetailBillType
+		incoming.RetailSaleType = existing.RetailSaleType
+		incoming.OrderTypeCode = existing.OrderTypeCode
+		incoming.OrderTypeName = existing.OrderTypeName
+	}
+	if incoming.OrderPhone == "" {
+		incoming.OrderPhone = existing.OrderPhone
+	}
+	if incoming.IsToShop == "" {
+		incoming.IsToShop = existing.IsToShop
+	}
+}
+
+func sameBojunOracleBusinessFields(left, right *model.BojunRetailOrder) bool {
+	if left == nil || right == nil {
+		return false
+	}
+	return left.BillDate == right.BillDate && sameBojunTime(left.CompletedAt, right.CompletedAt) &&
+		left.RetailBillType == right.RetailBillType && left.StoreCode == right.StoreCode &&
+		left.StoreName == right.StoreName && left.RetailSaleType == right.RetailSaleType &&
+		left.OrderTypeCode == right.OrderTypeCode && left.OrderTypeName == right.OrderTypeName &&
+		left.OrderPhone == right.OrderPhone && left.PaidAmount == right.PaidAmount &&
+		left.PushAmount == right.PushAmount && left.IsToShop == right.IsToShop &&
+		left.TotalLines == right.TotalLines && left.TotalQty == right.TotalQty &&
+		left.TotalAmtList == right.TotalAmtList && left.TotalAmtActual == right.TotalAmtActual &&
+		left.TotalAmtAcc == right.TotalAmtAcc && left.TotalAmtAcc1 == right.TotalAmtAcc1 &&
+		left.ItemsJSON == right.ItemsJSON && left.PayItemsJSON == right.PayItemsJSON
+}
+
+func applyBojunOracleBusinessFields(existing, incoming *model.BojunRetailOrder) {
+	existing.BillDate = incoming.BillDate
+	existing.CompletedAt = incoming.CompletedAt
+	existing.RetailBillType = incoming.RetailBillType
+	existing.StoreCode = incoming.StoreCode
+	existing.StoreName = incoming.StoreName
+	existing.RetailSaleType = incoming.RetailSaleType
+	existing.OrderTypeCode = incoming.OrderTypeCode
+	existing.OrderTypeName = incoming.OrderTypeName
+	existing.OrderPhone = incoming.OrderPhone
+	existing.PaidAmount = incoming.PaidAmount
+	existing.PushAmount = incoming.PushAmount
+	existing.IsToShop = incoming.IsToShop
+	existing.TotalLines = incoming.TotalLines
+	existing.TotalQty = incoming.TotalQty
+	existing.TotalAmtList = incoming.TotalAmtList
+	existing.TotalAmtActual = incoming.TotalAmtActual
+	existing.TotalAmtAcc = incoming.TotalAmtAcc
+	existing.TotalAmtAcc1 = incoming.TotalAmtAcc1
+	existing.ItemsJSON = incoming.ItemsJSON
+	existing.PayItemsJSON = incoming.PayItemsJSON
 }
 
 func applyBojunOracleSupplement(existing, incoming *model.BojunRetailOrder) {

@@ -124,25 +124,54 @@ func (dao *BojunRetailOrderDAO) UpdateSyncStatus(ctx context.Context, id uint, s
 		Error
 }
 
-func (dao *BojunRetailOrderDAO) UpdateDetailJSONByDocNo(
-	ctx context.Context,
-	docNo string,
-	itemsJSON string,
-	payItemsJSON string,
-) error {
-	docNo = strings.TrimSpace(docNo)
-	if dao == nil || dao.db == nil || ctx == nil || docNo == "" || itemsJSON == "" || payItemsJSON == "" {
+func (dao *BojunRetailOrderDAO) UpdateAPIBusinessFields(ctx context.Context, order *model.BojunRetailOrder) error {
+	if dao == nil || dao.db == nil || ctx == nil || order == nil || strings.TrimSpace(order.DocNo) == "" {
 		return gorm.ErrInvalidData
 	}
 	return dao.db.WithContext(ctx).
 		Model(&model.BojunRetailOrder{}).
-		Where("docno = ?", docNo).
+		Where("docno = ?", order.DocNo).
 		Updates(map[string]interface{}{
-			"items_json":     itemsJSON,
-			"pay_items_json": payItemsJSON,
-			"updated_at":     time.Now().Unix(),
+			"otherdocno": order.OtherDocNo, "billdate": order.BillDate, "completed_at": order.CompletedAt,
+			"c_store_code": order.StoreCode, "c_store_name": order.StoreName,
+			"retailsaletype": order.RetailSaleType, "order_type_code": order.OrderTypeCode,
+			"order_type_name": order.OrderTypeName, "tot_lines": order.TotalLines, "tot_qty": order.TotalQty,
+			"tot_amt_list": order.TotalAmtList, "tot_amt_actual": order.TotalAmtActual,
+			"avg_discount": order.AvgDiscount, "tot_amt_acc": order.TotalAmtAcc, "tot_amt_acc1": order.TotalAmtAcc1,
+			"related_normal_docno": order.RelatedNormalNo, "items_json": order.ItemsJSON,
+			"pay_items_json": order.PayItemsJSON, "raw_content_json": order.RawContentJSON,
+			"updated_at": time.Now().Unix(),
 		}).
 		Error
+}
+
+func (dao *BojunRetailOrderDAO) UpdateOracleBusinessFields(ctx context.Context, order *model.BojunRetailOrder) error {
+	if dao == nil || dao.db == nil || ctx == nil || order == nil || strings.TrimSpace(order.DocNo) == "" ||
+		order.OracleRetailID == nil || *order.OracleRetailID == 0 {
+		return gorm.ErrInvalidData
+	}
+	result := dao.db.WithContext(ctx).
+		Model(&model.BojunRetailOrder{}).
+		Where("docno = ? AND (oracle_retail_id = ? OR oracle_retail_id IS NULL)", order.DocNo, *order.OracleRetailID).
+		Updates(map[string]interface{}{
+			"oracle_retail_id": order.OracleRetailID,
+			"billdate":         order.BillDate, "completed_at": order.CompletedAt, "retailbilltype": order.RetailBillType,
+			"c_store_code": order.StoreCode, "c_store_name": order.StoreName,
+			"retailsaletype": order.RetailSaleType, "order_type_code": order.OrderTypeCode,
+			"order_type_name": order.OrderTypeName, "order_phone": order.OrderPhone,
+			"paid_amount": order.PaidAmount, "push_amount": order.PushAmount, "is_to_shop": order.IsToShop,
+			"tot_lines": order.TotalLines, "tot_qty": order.TotalQty, "tot_amt_list": order.TotalAmtList,
+			"tot_amt_actual": order.TotalAmtActual, "tot_amt_acc": order.TotalAmtAcc, "tot_amt_acc1": order.TotalAmtAcc1,
+			"items_json": order.ItemsJSON, "pay_items_json": order.PayItemsJSON,
+			"raw_content_json": order.RawContentJSON, "updated_at": time.Now().Unix(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 && !result.DryRun {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (dao *BojunRetailOrderDAO) SupplementOracleFieldsIfMissing(
