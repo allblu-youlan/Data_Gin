@@ -23,6 +23,7 @@ func TestAPIDataRegistersMallCRUDRoutes(t *testing.T) {
 		router.Group("/api"),
 		&data_ctrl.OpenBojunOrderController{},
 		&data_ctrl.OpenBojunProductController{},
+		&data_ctrl.OpenBojunSyncStatusController{},
 	)
 	registerOpenBusinessOverviewRoutes(router.Group("/api"), &data_ctrl.BusinessOverviewController{})
 	registerMallWeatherRefreshRoutes(router.Group("/api"), &data_ctrl.MallWeatherRefreshController{})
@@ -70,6 +71,7 @@ func TestAPIDataRegistersMallCRUDRoutes(t *testing.T) {
 		http.MethodPost + " /api/open/weather/malls/query",
 		http.MethodPost + " /api/open/bojun/orders/query",
 		http.MethodPost + " /api/open/bojun/products/query",
+		http.MethodPost + " /api/open/bojun/sync-status/query",
 		http.MethodPost + " /api/open/business-overview/payments/query",
 		http.MethodPost + " /api/v1/malls/:id/weather-refresh",
 		http.MethodPost + " /api/v1/weather-export-profiles",
@@ -99,6 +101,7 @@ func TestAPIDataRegistersMallCRUDRoutes(t *testing.T) {
 		http.MethodPost + " /api/open/weather/malls/:id/refresh",
 		http.MethodGet + " /api/open/bojun/orders/query",
 		http.MethodGet + " /api/open/bojun/products/query",
+		http.MethodGet + " /api/open/bojun/sync-status/query",
 		http.MethodGet + " /api/open/business-overview/payments/query",
 	} {
 		if _, ok := routes[forbidden]; ok {

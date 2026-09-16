@@ -21,6 +21,7 @@ func apiData(api *gin.RouterGroup) {
 		api,
 		data_ctrl.NewOpenBojunOrderController(),
 		data_ctrl.NewOpenBojunProductController(),
+		data_ctrl.NewOpenBojunSyncStatusController(),
 	)
 	registerMallWeatherRefreshRoutes(api, data_ctrl.NewMallWeatherRefreshController())
 	registerMallWeatherExportProfileRoutes(api, data_ctrl.NewMallWeatherExportProfileController())
@@ -361,6 +362,7 @@ func registerOpenBojunRoutes(
 	api *gin.RouterGroup,
 	orderController *data_ctrl.OpenBojunOrderController,
 	productController *data_ctrl.OpenBojunProductController,
+	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
 ) {
 	bojunGroup := api.Group("/open/bojun")
 	bojunGroup.Use(
@@ -371,6 +373,7 @@ func registerOpenBojunRoutes(
 	)
 	bojunGroup.POST("/orders/query", orderController.Query)
 	bojunGroup.POST("/products/query", productController.Query)
+	bojunGroup.POST("/sync-status/query", syncStatusController.Query)
 }
 
 const (
