@@ -112,7 +112,7 @@ func TestBojunRetailOrderDAOUpdateCompletedAtIfEmptyUsesNarrowUpdate(t *testing.
 	}
 }
 
-func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *testing.T) {
+func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoMarksOrderChanged(t *testing.T) {
 	t.Parallel()
 	db := dryRunWeatherDAOTestDB(t)
 	var statement string
@@ -134,6 +134,7 @@ func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *tes
 		"UPDATE `bojun_retail_orders`",
 		"`items_json`=?",
 		"`pay_items_json`=?",
+		"`updated_at`=?",
 		"WHERE docno = ?",
 	} {
 		if !strings.Contains(statement, fragment) {
@@ -141,7 +142,7 @@ func TestBojunRetailOrderDAOUpdateDetailJSONByDocNoOnlyUpdatesTwoPayloads(t *tes
 		}
 	}
 	for _, forbidden := range []string{
-		"`updated_at`=", "`paid_amount`=", "`push_amount`=", "`synced`=", "`raw_content_json`=", "`raw_data_id`=", "`oracle_retail_id`=",
+		"`paid_amount`=", "`push_amount`=", "`synced`=", "`raw_content_json`=", "`raw_data_id`=", "`oracle_retail_id`=",
 	} {
 		if strings.Contains(statement, forbidden) {
 			t.Fatalf("statement updates %q: %s", forbidden, statement)
@@ -181,7 +182,7 @@ func TestBojunRetailOrderDAOListOpenOrdersUsesBoundedSanitizedQuery(t *testing.T
 		t.Fatal("ListOpenOrders() returned nil slice")
 	}
 	for _, fragment := range []string{
-		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`c_store_code`,`c_store_name`",
+		"SELECT `id`,`otherdocno`,`docno`,`order_phone`,`billdate`,`completed_at`,`updated_at`,`c_store_code`,`c_store_name`",
 		"`items_json`,`pay_items_json`",
 		"completed_at >= ? AND completed_at < ?",
 		"c_store_code IN (?)",
@@ -252,6 +253,33 @@ func TestBojunRetailOrderDAOCountOpenOrdersAllowsOmittedMallCodes(t *testing.T) 
 	}
 	if strings.Contains(statement, "c_store_code IN") {
 		t.Fatalf("statement unexpectedly filters malls: %s", statement)
+	}
+}
+
+func TestBojunRetailOrderDAOListOpenOrdersSupportsUpdatedAtMode(t *testing.T) {
+	t.Parallel()
+	db := dryRunWeatherDAOTestDB(t)
+	var statement string
+	if err := db.Callback().Query().After("gorm:query").Register("test:capture_open_bojun_updated_sql", func(tx *gorm.DB) {
+		statement = tx.Statement.SQL.String()
+	}); err != nil {
+		t.Fatalf("register SQL capture callback: %v", err)
+	}
+	snapshotMaxID := uint(120)
+	_, err := NewBojunRetailOrderDAO(db).ListOpenOrders(t.Context(), OpenBojunOrderQuery{
+		StartUpdatedAt: 1789488000, EndUpdatedAt: 1789574400, BeforeUpdatedAt: 1789570000,
+		BeforeID: 99, SnapshotMaxID: &snapshotMaxID, Limit: 51,
+	})
+	if err != nil {
+		t.Fatalf("ListOpenOrders() error=%v", err)
+	}
+	for _, fragment := range []string{
+		"updated_at >= ? AND updated_at < ?", "id <= ?", "updated_at < ? OR (updated_at = ? AND id < ?)",
+		"ORDER BY updated_at DESC,id DESC", "LIMIT 51",
+	} {
+		if !strings.Contains(statement, fragment) {
+			t.Fatalf("statement missing %q: %s", fragment, statement)
+		}
 	}
 }
 

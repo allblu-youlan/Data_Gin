@@ -221,6 +221,7 @@ func TestOpenBojunOrderQueryServiceRejectsInvalidFiltersBeforeDAO(t *testing.T) 
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", MallCodes: []string{"bad code"}},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", MallCodes: []string{"A"}, StoreCodes: []string{"B"}},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", StartDate: "2026-07-01", EndDate: "2026-07-31"},
+		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", UpdatedStartTime: "2026-07-01 00:00:00", UpdatedEndTime: "2026-07-31 00:00:00"},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", OrderTypes: []string{"OTHER"}},
 		{StartTime: "2026-07-01 00:00:00", EndTime: "2026-07-31 00:00:00", PageSize: 101},
 	}
@@ -231,6 +232,31 @@ func TestOpenBojunOrderQueryServiceRejectsInvalidFiltersBeforeDAO(t *testing.T) 
 	}
 	if orders.calls != 0 {
 		t.Fatalf("DAO calls=%d", orders.calls)
+	}
+}
+
+func TestNormalizeOpenBojunOrderQuerySupportsUpdatedAtMode(t *testing.T) {
+	request := requestbody.OpenBojunOrderQueryRequest{
+		UpdatedStartTime: "2026-09-15 00:00:00", UpdatedEndTime: "2026-09-16 00:00:00", PageSize: 10,
+	}
+	query, _, pageSize, err := normalizeOpenBojunOrderQuery(request)
+	if err != nil {
+		t.Fatalf("normalize updated query: %v", err)
+	}
+	request.Cursor, err = encodeOpenBojunOrderCursor(openBojunOrderCursor{
+		Version: 3, QueryHash: openBojunOrderQueryHash(query, pageSize), UpdatedAtUnix: query.EndUpdatedAt - 1,
+		ID: 90, Page: 2, SnapshotMaxID: 100, SnapshotAtUnix: query.EndUpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("encode cursor: %v", err)
+	}
+	restored, page, _, err := normalizeOpenBojunOrderQuery(request)
+	if err != nil {
+		t.Fatalf("normalize continued updated query: %v", err)
+	}
+	if restored.BeforeUpdatedAt != query.EndUpdatedAt-1 || restored.SnapshotMaxID == nil ||
+		*restored.SnapshotMaxID != 100 || page != 2 {
+		t.Fatalf("query=%+v page=%d", restored, page)
 	}
 }
 

@@ -81,6 +81,7 @@ type OpenBojunOrderDTO struct {
 	OrderPhone      string                     `json:"order_phone"`
 	OrderDate       string                     `json:"orderDate"`
 	CompletedAt     *string                    `json:"completedAt"`
+	UpdatedAt       string                     `json:"updatedAt"`
 	MallCode        string                     `json:"mallCode"`
 	MallName        string                     `json:"mallName"`
 	OrderTypeCode   string                     `json:"orderTypeCode"`
@@ -136,6 +137,7 @@ type openBojunOrderCursor struct {
 	Version         int    `json:"version,omitempty"`
 	QueryHash       string `json:"queryHash,omitempty"`
 	CompletedAtUnix int64  `json:"completedAtUnix,omitempty"`
+	UpdatedAtUnix   int64  `json:"updatedAtUnix,omitempty"`
 	BillDate        int    `json:"billDate,omitempty"`
 	ID              uint   `json:"id"`
 	Page            int    `json:"page,omitempty"`
@@ -238,6 +240,8 @@ func (service *OpenBojunOrderQueryService) Query(
 				return nil, fmt.Errorf("open bojun order query: completed-at row has no completion time")
 			}
 			cursor.CompletedAtUnix = orders[len(orders)-1].CompletedAt.Unix()
+		} else if query.StartUpdatedAt > 0 {
+			cursor.UpdatedAtUnix = int64(orders[len(orders)-1].UpdatedAt)
 		} else {
 			cursor.BillDate = orders[len(orders)-1].BillDate
 		}
@@ -282,9 +286,12 @@ func normalizeOpenBojunOrderQuery(
 	endTimeValue := strings.TrimSpace(request.EndTime)
 	startDateValue := strings.TrimSpace(request.StartDate)
 	endDateValue := strings.TrimSpace(request.EndDate)
+	updatedStartValue := strings.TrimSpace(request.UpdatedStartTime)
+	updatedEndValue := strings.TrimSpace(request.UpdatedEndTime)
 	completedAtMode := startTimeValue != "" || endTimeValue != ""
 	billDateMode := startDateValue != "" || endDateValue != ""
-	if completedAtMode == billDateMode {
+	updatedAtMode := updatedStartValue != "" || updatedEndValue != ""
+	if countOpenBojunQueryModes(completedAtMode, billDateMode, updatedAtMode) != 1 {
 		return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: exactly one time range is required", ErrOpenBojunOrderInvalidQuery)
 	}
 	if len(request.MallCodes) > 0 && len(request.StoreCodes) > 0 {
@@ -330,6 +337,18 @@ func normalizeOpenBojunOrderQuery(
 		}
 		query.StartCompletedAt = startCompletedAt
 		query.EndCompletedAt = endCompletedAt
+	} else if updatedAtMode {
+		startUpdatedAt, parseErr := parseOpenBojunOrderTime(updatedStartValue, location)
+		if parseErr != nil {
+			return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid updatedStartTime", ErrOpenBojunOrderInvalidQuery)
+		}
+		endUpdatedAt, parseErr := parseOpenBojunOrderTime(updatedEndValue, location)
+		if parseErr != nil || !endUpdatedAt.After(startUpdatedAt) ||
+			endUpdatedAt.Sub(startUpdatedAt) > openBojunOrderMaxRangeDays*24*time.Hour {
+			return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid updatedEndTime", ErrOpenBojunOrderInvalidQuery)
+		}
+		query.StartUpdatedAt = startUpdatedAt.Unix()
+		query.EndUpdatedAt = endUpdatedAt.Unix()
 	} else {
 		start, startErr := time.Parse("2006-01-02", startDateValue)
 		end, endErr := time.Parse("2006-01-02", endDateValue)
@@ -358,12 +377,19 @@ func normalizeOpenBojunOrderQuery(
 		}
 		if completedAtMode {
 			before := time.Unix(cursor.CompletedAtUnix, 0).In(location)
-			if cursor.CompletedAtUnix <= 0 || cursor.BillDate != 0 || before.Before(startCompletedAt) || !before.Before(endCompletedAt) {
+			if cursor.CompletedAtUnix <= 0 || cursor.UpdatedAtUnix != 0 || cursor.BillDate != 0 ||
+				before.Before(startCompletedAt) || !before.Before(endCompletedAt) {
 				return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid cursor", ErrOpenBojunOrderInvalidQuery)
 			}
 			query.BeforeCompletedAt = &before
+		} else if updatedAtMode {
+			if cursor.UpdatedAtUnix < query.StartUpdatedAt || cursor.UpdatedAtUnix >= query.EndUpdatedAt ||
+				cursor.CompletedAtUnix != 0 || cursor.BillDate != 0 {
+				return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid cursor", ErrOpenBojunOrderInvalidQuery)
+			}
+			query.BeforeUpdatedAt = cursor.UpdatedAtUnix
 		} else {
-			if cursor.CompletedAtUnix != 0 || cursor.BillDate < startBillDate || cursor.BillDate > endBillDate {
+			if cursor.CompletedAtUnix != 0 || cursor.UpdatedAtUnix != 0 || cursor.BillDate < startBillDate || cursor.BillDate > endBillDate {
 				return data_dao.OpenBojunOrderQuery{}, 0, 0, fmt.Errorf("%w: invalid cursor", ErrOpenBojunOrderInvalidQuery)
 			}
 			query.BeforeBillDate = cursor.BillDate
@@ -432,9 +458,15 @@ func openBojunOrderQueryHash(query data_dao.OpenBojunOrderQuery, pageSize int) s
 	start := query.StartCompletedAt.Format(openBojunOrderDateTimeFormat)
 	end := query.EndCompletedAt.Format(openBojunOrderDateTimeFormat)
 	if query.StartCompletedAt.IsZero() {
-		mode = "billDate"
-		start = strconv.Itoa(query.StartBillDate)
-		end = strconv.Itoa(query.EndBillDate)
+		if query.StartUpdatedAt > 0 {
+			mode = "updatedAt"
+			start = strconv.FormatInt(query.StartUpdatedAt, 10)
+			end = strconv.FormatInt(query.EndUpdatedAt, 10)
+		} else {
+			mode = "billDate"
+			start = strconv.Itoa(query.StartBillDate)
+			end = strconv.Itoa(query.EndBillDate)
+		}
 	}
 	payload := strings.Join([]string{
 		mode,
@@ -458,6 +490,7 @@ func openBojunOrderDTO(order *model.BojunRetailOrder) OpenBojunOrderDTO {
 		OrderPhone:      order.OrderPhone,
 		OrderDate:       formatOpenBojunBillDate(order.BillDate),
 		CompletedAt:     formatOpenBojunCompletedAt(order.CompletedAt),
+		UpdatedAt:       formatOpenBojunUpdatedAt(order.UpdatedAt),
 		MallCode:        order.StoreCode,
 		MallName:        order.StoreName,
 		OrderTypeCode:   order.OrderTypeCode,
@@ -643,6 +676,14 @@ func formatOpenBojunSnapshotAt(value time.Time) string {
 	return value.In(location).Format(openBojunOrderDateTimeFormat)
 }
 
+func formatOpenBojunUpdatedAt(value int) string {
+	if value <= 0 {
+		return ""
+	}
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	return time.Unix(int64(value), 0).In(location).Format(openBojunOrderDateTimeFormat)
+}
+
 func encodeOpenBojunOrderCursor(cursor openBojunOrderCursor) (string, error) {
 	encoded, err := json.Marshal(cursor)
 	if err != nil {
@@ -665,12 +706,23 @@ func decodeOpenBojunOrderCursor(value string) (openBojunOrderCursor, error) {
 	}
 	hasCompletedAt := cursor.CompletedAtUnix > 0
 	hasBillDate := cursor.BillDate > 0
-	validVersion := (cursor.Version == 0 && cursor.QueryHash == "" && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
-		(cursor.Version == 2 && len(cursor.QueryHash) == sha256.Size*2 && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
+	hasUpdatedAt := cursor.UpdatedAtUnix > 0
+	validVersion := (cursor.Version == 0 && cursor.QueryHash == "" && cursor.UpdatedAtUnix == 0 && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
+		(cursor.Version == 2 && len(cursor.QueryHash) == sha256.Size*2 && cursor.UpdatedAtUnix == 0 && cursor.SnapshotMaxID == 0 && cursor.SnapshotAtUnix == 0) ||
 		(cursor.Version == 3 && len(cursor.QueryHash) == sha256.Size*2 && cursor.SnapshotMaxID > 0 &&
 			cursor.ID <= cursor.SnapshotMaxID && cursor.SnapshotAtUnix > 0)
-	if !validVersion || hasCompletedAt == hasBillDate || cursor.ID == 0 || invalidOpenCursorPage(cursor.Page) {
+	if !validVersion || countOpenBojunQueryModes(hasCompletedAt, hasBillDate, hasUpdatedAt) != 1 || cursor.ID == 0 || invalidOpenCursorPage(cursor.Page) {
 		return openBojunOrderCursor{}, ErrOpenBojunOrderInvalidQuery
 	}
 	return cursor, nil
+}
+
+func countOpenBojunQueryModes(values ...bool) int {
+	count := 0
+	for _, value := range values {
+		if value {
+			count++
+		}
+	}
+	return count
 }
