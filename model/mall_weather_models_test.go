@@ -129,7 +129,7 @@ func TestDataAuthorizationSecretsAreNotSerialized(t *testing.T) {
 
 func TestGrantableDataPermissionsReturnsDefensiveAllowlist(t *testing.T) {
 	permissions := GrantableDataPermissions()
-	if !reflect.DeepEqual(permissions, []string{PermissionWeatherRead, PermissionBojunOrderRead}) {
+	if !reflect.DeepEqual(permissions, []string{PermissionWeatherRead, PermissionBojunOrderRead, PermissionBusinessOverviewRead}) {
 		t.Fatalf("permissions = %v", permissions)
 	}
 	permissions[0] = "mall.write"

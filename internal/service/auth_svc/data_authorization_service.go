@@ -616,8 +616,11 @@ func permissionDTOsFromGrants(grants []normalizedDataGrant, now time.Time) []Dat
 }
 func permissionDTO(permission string, expiresAt *time.Time, granted bool, now time.Time) DataAuthorizationPermissionDTO {
 	label := "天气数据查询"
-	if permission == model.PermissionBojunOrderRead {
+	switch permission {
+	case model.PermissionBojunOrderRead:
 		label = "Bojun 订单查询"
+	case model.PermissionBusinessOverviewRead:
+		label = "营业金额查询"
 	}
 	status := "NOT_GRANTED"
 	if granted {

@@ -31,6 +31,7 @@ var mallWeatherAdminPermissions = [...]string{
 var grantableDataPermissions = [...]string{
 	PermissionWeatherRead,
 	PermissionBojunOrderRead,
+	PermissionBusinessOverviewRead,
 }
 
 // GrantableDataPermissions returns the fixed permissions an administrator may

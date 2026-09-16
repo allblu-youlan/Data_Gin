@@ -204,4 +204,7 @@ func TestPermissionDTOStates(t *testing.T) {
 	if len(permissions) != len(model.GrantableDataPermissions()) || permissions[1].Status != "ACTIVE" || !permissions[1].Permanent {
 		t.Fatalf("permissionDTOs(permanent) = %+v", permissions)
 	}
+	if got := permissionDTO(model.PermissionBusinessOverviewRead, nil, true, now); got.Label != "营业金额查询" || got.Status != "ACTIVE" {
+		t.Fatalf("business overview permission = %+v", got)
+	}
 }

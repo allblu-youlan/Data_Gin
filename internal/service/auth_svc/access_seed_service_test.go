@@ -52,3 +52,15 @@ func TestPermissionCodesReturnsSortedDefensiveCopy(t *testing.T) {
 		t.Fatal("PermissionCodes returned shared storage")
 	}
 }
+
+func TestBusinessOverviewPermissionIsAPIGrantable(t *testing.T) {
+	for _, permission := range PermissionCatalog() {
+		if permission.Code == model.PermissionBusinessOverviewRead {
+			if !permission.APIGrantable {
+				t.Fatal("business overview permission must be grantable to open API accounts")
+			}
+			return
+		}
+	}
+	t.Fatal("business overview permission is missing")
+}
