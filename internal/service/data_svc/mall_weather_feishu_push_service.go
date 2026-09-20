@@ -86,7 +86,7 @@ func NewMallWeatherFeishuPushService() *MallWeatherFeishuPushService {
 	service, err := newMallWeatherFeishuPushService(mallWeatherFeishuPushDependencies{
 		destinations: data_dao.NewDestinationDefinitionDAO(),
 		profiles:     data_dao.NewMallWeatherExportProfileDAO(database.DB),
-		permissions:  data_dao.NewMallWeatherPermissionDAO(database.DB),
+		permissions:  newAccountPermissionChecker(database.DB),
 		estimator:    data_dao.NewMallWeatherExportJobDAO(database.DB),
 		limits:       data_dao.NewRuntimeConfigDAO(),
 		store:        gormMallWeatherFeishuPushStore{db: database.DB},

@@ -78,7 +78,7 @@ type MallWeatherRefreshService struct {
 
 func NewMallWeatherRefreshService() *MallWeatherRefreshService {
 	return &MallWeatherRefreshService{
-		malls: data_dao.NewMallDAO(database.DB), permissions: data_dao.NewMallWeatherPermissionDAO(database.DB),
+		malls: data_dao.NewMallDAO(database.DB), permissions: newAccountPermissionChecker(database.DB),
 		store: gormMallWeatherRefreshStore{db: database.DB}, now: time.Now,
 	}
 }

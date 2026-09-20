@@ -10,7 +10,6 @@ import (
 	"time"
 
 	appConfig "gin-biz-web-api/config"
-	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/model"
@@ -66,7 +65,7 @@ func NewOpenBojunProductQueryService() *OpenBojunProductQueryService {
 		func(ctx context.Context, config reportoracle.Config) (openBojunProductOracle, error) {
 			return reportoracle.Open(ctx, config)
 		},
-		data_dao.NewMallWeatherPermissionDAO(database.DB),
+		newAccountPermissionChecker(database.DB),
 		time.Now,
 	)
 	if configErr != nil {

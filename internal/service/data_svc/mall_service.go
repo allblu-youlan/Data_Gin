@@ -131,7 +131,7 @@ func NewMallService() *MallService {
 	return &MallService{
 		db:                    database.DB,
 		malls:                 data_dao.NewMallDAO(),
-		permissions:           data_dao.NewMallWeatherPermissionDAO(),
+		permissions:           newAccountPermissionChecker(database.DB),
 		defaultDetailProfile:  config.GetString("cfg.mall_weather.default_detail_profile", "full"),
 		defaultCoverageRadius: config.GetInt("cfg.mall_weather.coverage_radius_m", 1000),
 		weatherFeatureEnabled: func() bool { return global.MallWeatherEnabledAtStartup },

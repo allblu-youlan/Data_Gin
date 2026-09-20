@@ -17,6 +17,7 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 )
 
 const (
@@ -95,7 +96,7 @@ type MallWeatherExportProfileService struct {
 func NewMallWeatherExportProfileService() *MallWeatherExportProfileService {
 	return &MallWeatherExportProfileService{
 		store:       data_dao.NewMallWeatherExportProfileDAO(),
-		permissions: data_dao.NewMallWeatherPermissionDAO(),
+		permissions: newAccountPermissionChecker(database.DB),
 		now:         time.Now,
 	}
 }

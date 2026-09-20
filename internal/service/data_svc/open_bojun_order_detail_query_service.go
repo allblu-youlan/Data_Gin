@@ -80,7 +80,7 @@ type openBojunOrderDetailCursor struct {
 func NewOpenBojunOrderDetailQueryService() *OpenBojunOrderDetailQueryService {
 	return newOpenBojunOrderDetailQueryService(
 		data_dao.NewBojunRetailOrderDAO(database.DB),
-		data_dao.NewMallWeatherPermissionDAO(database.DB),
+		newAccountPermissionChecker(database.DB),
 		auth_svc.NewMallScopeService(database.DB),
 		time.Now,
 	)

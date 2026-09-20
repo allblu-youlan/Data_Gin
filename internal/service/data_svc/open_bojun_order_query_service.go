@@ -149,7 +149,7 @@ type openBojunOrderCursor struct {
 func NewOpenBojunOrderQueryService() *OpenBojunOrderQueryService {
 	service := newOpenBojunOrderQueryService(
 		data_dao.NewBojunRetailOrderDAO(database.DB),
-		data_dao.NewMallWeatherPermissionDAO(database.DB),
+		newAccountPermissionChecker(database.DB),
 		time.Now,
 	)
 	service.mallScope = auth_svc.NewMallScopeService(database.DB)

@@ -36,7 +36,7 @@ type OpenBojunSyncStatusService struct {
 func NewOpenBojunSyncStatusService() *OpenBojunSyncStatusService {
 	return newOpenBojunSyncStatusService(
 		data_dao.NewBojunOracleSyncStateDAO(database.DB),
-		data_dao.NewMallWeatherPermissionDAO(database.DB),
+		newAccountPermissionChecker(database.DB),
 		time.Now,
 	)
 }

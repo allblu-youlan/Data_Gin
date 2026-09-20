@@ -44,7 +44,7 @@ type MallWeatherSheetPushOptionService struct {
 func NewMallWeatherSheetPushOptionService() *MallWeatherSheetPushOptionService {
 	return &MallWeatherSheetPushOptionService{
 		store:       data_dao.NewMallWeatherSheetPushOptionDAO(database.DB),
-		permissions: data_dao.NewMallWeatherPermissionDAO(database.DB),
+		permissions: newAccountPermissionChecker(database.DB),
 		now:         time.Now,
 	}
 }

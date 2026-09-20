@@ -257,7 +257,7 @@ type weatherTimeSeriesRequest struct {
 func NewMallWeatherQueryService() *MallWeatherQueryService {
 	return &MallWeatherQueryService{
 		malls: data_dao.NewMallDAO(database.DB), weather: data_dao.NewMallWeatherDAO(database.DB),
-		permissions: data_dao.NewMallWeatherPermissionDAO(database.DB), now: time.Now,
+		permissions: newAccountPermissionChecker(database.DB), now: time.Now,
 		mallScope: auth_svc.NewMallScopeService(database.DB),
 	}
 }

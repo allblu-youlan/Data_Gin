@@ -77,7 +77,7 @@ type openWeatherMallCursor struct {
 func NewOpenWeatherMallQueryService() *OpenWeatherMallQueryService {
 	return newOpenWeatherMallQueryService(
 		data_dao.NewMallDAO(database.DB),
-		data_dao.NewMallWeatherPermissionDAO(database.DB),
+		newAccountPermissionChecker(database.DB),
 		time.Now,
 	)
 }

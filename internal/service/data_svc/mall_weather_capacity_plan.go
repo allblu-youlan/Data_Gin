@@ -6,7 +6,6 @@ import (
 	"math"
 	"time"
 
-	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/pkg/database"
 )
 
@@ -29,7 +28,7 @@ type MallWeatherCapacityPlanService struct {
 
 func NewMallWeatherCapacityPlanService() *MallWeatherCapacityPlanService {
 	return &MallWeatherCapacityPlanService{
-		permissions: data_dao.NewMallWeatherPermissionDAO(database.DB),
+		permissions: newAccountPermissionChecker(database.DB),
 		now:         time.Now,
 	}
 }

@@ -182,7 +182,7 @@ type MallWeatherExportJobService struct {
 func NewMallWeatherExportJobService() *MallWeatherExportJobService {
 	return &MallWeatherExportJobService{
 		profiles:    data_dao.NewMallWeatherExportProfileDAO(database.DB),
-		permissions: data_dao.NewMallWeatherPermissionDAO(database.DB),
+		permissions: newAccountPermissionChecker(database.DB),
 		estimator:   data_dao.NewMallWeatherExportJobDAO(database.DB),
 		jobs:        data_dao.NewMallWeatherExportJobDAO(database.DB),
 		limits:      data_dao.NewRuntimeConfigDAO(),
