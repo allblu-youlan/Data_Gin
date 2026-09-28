@@ -2,9 +2,9 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Database, Download, FileJson, ListChecks, RefreshCcw, Search, Upload } from 'lucide-react'
 import type { ClientResponse } from '../api/client'
 import { Dialog, Drawer, FeedbackState, FilterToolbar, MetricStrip, PageCanvas, PageHeader, PaginationControls, Section } from '../ui'
-import { bojunImportWriteConfirmation, bojunImportWriteFieldOptions, buildExcelExportConfig, cloneExcelEmptyCellFills, cloneExcelImportWriteMappings, cloneExcelMatchSteps, excelMatchSchemePath, selectExcelMatchStepModel, type ExcelMatchFilterConfig, type ExcelEmptyCellFillConfig, type ExcelImportWriteMappingConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
-import { bojunMatchFieldOptions, canDownloadExcelJob, defaultExcelExportScheme, defaultExcelImportScheme, excelJobStatusLabel, excelMatchFilterOperatorOptions, exportSchemeDefaults, filterSensitiveExcelModels, formValue, importSchemeDefaults, isExcelMatchStepComplete, parseExportColumnFormats, readDataField, readObject, type ExcelDialogMode, type ExcelExportSchemeConfig, type ExcelImportSchemeConfig, type ExcelMatchJob, type ExcelMatchPreviewResult, type ExcelMatchScheme, type PendingSchemeSave } from './excelPageSupport'
-import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelModelFieldSelector, ExcelModelSelector, ExcelSchemeList, Field, Metric, Panel, SelectFilter } from './ExcelMatchPageParts'
+import { bojunImportWriteConfirmation, bojunImportWriteFieldOptions, buildExcelExportConfig, cloneExcelEmptyCellFills, cloneExcelImportWriteMappings, cloneExcelMatchSteps, excelMatchSchemePath, isExcelMatchStepComplete, selectExcelMatchStepModel, type ExcelMatchFilterConfig, type ExcelEmptyCellFillConfig, type ExcelImportWriteMappingConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
+import { bojunMatchFieldOptions, canDownloadExcelJob, defaultExcelExportScheme, defaultExcelImportScheme, excelJobStatusLabel, excelMatchFilterOperatorOptions, exportSchemeDefaults, filterSensitiveExcelModels, formValue, importSchemeDefaults, parseExportColumnFormats, readDataField, readObject, type ExcelDialogMode, type ExcelExportSchemeConfig, type ExcelImportSchemeConfig, type ExcelMatchJob, type ExcelMatchPreviewResult, type ExcelMatchScheme, type PendingSchemeSave } from './excelPageSupport'
+import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelMatchStepFields, ExcelSchemeList, Field, Metric, Panel, SelectFilter } from './ExcelMatchPageParts'
 import { buildExcelUploadPayload, useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { useExcelJobs } from './useExcelJobs'
 import styles from './ExcelMatchPage.module.css'
@@ -66,6 +66,7 @@ export function ExcelMatchPage({
     ? (pendingSchemeSave.operation === 'export_match' ? exportSchemes : importSchemes)
       .find((scheme) => scheme.name === pendingSchemeSave.name.trim()) ?? null
     : null
+  const usesExcelModels = exportSteps.some((step) => step.matchMode !== 'conditional_write')
   const requestErrorMessage = (response: ClientResponse, fallback: string) => response.error?.message || fallback
 
   function resetExcelDialogFiles() {
@@ -149,6 +150,8 @@ export function ExcelMatchPage({
         dbMatchField: '',
         dbValueField: '',
         outputColumnName: '',
+        containsValue: '',
+        writeValue: '',
         specExcelColumn: '',
         priceExcelColumn: '',
         qtyExcelColumn: '',
@@ -610,23 +613,15 @@ export function ExcelMatchPage({
         <div className={styles.schemeToolbar}><label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedExportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('export'); setPreviewResult(null) }} /><span>{selectedExportFileName || '请选择 Excel 文件'}</span></label><Field label="Sheet" name="sheetName" defaultValue={exportDefaults.sheetName} /><div className={styles.schemeToolbarActions}><button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加步骤</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'export_match', selectedExportSchemeID ? 'current' : 'new') }} disabled={loading}>保存方案</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) void previewExportJob(form) }} disabled={loading}><FileJson aria-hidden="true" />预览匹配</button><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建导出任务</button></div></div>
         <div className={styles.stepEditor}>
           <div className={styles.stepEditorTitle}><div><strong>自定义匹配流程</strong><span>步骤按顺序执行，并可引用前序步骤输出。</span></div></div>
-          {excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
-          {excelModelsError && <div className={styles.catalogError} role="alert"><span>模型与字段目录加载失败：{excelModelsError}</span><button type="button" onClick={() => void loadExcelModels()}>重试加载</button></div>}
-          {!excelModelsLoading && !excelModelsError && excelModels.length === 0 && <p className={styles.modeNote}>当前数据库没有返回可选择的模型；历史配置仍可查看，但新步骤需要先确认数据库连接和模型表。</p>}
+          {usesExcelModels && excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
+          {usesExcelModels && excelModelsError && <div className={styles.catalogError} role="alert"><span>模型与字段目录加载失败：{excelModelsError}</span><button type="button" onClick={() => void loadExcelModels()}>重试加载</button></div>}
+          {usesExcelModels && !excelModelsLoading && !excelModelsError && excelModels.length === 0 && <p className={styles.modeNote}>当前数据库没有返回可选择的模型；历史配置仍可查看，但新步骤需要先确认数据库连接和模型表。</p>}
           {exportSteps.map((step, index) => (
             <article className={styles.stepCard} key={`${exportFormKey}-${index}`}>
-              <div className={styles.stepHeading}><strong><span className={styles.stepIndex} aria-hidden="true">{index + 1}</span><input className={styles.stepNameInput} name={`step_name_${index}`} value={step.name} onChange={(event) => updateExportStep(index, 'name', event.currentTarget.value)} aria-label={`步骤 ${index + 1} 名称`} required />{index > 0 && <small>数据来源：使用上一步输出（{exportSteps[index - 1]?.outputColumnName || '待配置'}）</small>}</strong><div className={styles.tableActions}><span className={isExcelMatchStepComplete(step) ? styles.stepComplete : styles.stepIncomplete}>{isExcelMatchStepComplete(step) ? '配置完整' : '待完善'}</span><button type="button" onClick={() => moveExportStep(index, -1)} disabled={index === 0}>↑ 上移</button><button type="button" onClick={() => moveExportStep(index, 1)} disabled={index === exportSteps.length - 1}>↓ 下移</button><button className={styles.danger} type="button" onClick={() => removeExportStep(index)} disabled={exportSteps.length === 1}>删除</button></div></div>
-              <div className={styles.stepFields}>
-                <label>匹配模式<select name={`step_mode_${index}`} value={step.matchMode} onChange={(event) => updateExportStep(index, 'matchMode', event.currentTarget.value)}><option value="field">普通字段匹配</option><option value="order_item_sku">订单商品 SKU 匹配</option></select></label>
-                <ExcelModelSelector name={`step_table_${index}`} models={excelModels} value={step.tableName} onChange={(value) => selectExportStepModel(index, value)} />
-                <Field label={step.matchMode === 'order_item_sku' ? '订单号 Excel 列' : 'Excel 输入列'} name={`step_excel_${index}`} value={step.matchExcelColumn} onChange={(value) => updateExportStep(index, 'matchExcelColumn', value)} required />
-                <ExcelModelFieldSelector label={step.matchMode === 'order_item_sku' ? '数据库订单号字段' : '匹配模型字段'} name={`step_match_${index}`} models={excelModels} tableName={step.tableName} value={step.dbMatchField} onChange={(value) => updateExportStep(index, 'dbMatchField', value)} />
-                <ExcelModelFieldSelector label={step.matchMode === 'order_item_sku' ? '数据库购物明细字段' : '取值模型字段'} name={`step_value_${index}`} models={excelModels} tableName={step.tableName} value={step.dbValueField} onChange={(value) => updateExportStep(index, 'dbValueField', value)} />
-                <Field label={step.matchMode === 'order_item_sku' ? 'SKU 输出列' : '追加输出列'} name={`step_output_${index}`} value={step.outputColumnName} onChange={(value) => updateExportStep(index, 'outputColumnName', value)} required />
-                {step.matchMode === 'order_item_sku' && <><Field label="规格编码 Excel 列" name={`step_spec_${index}`} value={step.specExcelColumn} onChange={(value) => updateExportStep(index, 'specExcelColumn', value)} required /><Field label="销售金额 Excel 列（对应 totAmtActual）" name={`step_price_${index}`} value={step.priceExcelColumn} onChange={(value) => updateExportStep(index, 'priceExcelColumn', value)} required /><Field label="销售数量 Excel 列" name={`step_qty_${index}`} value={step.qtyExcelColumn} onChange={(value) => updateExportStep(index, 'qtyExcelColumn', value)} required /></>}
-              </div>
+              <div className={styles.stepHeading}><strong><span className={styles.stepIndex} aria-hidden="true">{index + 1}</span><input className={styles.stepNameInput} name={`step_name_${index}`} value={step.name} onChange={(event) => updateExportStep(index, 'name', event.currentTarget.value)} aria-label={`步骤 ${index + 1} 名称`} required />{index > 0 && <small>可引用前序步骤结果；上一步目标列（{exportSteps[index - 1]?.outputColumnName || '待配置'}）</small>}</strong><div className={styles.tableActions}><span className={isExcelMatchStepComplete(step) ? styles.stepComplete : styles.stepIncomplete}>{isExcelMatchStepComplete(step) ? '配置完整' : '待完善'}</span><button type="button" onClick={() => moveExportStep(index, -1)} disabled={index === 0}>↑ 上移</button><button type="button" onClick={() => moveExportStep(index, 1)} disabled={index === exportSteps.length - 1}>↓ 下移</button><button className={styles.danger} type="button" onClick={() => removeExportStep(index)} disabled={exportSteps.length === 1}>删除</button></div></div>
+              <ExcelMatchStepFields step={step} index={index} models={excelModels} onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)} />
               {step.matchMode === 'order_item_sku' && <p className={styles.modeNote}>按数据库购物明细字段匹配并输出完整 no：优先用规格编码匹配 mProductName 前缀，并同时校验销售金额和数量；规格编码为 15 位或 16 位时直接跳过。</p>}
-              <div className={styles.stepFilterEditor}><div className={styles.stepFilterHeading}><div><strong>本步骤筛选</strong><span>{step.matchMode === 'order_item_sku' ? '多条条件需要同时满足，订单商品 SKU 模式仅可引用原始 Excel 列。' : '多条条件需要同时满足，可引用原始列或前序步骤追加列。'}</span></div><button type="button" onClick={() => addExportStepFilter(index)}>添加条件</button></div>{step.filters.length === 0 && <p className={styles.stepFilterEmpty}>未设置条件，本步骤处理全部 Excel 行。</p>}{step.filters.map((filter, filterIndex) => { const valueNotRequired = filter.op === 'empty' || filter.op === 'not_empty'; return <div className={styles.stepFilterRow} key={`${exportFormKey}-${index}-${filterIndex}`}><Field label={`条件 ${filterIndex + 1} · Excel 列`} name={`step_filter_column_${index}_${filterIndex}`} value={filter.column} onChange={(value) => updateExportStepFilter(index, filterIndex, 'column', value)} required /><label>运算符<select name={`step_filter_op_${index}_${filterIndex}`} value={filter.op} onChange={(event) => updateExportStepFilter(index, filterIndex, 'op', event.currentTarget.value)}>{excelMatchFilterOperatorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{valueNotRequired ? <label>筛选值<input value="此运算无需填写" readOnly disabled /></label> : <Field label="筛选值" name={`step_filter_value_${index}_${filterIndex}`} value={filter.value} onChange={(value) => updateExportStepFilter(index, filterIndex, 'value', value)} required />}<button type="button" onClick={() => removeExportStepFilter(index, filterIndex)} aria-label={`删除步骤 ${index + 1} 的条件 ${filterIndex + 1}`}>删除条件</button></div> })}</div>
+              <div className={styles.stepFilterEditor}><div className={styles.stepFilterHeading}><div><strong>本步骤筛选</strong><span>{step.matchMode === 'order_item_sku' ? '多条条件需要同时满足，订单商品 SKU 模式仅可引用未被前序条件写入修改的原始 Excel 列。' : '多条条件需要同时满足，可引用原始列或前序步骤处理后的列。'}</span></div><button type="button" onClick={() => addExportStepFilter(index)}>添加条件</button></div>{step.filters.length === 0 && <p className={styles.stepFilterEmpty}>{step.matchMode === 'conditional_write' ? '未设置筛选，全部 Excel 行将继续判断包含文本。' : '未设置条件，本步骤处理全部 Excel 行。'}</p>}{step.filters.map((filter, filterIndex) => { const valueNotRequired = filter.op === 'empty' || filter.op === 'not_empty'; return <div className={styles.stepFilterRow} key={`${exportFormKey}-${index}-${filterIndex}`}><Field label={`条件 ${filterIndex + 1} · Excel 列`} name={`step_filter_column_${index}_${filterIndex}`} value={filter.column} onChange={(value) => updateExportStepFilter(index, filterIndex, 'column', value)} required /><label>运算符<select name={`step_filter_op_${index}_${filterIndex}`} value={filter.op} onChange={(event) => updateExportStepFilter(index, filterIndex, 'op', event.currentTarget.value)}>{excelMatchFilterOperatorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{valueNotRequired ? <label>筛选值<input value="此运算无需填写" readOnly disabled /></label> : <Field label="筛选值" name={`step_filter_value_${index}_${filterIndex}`} value={filter.value} onChange={(value) => updateExportStepFilter(index, filterIndex, 'value', value)} required />}<button type="button" onClick={() => removeExportStepFilter(index, filterIndex)} aria-label={`删除步骤 ${index + 1} 的条件 ${filterIndex + 1}`}>删除条件</button></div> })}</div>
             </article>
           ))}
           <div className={styles.stepFilterEditor}>
@@ -834,14 +829,14 @@ export function ExcelMatchPage({
                 </div>
                 <button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加步骤</button>
               </div>
-              {excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
-              {excelModelsError && (
+              {usesExcelModels && excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
+              {usesExcelModels && excelModelsError && (
                 <div className={styles.catalogError} role="alert">
                   <span>模型与字段目录加载失败：{excelModelsError}</span>
                   <button type="button" onClick={() => void loadExcelModels()}>重试加载</button>
                 </div>
               )}
-              {!excelModelsLoading && !excelModelsError && excelModels.length === 0 && (
+              {usesExcelModels && !excelModelsLoading && !excelModelsError && excelModels.length === 0 && (
                 <p className={styles.modeNote}>当前数据库没有返回可选择的模型；历史配置仍可查看，但新步骤需要先确认数据库连接和模型表。</p>
               )}
               {exportSteps.map((step, index) => (
@@ -854,49 +849,9 @@ export function ExcelMatchPage({
                       <button type="button" onClick={() => removeExportStep(index)} disabled={exportSteps.length === 1}>删除</button>
                     </div>
                   </div>
-                  <div className={styles.stepFields}>
+                  <ExcelMatchStepFields step={step} index={index} models={excelModels} onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)}>
                     <Field label="步骤名称" name={`step_name_${index}`} value={step.name} onChange={(value) => updateExportStep(index, 'name', value)} required />
-                    <label>
-                      匹配模式
-                      <select
-                        name={`step_mode_${index}`}
-                        value={step.matchMode}
-                        onChange={(event) => updateExportStep(index, 'matchMode', event.currentTarget.value)}
-                      >
-                        <option value="field">普通字段匹配</option>
-                        <option value="order_item_sku">订单商品 SKU 匹配</option>
-                      </select>
-                    </label>
-                    <ExcelModelSelector
-                      name={`step_table_${index}`}
-                      models={excelModels}
-                      value={step.tableName}
-                      onChange={(value) => selectExportStepModel(index, value)}
-                    />
-                    <Field label={step.matchMode === 'order_item_sku' ? '订单号 Excel 列' : 'Excel 输入列'} name={`step_excel_${index}`} value={step.matchExcelColumn} onChange={(value) => updateExportStep(index, 'matchExcelColumn', value)} required />
-                    <ExcelModelFieldSelector
-                      label={step.matchMode === 'order_item_sku' ? '数据库订单号字段' : '匹配模型字段'}
-                      name={`step_match_${index}`}
-                      models={excelModels}
-                      tableName={step.tableName}
-                      value={step.dbMatchField}
-                      onChange={(value) => updateExportStep(index, 'dbMatchField', value)}
-                    />
-                    <ExcelModelFieldSelector
-                      label={step.matchMode === 'order_item_sku' ? '数据库购物明细字段' : '取值模型字段'}
-                      name={`step_value_${index}`}
-                      models={excelModels}
-                      tableName={step.tableName}
-                      value={step.dbValueField}
-                      onChange={(value) => updateExportStep(index, 'dbValueField', value)}
-                    />
-                    <Field label={step.matchMode === 'order_item_sku' ? 'SKU 输出列' : '追加输出列'} name={`step_output_${index}`} value={step.outputColumnName} onChange={(value) => updateExportStep(index, 'outputColumnName', value)} required />
-                    {step.matchMode === 'order_item_sku' && <>
-                      <Field label="规格编码 Excel 列" name={`step_spec_${index}`} value={step.specExcelColumn} onChange={(value) => updateExportStep(index, 'specExcelColumn', value)} required />
-                      <Field label="销售金额 Excel 列（对应 totAmtActual）" name={`step_price_${index}`} value={step.priceExcelColumn} onChange={(value) => updateExportStep(index, 'priceExcelColumn', value)} required />
-                      <Field label="销售数量 Excel 列" name={`step_qty_${index}`} value={step.qtyExcelColumn} onChange={(value) => updateExportStep(index, 'qtyExcelColumn', value)} required />
-                    </>}
-                  </div>
+                  </ExcelMatchStepFields>
                   {step.matchMode === 'order_item_sku' && (
                     <p className={styles.modeNote}>
                       按数据库购物明细字段（例如 items_json）匹配并输出完整 no：优先用 Excel 规格编码匹配 mProductName 前缀，并同时校验 totAmtActual（销售金额）和 qty，mProductName 长度不限；若规格编码在订单明细中没有候选，则按销售金额和数量兜底匹配。Excel 规格编码为 15 位或 16 位时直接跳过。每条购物明细按其在 JSON 中的出现次数使用一次；相同明细重复出现时，可按次数重复输出同一 no。
@@ -907,12 +862,12 @@ export function ExcelMatchPage({
                       <div>
                         <strong>本步骤筛选</strong>
                         <span>{step.matchMode === 'order_item_sku'
-                          ? '只决定本步骤处理哪些行；多条条件需要同时满足。订单商品 SKU 模式仅可引用原始 Excel 列。'
-                          : '只决定本步骤处理哪些行；多条条件需要同时满足。可引用原始列或前序步骤追加列。'}</span>
+                          ? '只决定本步骤处理哪些行；多条条件需要同时满足。订单商品 SKU 模式仅可引用未被前序条件写入修改的原始 Excel 列。'
+                          : '只决定本步骤处理哪些行；多条条件需要同时满足。可引用原始列或前序步骤处理后的列。'}</span>
                       </div>
                       <button type="button" onClick={() => addExportStepFilter(index)}>添加条件</button>
                     </div>
-                    {step.filters.length === 0 && <p className={styles.stepFilterEmpty}>未设置条件，本步骤处理全部 Excel 行。</p>}
+                    {step.filters.length === 0 && <p className={styles.stepFilterEmpty}>{step.matchMode === 'conditional_write' ? '未设置筛选，全部 Excel 行将继续判断包含文本。' : '未设置条件，本步骤处理全部 Excel 行。'}</p>}
                     {step.filters.map((filter, filterIndex) => {
                       const valueNotRequired = filter.op === 'empty' || filter.op === 'not_empty'
                       return (

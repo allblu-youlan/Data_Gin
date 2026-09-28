@@ -10,6 +10,7 @@ import {
   excelMatchSchemePath,
   excelFieldSelectOptions,
   excelModelSelectOptions,
+  isExcelMatchStepComplete,
   migrateExcelMatchSteps,
   migrateExcelImportWriteMappings,
   selectExcelMatchStepModel,
@@ -73,6 +74,8 @@ const fallbackStep = {
   dbMatchField: 'matched_docno',
   dbValueField: 'c_store_name',
   outputColumnName: '线下店名称',
+  containsValue: '',
+  writeValue: '',
   specExcelColumn: '',
   priceExcelColumn: '',
   qtyExcelColumn: '',
@@ -123,6 +126,54 @@ test('migrateExcelMatchSteps defaults legacy schemes and steps to field mode', (
   assert.equal(legacyTopLevel[0].matchMode, 'field')
   assert.equal(legacyStep[0].matchMode, 'field')
   assert.equal(legacyStep[0].specExcelColumn, '')
+  assert.equal(legacyTopLevel[0].containsValue, '')
+  assert.equal(legacyTopLevel[0].writeValue, '')
+  assert.equal(legacyStep[0].containsValue, '')
+  assert.equal(legacyStep[0].writeValue, '')
+})
+
+test('migrateExcelMatchSteps preserves conditional write rules and defaults new fields', () => {
+  const steps = migrateExcelMatchSteps({
+    steps: [{
+      name: '标记渠道',
+      matchMode: 'conditional_write',
+      matchExcelColumn: '店铺',
+      containsValue: '有赞',
+      outputColumnName: '渠道',
+      writeValue: ' 线上 ',
+    }, {
+      name: '旧步骤',
+      matchExcelColumn: '订单号',
+    }],
+  }, fallbackStep)
+
+  assert.equal(steps[0].matchMode, 'conditional_write')
+  assert.equal(steps[0].containsValue, '有赞')
+  assert.equal(steps[0].writeValue, ' 线上 ')
+  assert.equal(steps[0].tableName, '')
+  assert.equal(steps[1].containsValue, '')
+  assert.equal(steps[1].writeValue, '')
+})
+
+test('conditional write completeness requires its condition and target but permits clearing without database fields', () => {
+  const step = {
+    ...fallbackStep,
+    matchMode: 'conditional_write',
+    tableName: '',
+    dbMatchField: '',
+    dbValueField: '',
+    containsValue: '有赞',
+    writeValue: '',
+  }
+
+  assert.equal(isExcelMatchStepComplete(step), true)
+  assert.equal(isExcelMatchStepComplete({ ...step, containsValue: ' ' }), false)
+  assert.equal(isExcelMatchStepComplete({ ...step, matchExcelColumn: '' }), false)
+  assert.equal(isExcelMatchStepComplete({ ...step, outputColumnName: '' }), false)
+  assert.equal(isExcelMatchStepComplete({ ...step, matchMode: 'field' }), false)
+  assert.equal(isExcelMatchStepComplete(fallbackStep), true)
+  assert.equal(isExcelMatchStepComplete({ ...fallbackStep, matchMode: 'order_item_sku' }), false)
+  assert.equal(isExcelMatchStepComplete({ ...fallbackStep, matchMode: 'order_item_sku', specExcelColumn: '规格', priceExcelColumn: '金额', qtyExcelColumn: '数量' }), true)
 })
 
 test('migrateExcelMatchSteps preserves order item SKU columns', () => {
@@ -197,10 +248,44 @@ test('buildExcelExportConfig emits trimmed order item SKU matching fields', () =
     dbMatchField: 'docno',
     dbValueField: 'items_json',
     outputColumnName: 'SKU',
+    containsValue: '',
+    writeValue: '',
     specExcelColumn: '规格编码',
     priceExcelColumn: '销售价格',
     qtyExcelColumn: '销售数量',
   })
+})
+
+test('buildExcelExportConfig preserves sequential conditional writes, whitespace and an empty write value', () => {
+  const step = {
+    ...fallbackStep,
+    matchMode: 'conditional_write',
+    tableName: '',
+    dbMatchField: '',
+    dbValueField: '',
+    matchExcelColumn: ' 店铺 ',
+    containsValue: ' 有赞 ',
+    outputColumnName: ' 渠道 ',
+    writeValue: ' 线上 ',
+    filters: [{ column: '订单类型', op: 'eq', value: '零售' }],
+  }
+  const config = buildExcelExportConfig({
+    sheetName: 'Sheet1',
+    steps: [step, { ...step, name: '清空渠道', writeValue: '' }],
+    emptyCellFills: [],
+    exportColumnFormats: [],
+    batchSize: 1000,
+  })
+
+  assert.equal(config.steps[0].matchMode, 'conditional_write')
+  assert.equal(config.steps[0].matchExcelColumn, '店铺')
+  assert.equal(config.steps[0].containsValue, '有赞')
+  assert.equal(config.steps[0].outputColumnName, '渠道')
+  assert.equal(config.steps[0].writeValue, ' 线上 ')
+  assert.deepEqual(config.steps[0].filters, [{ column: '订单类型', op: 'eq', value: '零售' }])
+  assert.equal(config.steps[1].name, '清空渠道')
+  assert.equal(config.steps[1].outputColumnName, '渠道')
+  assert.equal(config.steps[1].writeValue, '')
 })
 
 test('buildExcelExportConfig trims and keeps empty cell fill rules', () => {

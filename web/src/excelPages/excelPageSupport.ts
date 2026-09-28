@@ -43,12 +43,11 @@ export const excelMatchFilterOperatorOptions = [
 ]
 export const defaultExcelExportScheme: ExcelExportSchemeConfig = {
   sheetName: 'Sheet1',
-  steps: [{ name: '匹配伯俊门店', filters: [{ column: '店铺', op: 'eq', value: '幼岚-有赞' }], matchMode: 'field', tableName: 'bojun_retail_orders', matchExcelColumn: '原始线上订单号', dbMatchField: 'matched_docno', dbValueField: 'c_store_name', outputColumnName: '线下店名称', specExcelColumn: '', priceExcelColumn: '', qtyExcelColumn: '' }],
+  steps: [{ name: '匹配伯俊门店', filters: [{ column: '店铺', op: 'eq', value: '幼岚-有赞' }], matchMode: 'field', tableName: 'bojun_retail_orders', matchExcelColumn: '原始线上订单号', dbMatchField: 'matched_docno', dbValueField: 'c_store_name', outputColumnName: '线下店名称', containsValue: '', writeValue: '', specExcelColumn: '', priceExcelColumn: '', qtyExcelColumn: '' }],
   emptyCellFills: [], exportColumnFormats: '', batchSize: '1000',
 }
 export const defaultExcelImportScheme: ExcelImportSchemeConfig = { sheetName: 'Sheet1', tableName: 'bojun_retail_orders', dbMatchField: 'docno', matchExcelColumn: '外部订单编号', writeMappings: [{ dbWriteField: 'matched_docno', writeExcelColumn: '订单号' }], batchSize: '1000' }
 
-export function isExcelMatchStepComplete(step: ExcelMatchStepConfig) { if (!step.name.trim() || !step.tableName.trim() || !step.matchExcelColumn.trim() || !step.dbMatchField.trim() || !step.dbValueField.trim() || !step.outputColumnName.trim()) return false; return step.matchMode !== 'order_item_sku' || Boolean(step.specExcelColumn.trim() && step.priceExcelColumn.trim() && step.qtyExcelColumn.trim()) }
 export function excelJobProgressPercent(job: ExcelMatchJob) { return job.total_rows <= 0 ? 0 : Math.min(100, Math.max(0, Math.round(job.processed_rows / job.total_rows * 100))) }
 export function readList<T>(result: ClientResponse, key: string): T[] { const value = readDataField(result.data, key); return Array.isArray(value) ? value as T[] : [] }
 export function readObject<T>(result: ClientResponse, key: string): T | null { const value = readDataField(result.data, key); return value && typeof value === 'object' ? value as T : null }

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Download, RefreshCcw } from 'lucide-react'
 import { DataTable, StatusTag } from '../ui'
-import { excelFieldSelectOptions, excelModelSelectOptions, type ExcelMatchModel, type ExcelMatchModelField } from '../excelMatchConfig'
+import { excelFieldSelectOptions, excelModelSelectOptions, type ExcelMatchModel, type ExcelMatchModelField, type ExcelMatchStepConfig } from '../excelMatchConfig'
 import {
   canDownloadExcelJob,
   compactText,
@@ -103,7 +103,49 @@ export function SelectFilter({ label, value, onChange, options }: { label: strin
 function excelJobStatusTone(status: string): 'neutral' | 'success' | 'warning' | 'danger' { if (status === 'success') return 'success'; if (status === 'failed' || status === 'expired') return 'danger'; if (status === 'pending' || status === 'running') return 'warning'; return 'neutral' }
 export function Metric({ label, value }: { label: string; value: ReactNode }) { return <div className={styles.metric}><span>{label}</span><strong>{value}</strong></div> }
 export function EmptyState({ text }: { text: string }) { return <div className={styles.emptyState}>{text}</div> }
-export function Field({ label, name, defaultValue = '', type = 'text', value, onChange, required = false }: { label: string; name: string; defaultValue?: string; type?: string; value?: string; onChange?: (value: string) => void; required?: boolean }) { return <label>{label}<input name={name} defaultValue={value === undefined ? defaultValue : undefined} value={value} type={type} required={required} onChange={onChange ? (event) => onChange(event.currentTarget.value) : undefined} /></label> }
+export function Field({ label, name, defaultValue = '', type = 'text', value, onChange, required = false, pattern }: { label: string; name: string; defaultValue?: string; type?: string; value?: string; onChange?: (value: string) => void; required?: boolean; pattern?: string }) { return <label>{label}<input name={name} defaultValue={value === undefined ? defaultValue : undefined} value={value} type={type} required={required} pattern={pattern} onChange={onChange ? (event) => onChange(event.currentTarget.value) : undefined} /></label> }
+
+export function ExcelMatchStepFields({ step, index, models, onChange, onModelChange, children }: {
+  step: ExcelMatchStepConfig
+  index: number
+  models: ExcelMatchModel[]
+  onChange: (key: Exclude<keyof ExcelMatchStepConfig, 'filters'>, value: string) => void
+  onModelChange: (value: string) => void
+  children?: ReactNode
+}) {
+  const conditionalWrite = step.matchMode === 'conditional_write'
+  const orderItemSku = step.matchMode === 'order_item_sku'
+  return <>
+    <div className={styles.stepFields}>
+      {children}
+      <label>
+        匹配模式
+        <select name={`step_mode_${index}`} value={step.matchMode} onChange={(event) => onChange('matchMode', event.currentTarget.value)}>
+          <option value="field">普通字段匹配</option>
+          <option value="order_item_sku">订单商品 SKU 匹配</option>
+          <option value="conditional_write">条件写入固定值</option>
+        </select>
+      </label>
+      {!conditionalWrite && <ExcelModelSelector name={`step_table_${index}`} models={models} value={step.tableName} onChange={onModelChange} />}
+      <Field label={conditionalWrite ? '判断包含的 Excel 列' : orderItemSku ? '订单号 Excel 列' : 'Excel 输入列'} name={`step_excel_${index}`} value={step.matchExcelColumn} onChange={(value) => onChange('matchExcelColumn', value)} required />
+      {conditionalWrite
+        ? <Field label="包含文本" name={`step_contains_${index}`} value={step.containsValue} onChange={(value) => onChange('containsValue', value)} required pattern=".*\S.*" />
+        : <>
+            <ExcelModelFieldSelector label={orderItemSku ? '数据库订单号字段' : '匹配模型字段'} name={`step_match_${index}`} models={models} tableName={step.tableName} value={step.dbMatchField} onChange={(value) => onChange('dbMatchField', value)} />
+            <ExcelModelFieldSelector label={orderItemSku ? '数据库购物明细字段' : '取值模型字段'} name={`step_value_${index}`} models={models} tableName={step.tableName} value={step.dbValueField} onChange={(value) => onChange('dbValueField', value)} />
+          </>}
+      <Field label={conditionalWrite ? '写入目标列（已有或新增）' : orderItemSku ? 'SKU 输出列' : '追加输出列'} name={`step_output_${index}`} value={step.outputColumnName} onChange={(value) => onChange('outputColumnName', value)} required />
+      {conditionalWrite && <Field label="写入值（留空则清空）" name={`step_write_${index}`} value={step.writeValue} onChange={(value) => onChange('writeValue', value)} />}
+      {orderItemSku && <>
+        <Field label="规格编码 Excel 列" name={`step_spec_${index}`} value={step.specExcelColumn} onChange={(value) => onChange('specExcelColumn', value)} required />
+        <Field label="销售金额 Excel 列（对应 totAmtActual）" name={`step_price_${index}`} value={step.priceExcelColumn} onChange={(value) => onChange('priceExcelColumn', value)} required />
+        <Field label="销售数量 Excel 列" name={`step_qty_${index}`} value={step.qtyExcelColumn} onChange={(value) => onChange('qtyExcelColumn', value)} required />
+      </>}
+    </div>
+    {conditionalWrite && <p className={styles.modeNote}>先通过本步骤筛选，再判断指定列是否包含文本；成立时给同一行目标列写入固定值，未命中保留原值。目标列存在则复用并覆盖，不存在则新增。步骤按序执行，可重复写入同一列，后续步骤读取前面修改后的值，后命中覆盖前值。写入值留空会清空，空格原样保留。</p>}
+  </>
+}
+
 export function ExcelModelSelector({ name, models, value, onChange }: { name: string; models: ExcelMatchModel[]; value: string; onChange: (value: string) => void }) { const selectedModel = models.find((model) => model.tableName === value); const options = excelModelSelectOptions(models, value); return <label className={styles.catalogControl}>模型名称<select aria-label="模型名称" name={name} value={value} required onChange={(event) => onChange(event.currentTarget.value)}><option value="">选择模型名称</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>{selectedModel ? <ExcelCatalogExplanation title={selectedModel.mapping} detail={selectedModel.description} /> : value ? <ExcelCatalogExplanation title={`当前配置 → 数据库表 ${value}`} detail="该表不在当前模型目录中，保留它是为了兼容历史方案；保存前请确认表仍然存在。" /> : <ExcelCatalogExplanation title="模型名称 → 数据库表" detail="选择模型后，这里会直接解释对应的数据表，无需另行查表。" />}</label> }
 export function ExcelModelFieldSelector({ label, name, models, tableName, value, onChange }: { label: string; name: string; models: ExcelMatchModel[]; tableName: string; value: string; onChange: (value: string) => void }) { const selectedModel = models.find((model) => model.tableName === tableName); const fields = selectedModel?.fields ?? []; const selectedField = fields.find((field) => field.columnName === value); const options = excelFieldSelectOptions(fields, value); return <label className={styles.catalogControl}>{label}<select aria-label={label} name={name} value={value} required disabled={!tableName} onChange={(event) => onChange(event.currentTarget.value)}><option value="">选择模型字段</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>{selectedField ? <ExcelModelFieldExplanation field={selectedField} /> : value ? <ExcelCatalogExplanation title={`当前配置字段 → ${tableName}.${value}`} detail="该字段不在当前模型目录中，已作为历史配置保留；保存前请确认字段仍然存在。" /> : selectedModel ? <ExcelCatalogExplanation title={`${selectedModel.modelName}.字段 → ${selectedModel.tableName}.数据库列`} detail={`当前模型提供 ${fields.length} 个字段可选。`} /> : <ExcelCatalogExplanation title="模型字段 → 数据库列" detail="请先选择模型，再从该模型的字段列表中选择。" />}</label> }
 function ExcelModelFieldExplanation({ field }: { field: ExcelMatchModelField }) { const typeDetail = field.dataType && !field.description.includes(field.dataType) ? `；数据库类型 ${field.dataType}` : ''; return <ExcelCatalogExplanation title={field.mapping} detail={`${field.description}${typeDetail}；${field.nullable ? '允许为空' : '不允许为空'}`} /> }
