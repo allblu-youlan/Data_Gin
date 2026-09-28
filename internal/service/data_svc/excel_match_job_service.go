@@ -29,11 +29,12 @@ import (
 )
 
 const (
-	excelOperationExportMatch  = "export_match"
-	excelOperationImportUpdate = "import_update"
-	excelOperationClearMatched = "clear_matched_docno"
-	excelMatchModeField        = "field"
-	excelMatchModeOrderItemSKU = "order_item_sku"
+	excelOperationExportMatch      = "export_match"
+	excelOperationImportUpdate     = "import_update"
+	excelOperationClearMatched     = "clear_matched_docno"
+	excelMatchModeField            = "field"
+	excelMatchModeOrderItemSKU     = "order_item_sku"
+	excelMatchModeConditionalWrite = "conditional_write"
 
 	excelMatchStatusPending = "pending"
 	excelMatchStatusSuccess = "success"
@@ -195,6 +196,8 @@ type ExcelMatchStep struct {
 	DBMatchField     string             `json:"dbMatchField"`
 	DBValueField     string             `json:"dbValueField"`
 	OutputColumnName string             `json:"outputColumnName"`
+	ContainsValue    string             `json:"containsValue,omitempty"`
+	WriteValue       string             `json:"writeValue,omitempty"`
 }
 
 type ExcelMatchConfig struct {
@@ -1033,17 +1036,26 @@ func normalizeExcelExportConfig(config ExcelMatchConfig) (ExcelMatchConfig, erro
 		step.DBMatchField = strings.TrimSpace(step.DBMatchField)
 		step.DBValueField = strings.TrimSpace(step.DBValueField)
 		step.OutputColumnName = strings.TrimSpace(step.OutputColumnName)
+		step.ContainsValue = strings.TrimSpace(step.ContainsValue)
 		if step.Name == "" {
 			step.Name = fmt.Sprintf("步骤 %d", i+1)
 		}
 		if step.MatchMode == "" {
 			step.MatchMode = excelMatchModeField
 		}
-		if step.MatchMode != excelMatchModeField && step.MatchMode != excelMatchModeOrderItemSKU {
+		switch step.MatchMode {
+		case excelMatchModeConditionalWrite:
+			if step.MatchExcelColumn == "" || step.ContainsValue == "" || step.OutputColumnName == "" {
+				return config, fmt.Errorf("第 %d 个条件写入步骤必须配置判断列、包含文本和目标列", i+1)
+			}
+		case excelMatchModeField, excelMatchModeOrderItemSKU:
+			missingSource := step.TableName == "" || step.MatchExcelColumn == ""
+			missingFields := step.DBMatchField == "" || step.DBValueField == "" || step.OutputColumnName == ""
+			if missingSource || missingFields {
+				return config, fmt.Errorf("第 %d 个匹配步骤配置不完整", i+1)
+			}
+		default:
 			return config, fmt.Errorf("第 %d 个匹配步骤模式不支持: %s", i+1, step.MatchMode)
-		}
-		if step.TableName == "" || step.MatchExcelColumn == "" || step.DBMatchField == "" || step.DBValueField == "" || step.OutputColumnName == "" {
-			return config, fmt.Errorf("第 %d 个匹配步骤配置不完整", i+1)
 		}
 		if step.MatchMode == excelMatchModeOrderItemSKU && (step.SpecExcelColumn == "" || step.PriceExcelColumn == "" || step.QtyExcelColumn == "") {
 			return config, fmt.Errorf("第 %d 个订单商品SKU匹配步骤必须配置规格编码、价格和销售数量列", i+1)
@@ -1052,7 +1064,7 @@ func normalizeExcelExportConfig(config ExcelMatchConfig) (ExcelMatchConfig, erro
 		if err != nil {
 			return config, err
 		}
-		if _, exists := seenOutputs[step.OutputColumnName]; exists {
+		if _, exists := seenOutputs[step.OutputColumnName]; exists && step.MatchMode != excelMatchModeConditionalWrite {
 			return config, fmt.Errorf("匹配步骤输出列名重复: %s", step.OutputColumnName)
 		}
 		seenOutputs[step.OutputColumnName] = struct{}{}
@@ -1143,10 +1155,13 @@ func normalizeExcelMatchFilters(filters []ExcelMatchFilter, scope string) ([]Exc
 }
 
 func validateExcelExportSteps(ctx context.Context, config ExcelMatchConfig, validator ExcelMatchSchemaValidator) error {
-	if validator == nil {
-		return errors.New("数据库结构校验器未初始化")
-	}
 	for i, step := range config.Steps {
+		if step.MatchMode == excelMatchModeConditionalWrite {
+			continue
+		}
+		if validator == nil {
+			return errors.New("数据库结构校验器未初始化")
+		}
 		if err := validator.ValidateTableColumns(ctx, step.TableName, []string{step.DBMatchField, step.DBValueField}); err != nil {
 			return fmt.Errorf("第 %d 个匹配步骤数据库字段校验失败: %w", i+1, err)
 		}
@@ -1517,6 +1532,9 @@ func excelExportColumnFormatsForHeaders(headers []string, byColumn map[string]st
 func excelExportValueForFormat(raw string, format string) interface{} {
 	value := strings.TrimSpace(raw)
 	if value == "" {
+		if format == "" || format == "text" {
+			return raw
+		}
 		return ""
 	}
 	switch format {

@@ -19,6 +19,7 @@ type excelMatchPipelineRow struct {
 
 type excelMatchPipelineLayout struct {
 	headers          []string
+	originalWidth    int
 	columnIndexes    map[string]int
 	stepInputIndexes []int
 	emptyCellFills   []excelEmptyCellFillIndexes
@@ -43,7 +44,10 @@ func processExcelMatchFile(ctx context.Context, inputPath, outputPath string, co
 }
 
 func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excelMatchPipelineLayout, error) {
-	layout := excelMatchPipelineLayout{columnIndexes: make(map[string]int, len(headers)+len(config.Steps))}
+	layout := excelMatchPipelineLayout{
+		originalWidth: len(headers),
+		columnIndexes: make(map[string]int, len(headers)+len(config.Steps)),
+	}
 	layout.headers = append(layout.headers, headers...)
 	originalColumns := make(map[string]struct{}, len(headers))
 	for index, header := range headers {
@@ -63,21 +67,27 @@ func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excel
 		if step.MatchMode == excelMatchModeOrderItemSKU {
 			for _, column := range []string{step.MatchExcelColumn, step.SpecExcelColumn, step.PriceExcelColumn, step.QtyExcelColumn} {
 				if _, ok := originalColumns[column]; !ok {
-					return layout, fmt.Errorf("第 %d 个订单商品SKU匹配步骤缺少Excel列: %s", index+1, column)
+					return layout, fmt.Errorf("第 %d 个订单商品SKU匹配步骤必须使用未被前序条件写入修改的原始Excel列: %s", index+1, column)
 				}
 			}
 			for _, filter := range step.Filters {
 				if _, ok := originalColumns[filter.Column]; !ok {
-					return layout, fmt.Errorf("第 %d 个订单商品SKU匹配步骤筛选只能使用原始Excel列: %s", index+1, filter.Column)
+					return layout, fmt.Errorf("第 %d 个订单商品SKU匹配步骤筛选只能使用未被前序条件写入修改的原始Excel列: %s", index+1, filter.Column)
 				}
 			}
 		}
-		if _, exists := layout.columnIndexes[step.OutputColumnName]; exists {
+		_, outputExists := layout.columnIndexes[step.OutputColumnName]
+		if outputExists && step.MatchMode != excelMatchModeConditionalWrite {
 			return layout, fmt.Errorf("第 %d 个匹配步骤输出列已存在: %s", index+1, step.OutputColumnName)
 		}
 		layout.stepInputIndexes = append(layout.stepInputIndexes, inputIndex)
-		layout.columnIndexes[step.OutputColumnName] = len(layout.headers)
-		layout.headers = append(layout.headers, step.OutputColumnName)
+		if !outputExists {
+			layout.columnIndexes[step.OutputColumnName] = len(layout.headers)
+			layout.headers = append(layout.headers, step.OutputColumnName)
+		}
+		if step.MatchMode == excelMatchModeConditionalWrite {
+			delete(originalColumns, step.OutputColumnName)
+		}
 	}
 	for _, fill := range config.EmptyCellFills {
 		targetIndex, targetExists := layout.columnIndexes[fill.TargetColumn]
@@ -105,6 +115,16 @@ func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excel
 
 func runExcelMatchSteps(ctx context.Context, config ExcelMatchConfig, lookup ExcelMatchLookup, layout excelMatchPipelineLayout, state *excelMatchPipelineState, rows []*excelMatchPipelineRow) error {
 	for stepIndex, step := range config.Steps {
+		if step.MatchMode == excelMatchModeConditionalWrite {
+			for _, row := range rows {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				result := applyExcelConditionalWrite(stepIndex, step, layout, row)
+				row.stepResults = append(row.stepResults, result)
+			}
+			continue
+		}
 		keys := make([]string, 0, len(rows))
 		seen := make(map[string]struct{}, len(rows))
 		eligibleRows := make([]bool, len(rows))
@@ -184,6 +204,38 @@ func runExcelMatchSteps(ctx context.Context, config ExcelMatchConfig, lookup Exc
 	}
 	fillExcelEmptyCells(layout.emptyCellFills, rows)
 	return nil
+}
+
+func applyExcelConditionalWrite(
+	stepIndex int,
+	step ExcelMatchStep,
+	layout excelMatchPipelineLayout,
+	row *excelMatchPipelineRow,
+) ExcelMatchPreviewStepResult {
+	outputIndex := layout.columnIndexes[step.OutputColumnName]
+	if outputIndex >= len(row.values) {
+		row.values = append(row.values, make([]string, outputIndex+1-len(row.values))...)
+	}
+	result := ExcelMatchPreviewStepResult{
+		StepIndex: stepIndex + 1,
+		StepName:  step.Name,
+		Status:    "skipped",
+		Reason:    "未命中本步骤筛选",
+	}
+	if !excelRowMatchesFilters(row.values, layout.columnIndexes, step.Filters) {
+		return result
+	}
+	result.MatchKey = excelMatchRowValue(row.values, layout.stepInputIndexes[stepIndex])
+	if !strings.Contains(result.MatchKey, step.ContainsValue) {
+		result.Reason = "判断列不包含指定文本，保留原值"
+		return result
+	}
+	row.participated = true
+	row.values[outputIndex] = step.WriteValue
+	result.MatchedValue = step.WriteValue
+	result.Status = "matched"
+	result.Reason = "条件成立，已写入指定值"
+	return result
 }
 
 func fillExcelEmptyCells(fills []excelEmptyCellFillIndexes, rows []*excelMatchPipelineRow) {
@@ -272,7 +324,7 @@ func processExcelMatchPreview(ctx context.Context, input *excelize.File, config 
 			if last, ok := lastApplicableExcelMatchStepResult(row.stepResults); ok {
 				sample.MatchKey, sample.MatchedValue, sample.Status, sample.Reason = last.MatchKey, last.MatchedValue, last.Status, last.Reason
 			} else {
-				sample.Status, sample.Reason = "skipped", "未命中任一步骤筛选"
+				sample.Status, sample.Reason = "skipped", "未命中任一步骤条件"
 			}
 			result.Samples = append(result.Samples, sample)
 		}
@@ -297,7 +349,7 @@ func processExcelMatchPreview(ctx context.Context, input *excelize.File, config 
 			continue
 		}
 		result.Stats.TotalRows++
-		values := normalizeExcelRow(columns, len(layout.headers)-len(config.Steps))
+		values := normalizeExcelRow(columns, layout.originalWidth)
 		buffered = append(buffered, &excelMatchPipelineRow{rowNumber: result.Stats.TotalRows + 1, values: values})
 		if len(buffered) >= config.BatchSize {
 			if err := flush(); err != nil {
@@ -439,7 +491,7 @@ func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPat
 			continue
 		}
 		stats.TotalRows++
-		values := normalizeExcelRow(columns, len(layout.headers)-len(config.Steps))
+		values := normalizeExcelRow(columns, layout.originalWidth)
 		buffered = append(buffered, &excelMatchPipelineRow{values: values})
 		if len(buffered) >= config.BatchSize || len(buffered) >= maxBufferedExcelRows {
 			if err := flush(); err != nil {
