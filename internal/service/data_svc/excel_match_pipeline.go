@@ -226,8 +226,12 @@ func applyExcelConditionalWrite(
 		return result
 	}
 	result.MatchKey = excelMatchRowValue(row.values, layout.stepInputIndexes[stepIndex])
-	if !strings.Contains(result.MatchKey, step.ContainsValue) {
-		result.Reason = "判断列不包含指定文本，保留原值"
+	condition := ExcelMatchFilter{Column: step.MatchExcelColumn, Op: step.ConditionOp, Value: step.ContainsValue}
+	if condition.Op == "" {
+		condition.Op = "contains"
+	}
+	if !excelRowMatchesFilters(row.values, layout.columnIndexes, []ExcelMatchFilter{condition}) {
+		result.Reason = "判断列未满足指定条件，保留原值"
 		return result
 	}
 	row.participated = true

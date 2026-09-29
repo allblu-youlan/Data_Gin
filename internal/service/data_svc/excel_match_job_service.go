@@ -196,6 +196,7 @@ type ExcelMatchStep struct {
 	DBMatchField     string             `json:"dbMatchField"`
 	DBValueField     string             `json:"dbValueField"`
 	OutputColumnName string             `json:"outputColumnName"`
+	ConditionOp      string             `json:"conditionOp,omitempty"`
 	ContainsValue    string             `json:"containsValue,omitempty"`
 	WriteValue       string             `json:"writeValue,omitempty"`
 }
@@ -1036,6 +1037,7 @@ func normalizeExcelExportConfig(config ExcelMatchConfig) (ExcelMatchConfig, erro
 		step.DBMatchField = strings.TrimSpace(step.DBMatchField)
 		step.DBValueField = strings.TrimSpace(step.DBValueField)
 		step.OutputColumnName = strings.TrimSpace(step.OutputColumnName)
+		step.ConditionOp = strings.ToLower(strings.TrimSpace(step.ConditionOp))
 		step.ContainsValue = strings.TrimSpace(step.ContainsValue)
 		if step.Name == "" {
 			step.Name = fmt.Sprintf("步骤 %d", i+1)
@@ -1045,8 +1047,20 @@ func normalizeExcelExportConfig(config ExcelMatchConfig) (ExcelMatchConfig, erro
 		}
 		switch step.MatchMode {
 		case excelMatchModeConditionalWrite:
-			if step.MatchExcelColumn == "" || step.ContainsValue == "" || step.OutputColumnName == "" {
-				return config, fmt.Errorf("第 %d 个条件写入步骤必须配置判断列、包含文本和目标列", i+1)
+			if step.MatchExcelColumn == "" || step.OutputColumnName == "" {
+				return config, fmt.Errorf("第 %d 个条件写入步骤必须配置判断列和目标列", i+1)
+			}
+			if step.ConditionOp == "" {
+				step.ConditionOp = "contains"
+			}
+			switch step.ConditionOp {
+			case "contains":
+				if step.ContainsValue == "" {
+					return config, fmt.Errorf("第 %d 个条件写入步骤的包含文本不能为空", i+1)
+				}
+			case "eq", "neq":
+			default:
+				return config, fmt.Errorf("第 %d 个条件写入步骤判断方式不支持: %s", i+1, step.ConditionOp)
 			}
 		case excelMatchModeField, excelMatchModeOrderItemSKU:
 			missingSource := step.TableName == "" || step.MatchExcelColumn == ""
