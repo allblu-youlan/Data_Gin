@@ -114,6 +114,7 @@ export function ExcelMatchStepFields({ step, index, models, onChange, onModelCha
   children?: ReactNode
 }) {
   const conditionalWrite = step.matchMode === 'conditional_write'
+  const comparisonValueRequired = step.conditionOp === 'contains'
   const orderItemSku = step.matchMode === 'order_item_sku'
   return <>
     <div className={styles.stepFields}>
@@ -127,9 +128,19 @@ export function ExcelMatchStepFields({ step, index, models, onChange, onModelCha
         </select>
       </label>
       {!conditionalWrite && <ExcelModelSelector name={`step_table_${index}`} models={models} value={step.tableName} onChange={onModelChange} />}
-      <Field label={conditionalWrite ? '判断包含的 Excel 列' : orderItemSku ? '订单号 Excel 列' : 'Excel 输入列'} name={`step_excel_${index}`} value={step.matchExcelColumn} onChange={(value) => onChange('matchExcelColumn', value)} required />
+      <Field label={conditionalWrite ? '判断 Excel 列' : orderItemSku ? '订单号 Excel 列' : 'Excel 输入列'} name={`step_excel_${index}`} value={step.matchExcelColumn} onChange={(value) => onChange('matchExcelColumn', value)} required />
       {conditionalWrite
-        ? <Field label="包含文本" name={`step_contains_${index}`} value={step.containsValue} onChange={(value) => onChange('containsValue', value)} required pattern=".*\S.*" />
+        ? <>
+            <label>
+              判断方式
+              <select name={`step_condition_op_${index}`} value={step.conditionOp} onChange={(event) => onChange('conditionOp', event.currentTarget.value)}>
+                <option value="contains">包含</option>
+                <option value="eq">等于</option>
+                <option value="neq">不等于</option>
+              </select>
+            </label>
+            <Field label={comparisonValueRequired ? '比较值' : '比较值（留空表示空值）'} name={`step_contains_${index}`} value={step.containsValue} onChange={(value) => onChange('containsValue', value)} required={comparisonValueRequired} pattern={comparisonValueRequired ? '.*\\S.*' : undefined} />
+          </>
         : <>
             <ExcelModelFieldSelector label={orderItemSku ? '数据库订单号字段' : '匹配模型字段'} name={`step_match_${index}`} models={models} tableName={step.tableName} value={step.dbMatchField} onChange={(value) => onChange('dbMatchField', value)} />
             <ExcelModelFieldSelector label={orderItemSku ? '数据库购物明细字段' : '取值模型字段'} name={`step_value_${index}`} models={models} tableName={step.tableName} value={step.dbValueField} onChange={(value) => onChange('dbValueField', value)} />
@@ -142,7 +153,7 @@ export function ExcelMatchStepFields({ step, index, models, onChange, onModelCha
         <Field label="销售数量 Excel 列" name={`step_qty_${index}`} value={step.qtyExcelColumn} onChange={(value) => onChange('qtyExcelColumn', value)} required />
       </>}
     </div>
-    {conditionalWrite && <p className={styles.modeNote}>先通过本步骤筛选，再判断指定列是否包含文本；成立时给同一行目标列写入固定值，未命中保留原值。目标列存在则复用并覆盖，不存在则新增。步骤按序执行，可重复写入同一列，后续步骤读取前面修改后的值，后命中覆盖前值。写入值留空会清空，空格原样保留。</p>}
+    {conditionalWrite && <p className={styles.modeNote}>先通过本步骤筛选，再按所选方式判断指定列；成立时给同一行目标列写入固定值，未命中保留原值。比较时去除首尾空白，按文本判断（例如 001 与 1 不相等）；等于、不等于的比较值留空表示空值。目标列存在则复用并覆盖，不存在则新增。步骤按序执行，可重复写入同一列，后续步骤读取前面修改后的值，后命中覆盖前值。写入值留空会清空，空格原样保留。</p>}
   </>
 }
 

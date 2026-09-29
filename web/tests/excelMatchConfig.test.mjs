@@ -74,6 +74,7 @@ const fallbackStep = {
   dbMatchField: 'matched_docno',
   dbValueField: 'c_store_name',
   outputColumnName: '线下店名称',
+  conditionOp: 'contains',
   containsValue: '',
   writeValue: '',
   specExcelColumn: '',
@@ -126,6 +127,7 @@ test('migrateExcelMatchSteps defaults legacy schemes and steps to field mode', (
   assert.equal(legacyTopLevel[0].matchMode, 'field')
   assert.equal(legacyStep[0].matchMode, 'field')
   assert.equal(legacyStep[0].specExcelColumn, '')
+  assert.equal(legacyTopLevel[0].conditionOp, 'contains')
   assert.equal(legacyTopLevel[0].containsValue, '')
   assert.equal(legacyTopLevel[0].writeValue, '')
   assert.equal(legacyStep[0].containsValue, '')
@@ -148,11 +150,28 @@ test('migrateExcelMatchSteps preserves conditional write rules and defaults new 
   }, fallbackStep)
 
   assert.equal(steps[0].matchMode, 'conditional_write')
+  assert.equal(steps[0].conditionOp, 'contains')
   assert.equal(steps[0].containsValue, '有赞')
   assert.equal(steps[0].writeValue, ' 线上 ')
   assert.equal(steps[0].tableName, '')
   assert.equal(steps[1].containsValue, '')
   assert.equal(steps[1].writeValue, '')
+})
+
+test('migrateExcelMatchSteps preserves equality and inequality conditions including empty comparison values', () => {
+  const steps = migrateExcelMatchSteps({
+    steps: ['eq', 'neq'].map((conditionOp) => ({
+      ...fallbackStep,
+      matchMode: 'conditional_write',
+      conditionOp,
+      containsValue: '',
+      writeValue: ' 标记 ',
+    })),
+  }, fallbackStep)
+
+  assert.deepEqual(steps.map((step) => step.conditionOp), ['eq', 'neq'])
+  assert.deepEqual(steps.map((step) => step.containsValue), ['', ''])
+  assert.deepEqual(steps.map((step) => step.writeValue), [' 标记 ', ' 标记 '])
 })
 
 test('conditional write completeness requires its condition and target but permits clearing without database fields', () => {
@@ -174,6 +193,27 @@ test('conditional write completeness requires its condition and target but permi
   assert.equal(isExcelMatchStepComplete(fallbackStep), true)
   assert.equal(isExcelMatchStepComplete({ ...fallbackStep, matchMode: 'order_item_sku' }), false)
   assert.equal(isExcelMatchStepComplete({ ...fallbackStep, matchMode: 'order_item_sku', specExcelColumn: '规格', priceExcelColumn: '金额', qtyExcelColumn: '数量' }), true)
+})
+
+test('conditional write completeness allows empty equality comparisons but still requires source and target columns', () => {
+  const step = {
+    ...fallbackStep,
+    matchMode: 'conditional_write',
+    tableName: '',
+    dbMatchField: '',
+    dbValueField: '',
+    containsValue: '',
+    writeValue: '',
+  }
+
+  for (const conditionOp of ['eq', 'neq']) {
+    assert.equal(isExcelMatchStepComplete({ ...step, conditionOp }), true)
+    assert.equal(isExcelMatchStepComplete({ ...step, conditionOp, containsValue: ' ' }), true)
+    assert.equal(isExcelMatchStepComplete({ ...step, conditionOp, matchExcelColumn: '' }), false)
+    assert.equal(isExcelMatchStepComplete({ ...step, conditionOp, outputColumnName: '' }), false)
+  }
+  assert.equal(isExcelMatchStepComplete({ ...step, conditionOp: 'contains' }), false)
+  assert.equal(isExcelMatchStepComplete({ ...step, conditionOp: undefined }), false)
 })
 
 test('migrateExcelMatchSteps preserves order item SKU columns', () => {
@@ -248,6 +288,7 @@ test('buildExcelExportConfig emits trimmed order item SKU matching fields', () =
     dbMatchField: 'docno',
     dbValueField: 'items_json',
     outputColumnName: 'SKU',
+    conditionOp: 'contains',
     containsValue: '',
     writeValue: '',
     specExcelColumn: '规格编码',
@@ -278,6 +319,7 @@ test('buildExcelExportConfig preserves sequential conditional writes, whitespace
   })
 
   assert.equal(config.steps[0].matchMode, 'conditional_write')
+  assert.equal(config.steps[0].conditionOp, 'contains')
   assert.equal(config.steps[0].matchExcelColumn, '店铺')
   assert.equal(config.steps[0].containsValue, '有赞')
   assert.equal(config.steps[0].outputColumnName, '渠道')
@@ -286,6 +328,25 @@ test('buildExcelExportConfig preserves sequential conditional writes, whitespace
   assert.equal(config.steps[1].name, '清空渠道')
   assert.equal(config.steps[1].outputColumnName, '渠道')
   assert.equal(config.steps[1].writeValue, '')
+})
+
+test('buildExcelExportConfig keeps comparison operators and text values while preserving literal writes', () => {
+  const config = buildExcelExportConfig({
+    sheetName: 'Sheet1',
+    steps: [
+      { ...fallbackStep, matchMode: 'conditional_write', conditionOp: 'eq', containsValue: ' 001 ', writeValue: ' 等于 ' },
+      { ...fallbackStep, matchMode: 'conditional_write', conditionOp: 'neq', containsValue: ' ', writeValue: '   ' },
+      { ...fallbackStep, matchMode: 'conditional_write', conditionOp: 'eq', containsValue: '', writeValue: '' },
+      { ...fallbackStep, matchMode: 'conditional_write', conditionOp: undefined, containsValue: ' 有赞 ' },
+    ],
+    emptyCellFills: [],
+    exportColumnFormats: [],
+    batchSize: 1000,
+  })
+
+  assert.deepEqual(config.steps.map((step) => step.conditionOp), ['eq', 'neq', 'eq', 'contains'])
+  assert.deepEqual(config.steps.map((step) => step.containsValue), ['001', '', '', '有赞'])
+  assert.deepEqual(config.steps.map((step) => step.writeValue), [' 等于 ', '   ', '', ''])
 })
 
 test('buildExcelExportConfig trims and keeps empty cell fill rules', () => {

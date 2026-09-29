@@ -43,7 +43,7 @@ export const excelMatchFilterOperatorOptions = [
 ]
 export const defaultExcelExportScheme: ExcelExportSchemeConfig = {
   sheetName: 'Sheet1',
-  steps: [{ name: '匹配伯俊门店', filters: [{ column: '店铺', op: 'eq', value: '幼岚-有赞' }], matchMode: 'field', tableName: 'bojun_retail_orders', matchExcelColumn: '原始线上订单号', dbMatchField: 'matched_docno', dbValueField: 'c_store_name', outputColumnName: '线下店名称', containsValue: '', writeValue: '', specExcelColumn: '', priceExcelColumn: '', qtyExcelColumn: '' }],
+  steps: [{ name: '匹配伯俊门店', filters: [{ column: '店铺', op: 'eq', value: '幼岚-有赞' }], matchMode: 'field', tableName: 'bojun_retail_orders', matchExcelColumn: '原始线上订单号', dbMatchField: 'matched_docno', dbValueField: 'c_store_name', outputColumnName: '线下店名称', conditionOp: 'contains', containsValue: '', writeValue: '', specExcelColumn: '', priceExcelColumn: '', qtyExcelColumn: '' }],
   emptyCellFills: [], exportColumnFormats: '', batchSize: '1000',
 }
 export const defaultExcelImportScheme: ExcelImportSchemeConfig = { sheetName: 'Sheet1', tableName: 'bojun_retail_orders', dbMatchField: 'docno', matchExcelColumn: '外部订单编号', writeMappings: [{ dbWriteField: 'matched_docno', writeExcelColumn: '订单号' }], batchSize: '1000' }

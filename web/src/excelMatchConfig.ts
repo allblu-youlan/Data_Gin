@@ -15,6 +15,7 @@ export type ExcelImportWriteMappingConfig = {
 }
 
 export type ExcelMatchMode = 'field' | 'order_item_sku' | 'conditional_write'
+export type ExcelMatchConditionOp = 'contains' | 'eq' | 'neq'
 
 export type ExcelMatchStepConfig = {
   name: string
@@ -25,6 +26,7 @@ export type ExcelMatchStepConfig = {
   dbMatchField: string
   dbValueField: string
   outputColumnName: string
+  conditionOp: ExcelMatchConditionOp
   containsValue: string
   writeValue: string
   specExcelColumn: string
@@ -103,9 +105,13 @@ function normalizeMatchMode(value: unknown): ExcelMatchMode {
   return value === 'order_item_sku' || value === 'conditional_write' ? value : 'field'
 }
 
+function normalizeConditionOp(value: unknown): ExcelMatchConditionOp {
+  return value === 'eq' || value === 'neq' ? value : 'contains'
+}
+
 export function isExcelMatchStepComplete(step: ExcelMatchStepConfig) {
   if (!step.name.trim() || !step.matchExcelColumn.trim() || !step.outputColumnName.trim()) return false
-  if (step.matchMode === 'conditional_write') return Boolean(step.containsValue.trim())
+  if (step.matchMode === 'conditional_write') return normalizeConditionOp(step.conditionOp) !== 'contains' || Boolean(step.containsValue.trim())
   if (!step.tableName.trim() || !step.dbMatchField.trim() || !step.dbValueField.trim()) return false
   return step.matchMode !== 'order_item_sku' || Boolean(step.specExcelColumn.trim() && step.priceExcelColumn.trim() && step.qtyExcelColumn.trim())
 }
@@ -224,6 +230,7 @@ export function migrateExcelMatchSteps(config: ExcelMatchSchemeSource, fallbackS
         dbMatchField: step.dbMatchField ?? '',
         dbValueField: step.dbValueField ?? '',
         outputColumnName: step.outputColumnName ?? '',
+        conditionOp: normalizeConditionOp(step.conditionOp),
         containsValue: step.containsValue ?? '',
         writeValue: step.writeValue ?? '',
         specExcelColumn: step.specExcelColumn ?? '',
@@ -239,6 +246,7 @@ export function migrateExcelMatchSteps(config: ExcelMatchSchemeSource, fallbackS
         dbMatchField: config.dbMatchField || fallbackStep.dbMatchField,
         dbValueField: config.dbValueField || fallbackStep.dbValueField,
         outputColumnName: config.outputColumnName || fallbackStep.outputColumnName,
+        conditionOp: 'contains',
         containsValue: '',
         writeValue: '',
         specExcelColumn: '',
@@ -274,6 +282,7 @@ export function buildExcelExportConfig(input: ExcelExportConfigInput) {
       dbMatchField: step.dbMatchField.trim(),
       dbValueField: step.dbValueField.trim(),
       outputColumnName: step.outputColumnName.trim(),
+      conditionOp: normalizeConditionOp(step.conditionOp),
       containsValue: step.containsValue.trim(),
       writeValue: step.writeValue,
       specExcelColumn: step.specExcelColumn.trim(),
