@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -36,11 +37,19 @@ type botTokenProvider interface {
 }
 
 type BotError struct {
-	Class     providerhttp.ErrorClass
-	Retryable bool
-	HTTPCode  int
-	Code      int
-	cause     error
+	Class      providerhttp.ErrorClass
+	Retryable  bool
+	HTTPCode   int
+	Code       int
+	RetryAfter time.Duration
+	cause      error
+}
+
+func (err *BotError) RetryDelay() time.Duration {
+	if err == nil {
+		return 0
+	}
+	return err.RetryAfter
 }
 
 func (err *BotError) Error() string {
@@ -101,7 +110,7 @@ func (client *BotClient) UploadFile(ctx context.Context, path, fileName string) 
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		fileKey, status, requestErr := client.uploadFileOnce(ctx, token, path, fileName)
-		if status == http.StatusUnauthorized && attempt == 0 {
+		if shouldRefreshBotToken(status, requestErr) && attempt == 0 {
 			token, err = client.tokens.Refresh(ctx)
 			if err != nil {
 				return "", err
@@ -161,7 +170,7 @@ func (client *BotClient) send(ctx context.Context, receiveIDType, receiveID, mes
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		messageID, status, requestErr := client.sendOnce(ctx, token, receiveIDType, payload)
-		if status == http.StatusUnauthorized && attempt == 0 {
+		if shouldRefreshBotToken(status, requestErr) && attempt == 0 {
 			token, err = client.tokens.Refresh(ctx)
 			if err != nil {
 				return "", err
@@ -236,10 +245,10 @@ func (client *BotClient) do(request *http.Request, upload bool) (string, int, er
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		classification := providerhttp.ClassifyRetry(response.StatusCode, nil)
-		return "", response.StatusCode, &BotError{Class: classification.Class, Retryable: classification.Retryable, HTTPCode: response.StatusCode}
+		return "", response.StatusCode, &BotError{Class: classification.Class, Retryable: classification.Retryable, HTTPCode: response.StatusCode, RetryAfter: botRetryAfter(response.Header, time.Now())}
 	}
 	var decoded struct {
-		Code int `json:"code"`
+		Code *int `json:"code"`
 		Data struct {
 			FileKey   string `json:"file_key"`
 			MessageID string `json:"message_id"`
@@ -252,8 +261,15 @@ func (client *BotClient) do(request *http.Request, upload bool) (string, int, er
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return "", response.StatusCode, &BotError{Class: providerhttp.ErrorClassResponse, HTTPCode: response.StatusCode, cause: fmt.Errorf("response contains trailing data")}
 	}
-	if decoded.Code != 0 {
-		return "", response.StatusCode, &BotError{Class: providerhttp.ErrorClassRequest, HTTPCode: response.StatusCode, Code: decoded.Code}
+	if decoded.Code == nil {
+		return "", response.StatusCode, &BotError{Class: providerhttp.ErrorClassResponse, HTTPCode: response.StatusCode}
+	}
+	if *decoded.Code != 0 {
+		classification := classifyBotBusinessCode(*decoded.Code)
+		return "", response.StatusCode, &BotError{Class: classification.Class, Retryable: classification.Retryable, HTTPCode: response.StatusCode, Code: *decoded.Code, RetryAfter: botRetryAfter(response.Header, time.Now())}
+	}
+	if request.Method == http.MethodPatch {
+		return "", response.StatusCode, nil
 	}
 	value := decoded.Data.MessageID
 	if upload {
