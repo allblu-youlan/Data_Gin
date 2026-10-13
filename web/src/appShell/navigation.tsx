@@ -53,6 +53,11 @@ export type NavKey =
   | 'report_exports'
   | 'office_messages'
   | 'office_push'
+  | 'mention_chats'
+  | 'mention_recipients'
+  | 'mention_reports'
+  | 'mention_jobs'
+  | 'mention_status'
 
 export type NavItem = { key: NavKey; label: string; description: string; icon: ReactNode }
 export type NavGroup = { label: string; items: NavItem[] }
@@ -106,6 +111,16 @@ export const navGroups: NavGroup[] = [
       { key: 'office_push', label: '推送管理', description: '飞书与 WebDAV 推送记录', icon: <Send aria-hidden="true" /> },
     ],
   },
+  {
+    label: '飞书群提醒',
+    items: [
+      { key: 'mention_chats', label: '监控群', description: '来源群白名单与启停', icon: <Users aria-hidden="true" /> },
+      { key: 'mention_recipients', label: '@ 消息记录', description: '群原文与本人确认记录', icon: <Inbox aria-hidden="true" /> },
+      { key: 'mention_reports', label: '每日报告', description: '每群每人的固定总结', icon: <FileSpreadsheet aria-hidden="true" /> },
+      { key: 'mention_jobs', label: '发送任务', description: '发送结果与失败重试', icon: <Send aria-hidden="true" /> },
+      { key: 'mention_status', label: '模块状态', description: '当前连接与共享积压', icon: <Activity aria-hidden="true" /> },
+    ],
+  },
   { label: '账号与权限', items: [{ key: 'access_management', label: '账号与权限', description: '控制台账号、角色与审计', icon: <Users aria-hidden="true" /> }] },
   {
     label: '数据处理',
@@ -141,6 +156,7 @@ const compactWorkspaceKeys = new Set<NavKey>([
   'mall_weather', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
   'excel_schemes', 'excel_write',
   'office_messages', 'office_push',
+  'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',
 ])
 
 export function navGroupFor(key: NavKey) {

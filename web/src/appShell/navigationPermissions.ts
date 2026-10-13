@@ -38,6 +38,8 @@ function navPermission(key: string) {
     destinations: 'delivery.read', tasks: 'delivery.read', push_policy: 'delivery.read', runs: 'pipeline.read', step_runs: 'pipeline.read',
     delivery_logs: 'delivery.read', excel_jobs: 'excel.read', excel_schemes: 'excel.read', excel_write: 'excel.manage',
     office_messages: 'office_message.read', office_push: 'office_message.read',
+    mention_chats: 'office_mention.manage', mention_status: 'office_mention.manage',
+    mention_recipients: 'office_mention.read', mention_reports: 'office_mention.read', mention_jobs: 'office_mention.read',
   }
   return permissions[key]
 }

@@ -21,6 +21,8 @@ import { DeliveryLogsPage } from '../monitoringPages/DeliveryLogsPage/DeliveryLo
 import { PipelineRunsPage } from '../monitoringPages/PipelineRunsPage/PipelineRunsPage'
 import { RunOverviewPage } from '../monitoringPages/RunOverviewPage/RunOverviewPage'
 import { StepRunsPage } from '../monitoringPages/StepRunsPage/StepRunsPage'
+import { OfficeMentionPage } from '../officeMention/OfficeMentionPage'
+import type { MentionSection } from '../officeMention/types'
 import { MessageManagementPage } from '../officeMessage/MessageManagementPage'
 import { PushManagementPage } from '../officeMessage/PushManagementPage'
 import type { DeliveryLog, PipelineRun } from '../monitoringPages/types'
@@ -101,6 +103,9 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   if (activeNav === 'mall_weather') return <MallWeatherPage actorID={actorID} client={client} downloadFile={downloadFile} />
   if (activeNav === 'office_messages') return <MessageManagementPage client={client} permissions={permissions} />
   if (activeNav === 'office_push') return <PushManagementPage client={client} permissions={permissions} />
+  const mentionSections: Partial<Record<NavKey, MentionSection>> = { mention_chats: 'chats', mention_recipients: 'recipients', mention_reports: 'reports', mention_jobs: 'jobs', mention_status: 'status' }
+  const mentionSection = mentionSections[activeNav]
+  if (mentionSection) return <OfficeMentionPage key={mentionSection} client={client} permissions={permissions} section={mentionSection} />
   if (reportSection) return <ReportCenter client={client} permissions={permissions} section={reportSection} onNavigate={(section) => navigate(reportCenterNavKey(section))} />
   if (activeNav === 'access_management') return <AccessManagementPage client={client} permissions={permissions} />
   if (activeNav === 'sources') return <SourcesPage client={client} onFetchSource={onFetchSource} onTestSource={onTestSource} refreshVersion={refreshVersion} />
