@@ -72,6 +72,20 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestFeishuAppDoesNotRequireWeatherResources(t *testing.T) {
+	for _, name := range allNames() {
+		t.Setenv(name, "")
+	}
+	t.Setenv(EnvFeishuAppID, "cli_example_app")
+	t.Setenv(EnvFeishuAppSecret, "configured-application-secret")
+	if _, err := Load(Requirements{RequireFeishuApp: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(Requirements{RequireFeishu: true}); err == nil {
+		t.Fatal("weather resource validation was bypassed")
+	}
+}
+
 func TestConfigCannotSerializeCredentials(t *testing.T) {
 	t.Setenv(EnvCaiyunAppSecret, "do-not-serialize")
 	cfg, err := Load(Requirements{})

@@ -210,3 +210,22 @@ Storage:
     ParallelNum: ${ALIYUN_OSS_PARALLEL_NUM:-3}
     EnableCheckpoint: ${ALIYUN_OSS_ENABLE_CHECKPOINT:-true}
     CheckpointDir: ${ALIYUN_OSS_CHECKPOINT_DIR:-}
+
+FeishuMention:
+  Enabled: false
+  ReceiverEnabled: false
+  Timezone: Asia/Shanghai
+  PersonalReminderEnabled: false
+  FollowupEnabled: false
+  DefaultFollowupMinutes: 30
+  MaxFollowups: 1
+  GroupFallbackEnabled: false
+  DigestEnabled: true
+  DigestTime: "18:00"
+  DigestSkipEmpty: true
+  AIEnabled: false
+  APITimeoutSeconds: 10
+  DeliveryLeaseSeconds: 60
+  MaxAttempts: 5
+  SendRatePerSecond: 5
+  RetentionDays: 90

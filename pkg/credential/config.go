@@ -32,6 +32,7 @@ type Requirements struct {
 	Production         bool
 	RequireMallWeather bool
 	RequireFeishu      bool
+	RequireFeishuApp   bool
 }
 
 // Config intentionally keeps every value private so encoding/json, YAML and
@@ -87,6 +88,10 @@ func Load(requirements Requirements) (Config, error) {
 
 func requiredNames(requirements Requirements) map[string]bool {
 	required := make(map[string]bool)
+	if requirements.RequireFeishuApp {
+		required[EnvFeishuAppID] = true
+		required[EnvFeishuAppSecret] = true
+	}
 	if requirements.RequireMallWeather {
 		for _, name := range []string{EnvAmapWebServiceKey, EnvCaiyunAppKey, EnvCaiyunAppSecret} {
 			required[name] = true
