@@ -1,6 +1,7 @@
 package data_svc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	appconfig "gin-biz-web-api/config"
@@ -107,5 +108,27 @@ func TestFeishuMentionAdminUsesShanghaiTimesWithoutChangingInstant(t *testing.T)
 	service := NewFeishuMentionAdminService(nil, "cli", appconfig.FeishuMentionConfig{})
 	if service.now().Location().String() != "Asia/Shanghai" {
 		t.Fatal("admin clock must use Shanghai")
+	}
+}
+
+func TestFeishuMentionAdminStatusKeepsPauseReasonWithoutDatabase(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  appconfig.FeishuMentionConfig
+		want string
+	}{
+		{"module off", appconfig.FeishuMentionConfig{}, "模块已关闭"},
+		{"digest off", appconfig.FeishuMentionConfig{Enabled: true}, "日报已暂停，恢复后按原统计日补建"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewFeishuMentionAdminService(nil, "cli_current", tc.cfg)
+			status, err := service.Status(context.Background())
+			if err != nil || status["pauseReason"] != tc.want || status["appId"] != "cli_current" {
+				t.Fatalf("status=%+v error=%v", status, err)
+			}
+			if status["backlog"] != nil || status["observations"] != nil {
+				t.Fatal("unavailable database must not appear to have zero backlog")
+			}
+		})
 	}
 }

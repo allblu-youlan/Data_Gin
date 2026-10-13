@@ -712,7 +712,13 @@ func (s *FeishuMentionAdminService) Status(ctx context.Context) (map[string]inte
 	if queueFn != nil {
 		queue = queueFn(ctx)
 	}
-	status := map[string]interface{}{"enabled": s.config.Enabled, "timezone": s.config.Timezone, "personalReminderEnabled": s.config.PersonalReminderEnabled, "followupEnabled": s.config.FollowupEnabled, "digestEnabled": s.config.DigestEnabled, "receiver": receiver, "backlog": nil, "digest": map[string]interface{}{"nextWindowStartAt": nil, "nextCutoffAt": nil, "lastPlannedAt": nil}, "dependencies": map[string]interface{}{"database": nil, "queue": queue}}
+	pauseReason := ""
+	if !s.config.Enabled {
+		pauseReason = "模块已关闭"
+	} else if !s.config.DigestEnabled {
+		pauseReason = "日报已暂停，恢复后按原统计日补建"
+	}
+	status := map[string]interface{}{"appId": s.dao.AppID, "enabled": s.config.Enabled, "timezone": s.config.Timezone, "personalReminderEnabled": s.config.PersonalReminderEnabled, "followupEnabled": s.config.FollowupEnabled, "digestEnabled": s.config.DigestEnabled, "receiver": receiver, "backlog": nil, "observations": nil, "pauseReason": pauseReason, "digest": map[string]interface{}{"scheduleEnabled": nil, "nextWindowStartAt": nil, "nextCutoffAt": nil, "lastPlannedAt": nil}, "dependencies": map[string]interface{}{"database": nil, "queue": queue}}
 	if e := s.ready(); e != nil {
 		return status, nil
 	}
@@ -737,15 +743,20 @@ func (s *FeishuMentionAdminService) Status(ctx context.Context) (map[string]inte
 		return nil, e
 	}
 	if schedule != nil {
-		status["digest"] = map[string]interface{}{"nextWindowStartAt": schedule.NextWindowStartAt.In(mentionLocation()), "nextCutoffAt": schedule.NextCutoffAt.In(mentionLocation()), "lastPlannedAt": mentionAdminTime(schedule.LastPlannedAt)}
+		status["digest"] = map[string]interface{}{"scheduleEnabled": schedule.Enabled, "nextWindowStartAt": schedule.NextWindowStartAt.In(mentionLocation()), "nextCutoffAt": schedule.NextCutoffAt.In(mentionLocation()), "lastPlannedAt": mentionAdminTime(schedule.LastPlannedAt)}
+		if pauseReason == "" && !schedule.Enabled {
+			status["pauseReason"] = "日报调度已暂停，恢复后按原统计日补建"
+		}
 	}
-	if !s.config.Enabled {
-		status["pauseReason"] = "模块已关闭"
-	} else if !s.config.DigestEnabled {
-		status["pauseReason"] = "日报已暂停，恢复后按原统计日补建"
-	} else {
-		status["pauseReason"] = ""
+	observations, e := s.dao.Observations(ctx, s.now(), schedule)
+	if e != nil {
+		return nil, e
 	}
+	observations.Outbox.EarliestAvailableAt = mentionAdminTime(observations.Outbox.EarliestAvailableAt)
+	observations.Delivery.OldestWaitingAt = mentionAdminTime(observations.Delivery.OldestWaitingAt)
+	observations.Delivery.EarliestLeaseUntil = mentionAdminTime(observations.Delivery.EarliestLeaseUntil)
+	observations.Archive.LatestReceivedAt = mentionAdminTime(observations.Archive.LatestReceivedAt)
+	status["observations"] = observations
 	return status, nil
 }
 

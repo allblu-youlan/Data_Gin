@@ -225,16 +225,8 @@ func (d *FeishuMentionAdminDAO) Audit(ctx context.Context, row *model.AuthAudit)
 	return d.DB.WithContext(ctx).Create(row).Error
 }
 func (d *FeishuMentionAdminDAO) Backlog(ctx context.Context) (map[string]int64, error) {
-	var rows []struct {
-		Status string
-		Count  int64
-	}
-	err := d.DB.WithContext(ctx).Model(&model.FeishuDeliveryJob{}).Select("status, COUNT(*) AS count").Where("app_id = ?", d.AppID).Group("status").Scan(&rows).Error
-	result := map[string]int64{}
-	for _, row := range rows {
-		result[row.Status] = row.Count
-	}
-	return result, err
+	return mentionAdminStatusCounts(d.DB.WithContext(ctx).Model(&model.FeishuDeliveryJob{}).
+		Where("app_id = ?", d.AppID).Select("status, COUNT(*) AS count").Group("status"))
 }
 func (d *FeishuMentionAdminDAO) Schedule(ctx context.Context) (*model.FeishuDigestSchedule, error) {
 	var row model.FeishuDigestSchedule

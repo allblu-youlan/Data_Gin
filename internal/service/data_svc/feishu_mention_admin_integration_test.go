@@ -4,6 +4,7 @@ package data_svc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -186,6 +187,14 @@ func TestFeishuMentionAdminMySQLDailyPauseAndFrozenPart(t *testing.T) {
 	if _, err := admin.Retry(ctx, 7, job.ID); !errors.Is(err, ErrFeishuMentionAdminPaused) {
 		t.Fatalf("paused schedule accepted retry: %v", err)
 	}
+	status, err := admin.Status(ctx)
+	if err != nil || status["pauseReason"] != "日报调度已暂停，恢复后按原统计日补建" {
+		t.Fatalf("paused schedule missing from status: %+v %v", status, err)
+	}
+	observations := status["observations"].(*data_dao.FeishuMentionAdminObservations)
+	if observations.Delivery.DigestPartsFailed != 1 || observations.Reports["ready"] != 1 {
+		t.Fatalf("missing report statistics: %+v", observations)
+	}
 	if err := core.db.Model(&model.FeishuDigestSchedule{}).Where("app_id = ?", core.appID).Update("enabled", true).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -200,5 +209,66 @@ func TestFeishuMentionAdminMySQLDailyPauseAndFrozenPart(t *testing.T) {
 	fixed, err := admin.Report(ctx, report.ID)
 	if err != nil || fixed.ChatName != "chat_a" || fixed.MessageCount != 1 || fixed.Status != "ready" {
 		t.Fatalf("snapshot changed: %+v error=%v", fixed, err)
+	}
+}
+
+func TestFeishuMentionAdminMySQLStatusObservationsAndDefaultInterval(t *testing.T) {
+	core, admin := mentionAdminFixture(t)
+	other, _ := mentionMySQLFixture(t, true)
+	ctx := context.Background()
+	for _, message := range []string{"status-pending", "status-sending", "status-failed"} {
+		if err := core.Archive(ctx, mentionTestEvent(core, "chat_a", message, "user_a")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := other.Archive(ctx, mentionTestEvent(other, "chat_a", "other-app-private", "user_a")); err != nil {
+		t.Fatal(err)
+	}
+	var jobs []model.FeishuDeliveryJob
+	if err := core.db.Where("app_id = ?", core.appID).Order("id").Find(&jobs).Error; err != nil || len(jobs) != 3 {
+		t.Fatalf("jobs=%v error=%v", jobs, err)
+	}
+	expired := core.now().Add(-time.Minute)
+	if err := core.db.Model(&jobs[1]).Updates(map[string]interface{}{"status": "sending", "lease_until": expired}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := core.db.Model(&jobs[2]).Updates(map[string]interface{}{"status": "failed", "job_type": "card_update"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := core.db.Model(&model.AsyncJobOutbox{}).Where("task_key = ?", fmt.Sprintf("feishu-mention:%d:g:1", jobs[1].ID)).Update("published_at", core.now()).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := core.db.Model(&model.AsyncJobOutbox{}).Where("task_key = ?", fmt.Sprintf("feishu-mention:%d:g:1", jobs[0].ID)).Updates(map[string]interface{}{"attempts": 2, "last_error_safe": "queue unavailable"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	status, err := admin.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := status["observations"].(*data_dao.FeishuMentionAdminObservations)
+	if got.Archive.Messages != 3 || got.Archive.EnabledChats != 2 || got.Archive.WindowMessages == nil || *got.Archive.WindowMessages != 3 || got.Confirmation["pending"] != 3 {
+		t.Fatalf("wrong app-scoped archive counts: %+v", got)
+	}
+	if got.Outbox.Unpublished != 2 || got.Outbox.PublishFailed != 1 || got.Outbox.EarliestAvailableAt == nil {
+		t.Fatalf("wrong outbox counts: %+v", got.Outbox)
+	}
+	if got.Delivery.DueWaiting != 1 || got.Delivery.ExpiredLeases != 1 || got.Delivery.CardUpdateFailed != 1 || got.Delivery.OldestWaitingAt == nil || !got.Delivery.EarliestLeaseUntil.Equal(expired) {
+		t.Fatalf("wrong delivery observations: %+v", got.Delivery)
+	}
+	encoded, err := json.Marshal(status)
+	if err != nil || strings.Contains(string(encoded), "本期内容") || strings.Contains(string(encoded), "other-app-private") || !strings.Contains(string(encoded), "+08:00") {
+		t.Fatalf("unsafe status or incorrect timezone: %s %v", encoded, err)
+	}
+	admin.config.DefaultFollowupMinutes = 47
+	id, name, enabled, external := "default_interval", "默认间隔测试", true, false
+	chat, err := admin.SaveChat(ctx, 7, 0, FeishuMentionChatInput{ChatID: &id, ChatName: &name, IsExternal: &external, Enabled: &enabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		core.db.Where("target_type = ? AND target_id = ?", "feishu_chat", chat.ID).Delete(&model.AuthAudit{})
+	})
+	if chat.FollowupMinutes != 47 {
+		t.Fatalf("omitted interval must use configured default, got %d", chat.FollowupMinutes)
 	}
 }
