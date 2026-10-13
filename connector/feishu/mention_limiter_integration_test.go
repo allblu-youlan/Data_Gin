@@ -18,8 +18,15 @@ func TestMentionSendLimiterSharesRedisQuota(t *testing.T) {
 	if addr == "" {
 		t.Skip("FEISHU_MENTION_REDIS_ADDR is required for Redis integration tests")
 	}
-	client := redis.NewClient(&redis.Options{Addr: addr, DB: 15})
+	client := redis.NewClient(&redis.Options{Addr: addr, DB: 15, DialTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, MaxRetries: 1})
 	t.Cleanup(func() { _ = client.Close() })
+	cleanupKey := func(key string) {
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = client.Del(ctx, key).Err()
+		})
+	}
 	appID := "integration-" + uuid.NewString()
 	first, err := NewMentionSendLimiter(client, appID, 1)
 	if err != nil {
@@ -38,17 +45,19 @@ func TestMentionSendLimiterSharesRedisQuota(t *testing.T) {
 	if err := client.PExpire(ctx, first.key, time.Minute).Err(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.Del(context.Background(), first.key).Err() })
-	waitCtx, stop := context.WithTimeout(ctx, 30*time.Millisecond)
+	cleanupKey(first.key)
+	waitCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer stop()
-	if err := second.Wait(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
+	// Cancellation may happen during either the Redis command or the timer;
+	// both paths must stop without granting a second permit.
+	if err := second.Wait(waitCtx); err == nil || !errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("another worker bypassed the shared permit: %v", err)
 	}
 	other, err := NewMentionSendLimiter(client, appID+"-other", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.Del(context.Background(), other.key).Err() })
+	cleanupKey(other.key)
 	if err := other.Wait(ctx); err != nil {
 		t.Fatalf("another application's quota was blocked: %v", err)
 	}
