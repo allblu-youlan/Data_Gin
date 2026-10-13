@@ -29,6 +29,7 @@ func TestFeishuMentionMigrationRetainsUpgradeBaseline(t *testing.T) {
 }
 
 func TestFeishuMentionSchedulerIndependentOfPersonalAndWeatherFlags(t *testing.T) {
+	loadReportCenterConfig(t, "")
 	v := config.Instance()
 	keys := []string{"cfg.feishu_mention.enabled", "cfg.feishu_mention.personal_reminder_enabled", "cfg.feishu_mention.digest_enabled"}
 	for _, key := range keys {
