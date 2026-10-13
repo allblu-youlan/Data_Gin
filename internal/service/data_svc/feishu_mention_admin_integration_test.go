@@ -74,6 +74,52 @@ func TestFeishuMentionAdminMySQLScopePaginationAndPause(t *testing.T) {
 		t.Fatalf("audit count %d", count)
 	}
 }
+
+func TestFeishuMentionAdminMySQLLongReportPaginationKeepsFrozenContent(t *testing.T) {
+	core, admin := mentionAdminFixture(t)
+	ctx := context.Background()
+	longText := strings.Repeat("长日报原文。", 100000)
+	dates := []string{"2026-10-11", "2026-10-13", "2026-10-12", "2026-10-13"}
+	reports := make([]model.FeishuDailyReport, len(dates))
+	for i, date := range dates {
+		snapshot, err := json.Marshal(model.FeishuDigestSnapshot{
+			ChatName: fmt.Sprintf("生成时群名%d", i), RecipientName: fmt.Sprintf("生成时人员%d", i),
+			MessageCount: 1, Messages: []model.FeishuDigestMessage{{DisplayText: longText}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		reports[i] = model.FeishuDailyReport{
+			AppID: core.appID, ChatID: "chat_a", RecipientOpenID: fmt.Sprintf("user_%d", i),
+			ReportDate: date, WindowStart: core.now().Add(-24 * time.Hour), WindowEnd: core.now(),
+			GeneratedAt: core.now(), Status: "ready", PartCount: 1, ContentSnapshot: model.JSONText(snapshot),
+		}
+		if err := core.db.Create(&reports[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Dates are deliberately inserted out of order; equal dates use descending ID.
+	for page, indices := range [][]int{{3, 1}, {2, 0}, {}} {
+		rows, pagination, err := admin.Reports(ctx, data_dao.FeishuMentionAdminFilter{Page: page + 1, PerPage: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != len(indices) || pagination.Page != page+1 || pagination.TotalCount != 4 || pagination.TotalPage != 2 {
+			t.Fatalf("page=%+v rows=%d", pagination, len(rows))
+		}
+		for position, index := range indices {
+			row := rows[position]
+			if row.ID != reports[index].ID || row.ReportDate != dates[index] || row.ChatName != fmt.Sprintf("生成时群名%d", index) || row.RecipientName != fmt.Sprintf("生成时人员%d", index) || row.MessageCount != 1 {
+				t.Fatalf("page %d position %d lost ordering or frozen content: %+v", page+1, position, row)
+			}
+		}
+	}
+	messages, pagination, err := admin.ReportMessages(ctx, reports[3].ID, data_dao.FeishuMentionAdminFilter{Page: 1, PerPage: 20})
+	if err != nil || pagination.TotalCount != 1 || len(messages) != 1 || messages[0].DisplayText != longText {
+		t.Fatalf("long snapshot changed: messages=%d pagination=%+v error=%v", len(messages), pagination, err)
+	}
+}
+
 func TestFeishuMentionAdminMySQLRetryAtomicAndConcurrent(t *testing.T) {
 	core, admin := mentionAdminFixture(t)
 	ctx := context.Background()

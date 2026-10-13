@@ -145,8 +145,26 @@ func (d *FeishuMentionAdminDAO) Reports(ctx context.Context, f FeishuMentionAdmi
 	if f.ReportDateFrom != "" {
 		q = q.Where("report_date >= ? AND report_date <= ?", f.ReportDateFrom, f.ReportDateTo)
 	}
-	p, err := mentionPage(q.Order("report_date DESC, id DESC"), f, &rows)
-	return rows, p, err
+	// Keep large immutable snapshots out of MySQL's filesort buffer.
+	var ids []uint
+	p, err := mentionPage(q.Select("id").Order("report_date DESC, id DESC"), f, &ids)
+	if err != nil || len(ids) == 0 {
+		return rows, p, err
+	}
+	var fetched []model.FeishuDailyReport
+	if err := d.DB.WithContext(ctx).Where("app_id = ? AND id IN ?", d.AppID, ids).Find(&fetched).Error; err != nil {
+		return rows, p, err
+	}
+	byID := make(map[uint]model.FeishuDailyReport, len(fetched))
+	for _, row := range fetched {
+		byID[row.ID] = row
+	}
+	for _, id := range ids {
+		if row, ok := byID[id]; ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows, p, nil
 }
 func (d *FeishuMentionAdminDAO) Report(ctx context.Context, id uint) (*model.FeishuDailyReport, error) {
 	var row model.FeishuDailyReport
