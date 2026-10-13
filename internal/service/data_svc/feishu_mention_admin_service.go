@@ -718,7 +718,7 @@ func (s *FeishuMentionAdminService) Status(ctx context.Context) (map[string]inte
 	} else if !s.config.DigestEnabled {
 		pauseReason = "日报已暂停，恢复后按原统计日补建"
 	}
-	status := map[string]interface{}{"appId": s.dao.AppID, "enabled": s.config.Enabled, "timezone": s.config.Timezone, "personalReminderEnabled": s.config.PersonalReminderEnabled, "followupEnabled": s.config.FollowupEnabled, "digestEnabled": s.config.DigestEnabled, "receiver": receiver, "backlog": nil, "observations": nil, "pauseReason": pauseReason, "digest": map[string]interface{}{"scheduleEnabled": nil, "nextWindowStartAt": nil, "nextCutoffAt": nil, "lastPlannedAt": nil}, "dependencies": map[string]interface{}{"database": nil, "queue": queue}}
+	status := map[string]interface{}{"appId": s.dao.AppID, "enabled": s.config.Enabled, "timezone": s.config.Timezone, "personalReminderEnabled": s.config.PersonalReminderEnabled, "followupEnabled": s.config.FollowupEnabled, "digestEnabled": s.config.DigestEnabled, "digestTime": s.config.DigestTime, "receiver": receiver, "backlog": nil, "observations": nil, "pauseReason": pauseReason, "digest": map[string]interface{}{"scheduleEnabled": nil, "nextWindowStartAt": nil, "nextCutoffAt": nil, "lastPlannedAt": nil}, "dependencies": map[string]interface{}{"database": nil, "queue": queue}}
 	if e := s.ready(); e != nil {
 		return status, nil
 	}

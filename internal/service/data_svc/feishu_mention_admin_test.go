@@ -132,3 +132,38 @@ func TestFeishuMentionAdminStatusKeepsPauseReasonWithoutDatabase(t *testing.T) {
 		})
 	}
 }
+
+func TestFeishuMentionAdminStatusExposesConfiguredDigestTime(t *testing.T) {
+	for _, tc := range []struct {
+		time    string
+		enabled bool
+	}{
+		{"18:00", true},
+		{"20:30", true},
+		{"00:05", false},
+	} {
+		t.Run(tc.time, func(t *testing.T) {
+			cfg := appconfig.FeishuMentionConfig{Enabled: true, DigestEnabled: tc.enabled, DigestTime: tc.time, Timezone: "Asia/Shanghai"}
+			service := NewFeishuMentionAdminService(nil, "cli_current", cfg)
+			status, err := service.Status(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := json.Marshal(status)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded struct {
+				DigestTime    string `json:"digestTime"`
+				Timezone      string `json:"timezone"`
+				DigestEnabled bool   `json:"digestEnabled"`
+			}
+			if err := json.Unmarshal(encoded, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if decoded.DigestTime != tc.time || decoded.Timezone != "Asia/Shanghai" || decoded.DigestEnabled != tc.enabled {
+				t.Fatalf("status must retain effective configuration even when storage is unavailable or digest is paused: %+v", decoded)
+			}
+		})
+	}
+}

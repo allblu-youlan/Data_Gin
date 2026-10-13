@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cast"
@@ -9,8 +10,11 @@ import (
 	"gin-biz-web-api/pkg/config"
 )
 
+const EnvFeishuMentionDigestTime = "FEISHU_MENTION_DIGEST_TIME"
+
 // FeishuMentionConfig is loaded once per process. Business switches must match
 // across receivers, workers and schedulers using the same Feishu application.
+// Restart each role after changing the daily digest's Shanghai clock.
 type FeishuMentionConfig struct {
 	Enabled                 bool
 	ReceiverEnabled         bool
@@ -43,7 +47,7 @@ func init() {
 			"max_followups":             mentionConfigValue("FeishuMention.MaxFollowups", 1),
 			"group_fallback_enabled":    mentionConfigValue("FeishuMention.GroupFallbackEnabled", false),
 			"digest_enabled":            mentionConfigValue("FeishuMention.DigestEnabled", true),
-			"digest_time":               mentionConfigValue("FeishuMention.DigestTime", "18:00"),
+			"digest_time":               mentionDigestTime(),
 			"digest_skip_empty":         mentionConfigValue("FeishuMention.DigestSkipEmpty", true),
 			"ai_enabled":                mentionConfigValue("FeishuMention.AIEnabled", false),
 			"api_timeout_seconds":       mentionConfigValue("FeishuMention.APITimeoutSeconds", 10),
@@ -53,6 +57,15 @@ func init() {
 			"retention_days":            mentionConfigValue("FeishuMention.RetentionDays", 90),
 		}
 	})
+}
+
+func mentionDigestTime() string {
+	if raw, exists := os.LookupEnv(EnvFeishuMentionDigestTime); exists {
+		// Preserve explicit invalid values, including an empty string, so
+		// startup validation reports them instead of silently using YAML.
+		return raw
+	}
+	return cast.ToString(mentionConfigValue("FeishuMention.DigestTime", "18:00"))
 }
 
 func LoadFeishuMentionConfig() (FeishuMentionConfig, error) {
@@ -83,7 +96,7 @@ func (c FeishuMentionConfig) Validate() error {
 		return fmt.Errorf("FeishuMention.Timezone must be Asia/Shanghai")
 	}
 	if parsed, err := time.Parse("15:04", c.DigestTime); err != nil || parsed.Format("15:04") != c.DigestTime {
-		return fmt.Errorf("FeishuMention.DigestTime must be HH:mm")
+		return fmt.Errorf("FeishuMention.DigestTime / %s must be HH:mm in Asia/Shanghai", EnvFeishuMentionDigestTime)
 	}
 	if c.MaxFollowups != 1 || !c.DigestSkipEmpty || c.GroupFallbackEnabled || c.AIEnabled {
 		return fmt.Errorf("FeishuMention requires MaxFollowups=1, DigestSkipEmpty=true, GroupFallbackEnabled=false and AIEnabled=false")
