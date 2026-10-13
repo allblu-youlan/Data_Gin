@@ -482,7 +482,7 @@ func executeReportIntegrationRun(t *testing.T, ctx context.Context, db *gorm.DB,
 	resources.taskKeys = append(resources.taskKeys, "report:run:"+created.RunUUID)
 	processor := NewReportRunProcessorWithDependencies(repository, credential, integrationParameterDecryptor{}, oracleReportProcedureExecutor{})
 	processor.heartbeatInterval = time.Hour
-	if err := processor.Process(ctx, created.ID, false); err != nil {
+	if err := processor.Process(ctx, created.ID, 0, false); err != nil {
 		t.Fatalf("execute report integration run: %v", err)
 	}
 	run := loadReportIntegrationRun(t, ctx, db, created.ID)
