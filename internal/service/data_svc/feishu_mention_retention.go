@@ -31,7 +31,9 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 	nextID := afterID
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var reports []model.FeishuDailyReport
-		if err := tx.Where("id > ? AND app_id = ? AND status = ? AND window_end < ?", afterID, s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
+		// Retention only needs identifiers and state; large content snapshots
+		// must not be loaded into MySQL's sort buffer or application memory.
+		if err := tx.Select("id").Where("id > ? AND app_id = ? AND status = ? AND window_end < ?", afterID, s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
 			return err
 		}
 		allowed := map[uint]bool{}
@@ -64,7 +66,7 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 		}
 		var recipients []model.FeishuMessageRecipient
 		ids := mentionMapIDs(allowed)
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("first_report_id IN ?", ids).Order("id").Find(&recipients).Error; err != nil {
+		if err := tx.Select("id", "source_message_id").Clauses(clause.Locking{Strength: "UPDATE"}).Where("first_report_id IN ?", ids).Order("id").Find(&recipients).Error; err != nil {
 			return err
 		}
 		sources := map[uint]bool{}
@@ -75,11 +77,11 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 			return nil
 		}
 		var all []model.FeishuMessageRecipient
-		if err := tx.Where("source_message_id IN ?", mentionMapIDs(sources)).Find(&all).Error; err != nil {
+		if err := tx.Select("id", "source_message_id", "first_report_id", "view_status").Where("source_message_id IN ?", mentionMapIDs(sources)).Find(&all).Error; err != nil {
 			return err
 		}
 		var sourceRows []model.FeishuSourceMessage
-		if err := tx.Where("id IN ? AND app_id = ?", mentionMapIDs(sources), s.appID).Find(&sourceRows).Error; err != nil {
+		if err := tx.Select("id", "received_at").Where("id IN ? AND app_id = ?", mentionMapIDs(sources), s.appID).Find(&sourceRows).Error; err != nil {
 			return err
 		}
 		oldSources := map[uint]bool{}
@@ -91,7 +93,7 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 		for _, recipient := range all {
 			recipientIDs = append(recipientIDs, recipient.ID)
 		}
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("app_id = ? AND (report_id IN ? OR recipient_record_id IN ?)", s.appID, ids, recipientIDs).Order("id").Find(&jobs).Error; err != nil {
+		if err := tx.Select("id", "status", "report_id", "recipient_record_id", "dispatch_generation").Clauses(clause.Locking{Strength: "UPDATE"}).Where("app_id = ? AND (report_id IN ? OR recipient_record_id IN ?)", s.appID, ids, recipientIDs).Order("id").Find(&jobs).Error; err != nil {
 			return err
 		}
 		blockedRecipients := map[uint]bool{}
