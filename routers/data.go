@@ -33,6 +33,7 @@ func apiData(api *gin.RouterGroup) {
 	registerMallWeatherMetricsRoutes(api, data_ctrl.NewMallWeatherMetricsController())
 	registerReportCenterRoutes(api, global.ReportCenterEnabledAtStartup)
 	registerOfficeMessageRoutes(api, data_ctrl.NewOfficeMessageController())
+	registerFeishuMentionRoutes(api, data_ctrl.NewFeishuMentionController())
 
 	sourceGroup := api.Group("/v1/sources")
 	sourceGroup.Use(middleware.AuthJWT())
@@ -562,4 +563,22 @@ func registerMallRoutes(api *gin.RouterGroup, mallCtrl *data_ctrl.MallController
 		mallGroup.GET("/:id/geocode-candidates", middleware.RequirePermission(model.PermissionMallRead), middleware.RequireMallScope("id"), mallCtrl.ListGeocodeCandidates)
 		mallGroup.POST("/:id/geocode-confirm", middleware.RequirePermission(model.PermissionMallGeocodeConfirm), middleware.RequireMallScope("id"), mallCtrl.ConfirmGeocode)
 	}
+}
+
+func registerFeishuMentionRoutes(api *gin.RouterGroup, controller *data_ctrl.FeishuMentionController) {
+	group := api.Group("/v1/feishu-mention", middleware.AuthJWT())
+	manage := middleware.RequirePermission(model.PermissionOfficeMentionManage)
+	read := middleware.RequirePermission(model.PermissionOfficeMentionRead)
+	group.GET("/chats", manage, controller.Chats)
+	group.POST("/chats", manage, controller.CreateChat)
+	group.PUT("/chats/:id", manage, controller.UpdateChat)
+	group.GET("/recipients", read, controller.Recipients)
+	group.GET("/recipients/:id", read, controller.Recipient)
+	group.GET("/reports", read, controller.Reports)
+	group.GET("/reports/:id", read, controller.Report)
+	group.GET("/reports/:id/messages", read, controller.ReportMessages)
+	group.GET("/reports/:id/parts/:partNo", read, controller.ReportPart)
+	group.GET("/jobs", read, controller.Jobs)
+	group.POST("/jobs/:id/retry", read, middleware.RequirePermission(model.PermissionOfficeMentionRetry), controller.Retry)
+	group.GET("/status", manage, controller.Status)
 }

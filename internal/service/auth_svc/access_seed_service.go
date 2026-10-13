@@ -54,6 +54,9 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionOfficeMessageRead, "查看办公消息", "办公消息推送", "查看消息、推送目标和推送记录", "LOW", false, 800},
 	{model.PermissionOfficeMessageManage, "管理办公消息", "办公消息推送", "维护编辑消息、Oracle 过程和飞书推送目标", "HIGH", false, 810},
 	{model.PermissionOfficeMessagePush, "执行办公消息推送", "办公消息推送", "触发 Oracle 导出并通过飞书自建机器人发送", "HIGH", false, 820},
+	{model.PermissionOfficeMentionRead, "查看群提醒与日报", "群消息提醒", "查看群原文、本人确认记录和每日总结", "HIGH", false, 830},
+	{model.PermissionOfficeMentionManage, "管理监控群", "群消息提醒", "维护监控群和查看模块运行状态，不授予原文访问", "HIGH", false, 840},
+	{model.PermissionOfficeMentionRetry, "重试群提醒任务", "群消息提醒", "与读取权限一起重排失败发送任务", "HIGH", false, 850},
 }
 
 var roleSeeds = []model.Role{
@@ -105,7 +108,6 @@ func SyncAccessControlSeeds(ctx context.Context, db *gorm.DB) error {
 }
 
 func syncSystemRolePermissions(tx *gorm.DB, roles map[string]model.Role, permissions []model.Permission) error {
-	readOnly := map[string]struct{}{model.PermissionBusinessOverviewRead: {}, model.PermissionMallRead: {}, model.PermissionWeatherRead: {}, model.PermissionSourceRead: {}, model.PermissionPipelineRead: {}, model.PermissionDeliveryRead: {}, model.PermissionDataRead: {}, model.PermissionExcelRead: {}, model.PermissionReportRead: {}, model.PermissionOfficeMessageRead: {}}
 	for _, roleCode := range []string{model.RoleCodeSuperAdmin, model.RoleCodeAdmin, model.RoleCodeOperator, model.RoleCodeViewer} {
 		role := roles[roleCode]
 		if err := tx.Where("role_id = ?", role.ID).Delete(&model.RolePermission{}).Error; err != nil {
@@ -113,13 +115,7 @@ func syncSystemRolePermissions(tx *gorm.DB, roles map[string]model.Role, permiss
 		}
 		grants := make([]model.RolePermission, 0, len(permissions))
 		for _, permission := range permissions {
-			include := roleCode == model.RoleCodeSuperAdmin || roleCode == model.RoleCodeAdmin
-			if roleCode == model.RoleCodeOperator {
-				include = permission.Module != "系统管理" && permission.Code != model.PermissionWeatherRawRead
-			}
-			if roleCode == model.RoleCodeViewer {
-				_, include = readOnly[permission.Code]
-			}
+			include := defaultRoleIncludesPermission(roleCode, permission)
 			if include {
 				grants = append(grants, model.RolePermission{RoleID: role.ID, PermissionCode: permission.Code})
 			}
@@ -166,4 +162,23 @@ func PermissionCodes() []string {
 	}
 	sort.Strings(codes)
 	return codes
+}
+
+func isOfficeMentionPermission(code string) bool {
+	return code == model.PermissionOfficeMentionRead || code == model.PermissionOfficeMentionManage || code == model.PermissionOfficeMentionRetry
+}
+
+func defaultRoleIncludesPermission(roleCode string, permission model.Permission) bool {
+	switch roleCode {
+	case model.RoleCodeSuperAdmin, model.RoleCodeAdmin:
+		return true
+	case model.RoleCodeOperator:
+		return permission.Module != "系统管理" && permission.Code != model.PermissionWeatherRawRead && !isOfficeMentionPermission(permission.Code)
+	case model.RoleCodeViewer:
+		switch permission.Code {
+		case model.PermissionBusinessOverviewRead, model.PermissionMallRead, model.PermissionWeatherRead, model.PermissionSourceRead, model.PermissionPipelineRead, model.PermissionDeliveryRead, model.PermissionDataRead, model.PermissionExcelRead, model.PermissionReportRead, model.PermissionOfficeMessageRead:
+			return true
+		}
+	}
+	return false
 }

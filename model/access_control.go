@@ -47,6 +47,9 @@ const (
 	PermissionOfficeMessageRead    = "office_message.read"
 	PermissionOfficeMessageManage  = "office_message.manage"
 	PermissionOfficeMessagePush    = "office_message.push"
+	PermissionOfficeMentionRead    = "office_mention.read"
+	PermissionOfficeMentionManage  = "office_mention.manage"
+	PermissionOfficeMentionRetry   = "office_mention.retry"
 )
 
 type Permission struct {
