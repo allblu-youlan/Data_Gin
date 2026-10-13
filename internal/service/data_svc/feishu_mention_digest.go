@@ -26,7 +26,25 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("app_id = ?", s.appID).First(&schedule).Error; err != nil {
 				return err
 			}
-			due = schedule.Enabled && !schedule.NextCutoffAt.After(s.now())
+			if !schedule.Enabled {
+				return nil
+			}
+			now := s.now()
+			// Finish every overdue window using its persisted clock before
+			// applying a changed clock to the next unplanned cutoff date.
+			if schedule.NextCutoffAt.After(now) {
+				next, err := rescheduleMentionCutoff(schedule, s.cfg.DigestTime)
+				if err != nil {
+					return err
+				}
+				if !next.Equal(schedule.NextCutoffAt) {
+					if err := tx.Model(&schedule).Update("next_cutoff_at", next).Error; err != nil {
+						return err
+					}
+					schedule.NextCutoffAt = next
+				}
+			}
+			due = !schedule.NextCutoffAt.After(now)
 			return nil
 		}); err != nil {
 			return err
@@ -59,14 +77,7 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 				return nil
 			}
 			now := s.now()
-			next, err := nextMentionCutoff(schedule.NextCutoffAt, s.cfg.DigestTime)
-			if err != nil {
-				return err
-			}
-			// A changed clock cannot create two reports with the same local date.
-			if next.In(mentionLocation()).Format("2006-01-02") == schedule.NextCutoffAt.In(mentionLocation()).Format("2006-01-02") {
-				next = next.In(mentionLocation()).AddDate(0, 0, 1)
-			}
+			next := schedule.NextCutoffAt.In(mentionLocation()).AddDate(0, 0, 1)
 			return tx.Model(&current).Updates(map[string]any{"next_window_start_at": schedule.NextCutoffAt, "next_cutoff_at": next, "last_planned_at": now}).Error
 		}); err != nil {
 			return err
@@ -74,6 +85,22 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 	}
 	return nil
 }
+
+func rescheduleMentionCutoff(schedule model.FeishuDigestSchedule, clock string) (time.Time, error) {
+	parsed, err := time.Parse("15:04", clock)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("feishu mention: invalid digest time: %w", err)
+	}
+	date := schedule.NextCutoffAt.In(mentionLocation())
+	next := time.Date(date.Year(), date.Month(), date.Day(), parsed.Hour(), parsed.Minute(), 0, 0, mentionLocation())
+	// A first activation can begin after the newly configured cutoff time.
+	// Move only the cutoff forward; never discard the unreported interval.
+	for !next.After(schedule.NextWindowStartAt) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next, nil
+}
+
 func (s *FeishuMentionService) freezeDigest(ctx context.Context, tx *gorm.DB, chatID, openID string, start, end time.Time) error {
 	date := end.In(mentionLocation()).Format("2006-01-02")
 	var existing model.FeishuDailyReport

@@ -109,7 +109,15 @@ func (p *FeishuMentionProcessor) HandleDelivery(ctx context.Context, task *asynq
 			err = errors.New("feishu returned no message id")
 		}
 	}
-	return p.finish(ctx, row, messageID, err, officePushRetryable(err))
+	return p.finish(ctx, row, messageID, err, feishuMentionRetryable(err))
+}
+
+func feishuMentionRetryable(err error) bool {
+	var tokenError *feishu.TokenError
+	if errors.As(err, &tokenError) {
+		return tokenError.Retryable
+	}
+	return officePushRetryable(err)
 }
 
 // deliveryAllowed never uses confirmation state to filter a daily report.

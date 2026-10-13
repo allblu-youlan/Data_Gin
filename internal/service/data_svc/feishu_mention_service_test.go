@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	appConfig "gin-biz-web-api/config"
+	"gin-biz-web-api/connector/feishu"
 	"gin-biz-web-api/model"
 )
 
@@ -142,5 +144,49 @@ func TestFeishuMentionBusinessClockUsesShanghai(t *testing.T) {
 	service := NewFeishuMentionService(nil, "app", appConfig.FeishuMentionConfig{})
 	if _, offset := service.now().Zone(); offset != 8*60*60 {
 		t.Fatal("business clock must use Shanghai")
+	}
+}
+
+func TestFeishuMentionChangedDigestCutoff(t *testing.T) {
+	start := time.Date(2026, 10, 13, 10, 0, 0, 0, mentionLocation())
+	schedule := model.FeishuDigestSchedule{NextWindowStartAt: start, NextCutoffAt: start.Add(8 * time.Hour)}
+	for _, tt := range []struct {
+		clock string
+		want  time.Time
+	}{
+		{"17:00", start.Add(7 * time.Hour)},
+		{"20:00", start.Add(10 * time.Hour)},
+		{"08:00", start.Add(22 * time.Hour)},
+		{"10:00", start.Add(24 * time.Hour)},
+	} {
+		t.Run(tt.clock, func(t *testing.T) {
+			got, err := rescheduleMentionCutoff(schedule, tt.clock)
+			if err != nil || !got.Equal(tt.want) || !schedule.NextWindowStartAt.Equal(start) {
+				t.Fatalf("cutoff=%s err=%v want=%s", got, err, tt.want)
+			}
+		})
+	}
+	if _, err := rescheduleMentionCutoff(schedule, "25:00"); err == nil {
+		t.Fatal("accepted invalid digest clock")
+	}
+}
+
+func TestFeishuMentionRetryClassification(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"invalid credentials", &feishu.TokenError{Retryable: false}, false},
+		{"wrapped token outage", fmt.Errorf("token: %w", &feishu.TokenError{Retryable: true}), true},
+		{"missing permission", &feishu.BotError{Retryable: false}, false},
+		{"rate limit", &feishu.BotError{Retryable: true}, true},
+		{"network failure", errors.New("temporary network failure"), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := feishuMentionRetryable(tt.err); got != tt.want {
+				t.Fatalf("retry=%t want=%t", got, tt.want)
+			}
+		})
 	}
 }
