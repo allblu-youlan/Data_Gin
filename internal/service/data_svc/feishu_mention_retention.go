@@ -2,6 +2,7 @@ package data_svc
 
 import (
 	"context"
+	"time"
 
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
@@ -16,17 +17,50 @@ func (s *FeishuMentionService) Cleanup(ctx context.Context) error {
 		return nil
 	}
 	cutoff := s.now().AddDate(0, 0, -s.cfg.RetentionDays)
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var afterID uint
+	for {
+		nextID, err := s.cleanupMentionBatch(ctx, cutoff, afterID)
+		if err != nil || nextID == afterID {
+			return err
+		}
+		afterID = nextID
+	}
+}
+
+func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff time.Time, afterID uint) (uint, error) {
+	nextID := afterID
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var reports []model.FeishuDailyReport
-		if err := tx.Where("app_id = ? AND status = ? AND window_end < ?", s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
+		if err := tx.Where("id > ? AND app_id = ? AND status = ? AND window_end < ?", afterID, s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
 			return err
 		}
 		allowed := map[uint]bool{}
 		for _, report := range reports {
 			allowed[report.ID] = true
+			nextID = report.ID
 		}
 		if len(allowed) == 0 {
 			return nil
+		}
+		// A message may mention people whose reports straddle this page.
+		// Expand to the connected reports before deciding what can be removed.
+		for frontier := mentionMapIDs(allowed); len(frontier) > 0; {
+			var linked []uint
+			if err := tx.Table("feishu_message_recipients AS selected").
+				Select("DISTINCT report.id").
+				Joins("JOIN feishu_message_recipients related ON related.source_message_id = selected.source_message_id").
+				Joins("JOIN feishu_daily_reports report ON report.id = related.first_report_id").
+				Where("selected.first_report_id IN ? AND report.app_id = ? AND report.status = ? AND report.window_end < ?", frontier, s.appID, "sent", cutoff).
+				Scan(&linked).Error; err != nil {
+				return err
+			}
+			frontier = nil
+			for _, id := range linked {
+				if !allowed[id] {
+					allowed[id] = true
+					frontier = append(frontier, id)
+				}
+			}
 		}
 		var recipients []model.FeishuMessageRecipient
 		ids := mentionMapIDs(allowed)
@@ -141,6 +175,7 @@ func (s *FeishuMentionService) Cleanup(ctx context.Context) error {
 		}
 		return tx.Where("id IN ?", mentionMapIDs(allowed)).Delete(&model.FeishuDailyReport{}).Error
 	})
+	return nextID, err
 }
 func mentionMapIDs(values map[uint]bool) []uint {
 	ids := make([]uint, 0, len(values))
