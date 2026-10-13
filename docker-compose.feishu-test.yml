@@ -1,0 +1,45 @@
+# Run: docker compose -f docker-compose.feishu-test.yml up --abort-on-container-exit --exit-code-from tests
+# Clean up: docker compose -f docker-compose.feishu-test.yml down -v
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: integration_root_only
+      MYSQL_DATABASE: feishu_mention_test
+      MYSQL_USER: mention_test
+      MYSQL_PASSWORD: integration_only
+      TZ: Asia/Shanghai
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'mysqladmin ping -h 127.0.0.1 -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  tests:
+    image: golang:1.24-bookworm
+    working_dir: /workspace
+    command: [bash, scripts/test-feishu-mention.sh]
+    environment:
+      TZ: Asia/Shanghai
+      FEISHU_MENTION_MYSQL_DSN: mention_test:integration_only@tcp(mysql:3306)/feishu_mention_test?parseTime=true&loc=Asia%2FShanghai
+      FEISHU_MENTION_REDIS_ADDR: redis:6379
+    volumes:
+      - .:/workspace:ro
+      - go-modules:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+volumes:
+  go-modules:
+  go-build:

@@ -1,0 +1,73 @@
+name: Feishu mention integration
+
+on:
+  push:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - scripts/test-feishu-mention.sh
+      - docker-compose.feishu-test.yml
+      - .github/workflows/feishu-mention-integration.yml
+  pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - scripts/test-feishu-mention.sh
+      - docker-compose.feishu-test.yml
+      - .github/workflows/feishu-mention-integration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feishu-mention-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: integration_root_only
+          MYSQL_DATABASE: feishu_mention_test
+          MYSQL_USER: mention_test
+          MYSQL_PASSWORD: integration_only
+          TZ: Asia/Shanghai
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pintegration_root_only --silent"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      TZ: Asia/Shanghai
+      FEISHU_MENTION_MYSQL_DSN: mention_test:integration_only@tcp(127.0.0.1:${{ job.services.mysql.ports[3306] }})/feishu_mention_test?parseTime=true&loc=Asia%2FShanghai
+      FEISHU_MENTION_REDIS_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24.x'
+          cache: true
+      - name: Run MySQL and Redis acceptance tests with race detection
+        run: bash scripts/test-feishu-mention.sh
+      - name: Regress existing office delivery and startup integration
+        run: go test -mod=readonly ./bootstrap ./config ./job ./routers ./internal/controller/data_ctrl ./internal/service/auth_svc ./connector/feishu -count=1
