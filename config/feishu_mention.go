@@ -91,6 +91,9 @@ func (c FeishuMentionConfig) Validate() error {
 	if c.DefaultFollowupMinutes <= 0 || c.APITimeoutSeconds <= 0 || c.MaxAttempts <= 0 || c.SendRatePerSecond <= 0 || c.RetentionDays <= 0 {
 		return fmt.Errorf("FeishuMention intervals, attempts, send rate and retention must be positive")
 	}
+	if c.SendRatePerSecond > 1000 {
+		return fmt.Errorf("FeishuMention.SendRatePerSecond must be at most 1000")
+	}
 	// One token refresh may result in a second HTTP request; reserve five
 	// additional seconds for committing the response under the business lease.
 	if c.DeliveryLeaseSeconds <= 2*c.APITimeoutSeconds+5 {

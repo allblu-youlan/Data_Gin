@@ -33,6 +33,7 @@ func TestFeishuMentionRejectsUnsupportedAndInvalidSettings(t *testing.T) {
 		func(c *FeishuMentionConfig) { c.DigestTime = "8:00" },
 		func(c *FeishuMentionConfig) { c.DigestTime = "24:00" },
 		func(c *FeishuMentionConfig) { c.MaxAttempts = 0 },
+		func(c *FeishuMentionConfig) { c.SendRatePerSecond = 1001 },
 		func(c *FeishuMentionConfig) { c.DeliveryLeaseSeconds = 25 },
 		func(c *FeishuMentionConfig) { c.AIEnabled = true },
 		func(c *FeishuMentionConfig) { c.GroupFallbackEnabled = true },

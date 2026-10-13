@@ -35,6 +35,9 @@ func Initialize() {
 
 	// 初始化缓存 cache
 	setupCache()
+	if err := setupFeishuMention(); err != nil {
+		console.Exit("Feishu mention initialization failed: %v", err)
+	}
 
 	// 启动 crontab
 	setupCrontab()
@@ -44,6 +47,7 @@ func Initialize() {
 
 	// 启动定时任务调度器
 	setupScheduler()
+	startFeishuMentionReceiver()
 
 }
 

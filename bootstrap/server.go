@@ -24,6 +24,7 @@ const mallWeatherExportDownloadWriteTimeout = 16 * time.Minute
 // RunServer 启动服务
 func RunServer() {
 	defer stopOutboxDispatcher()
+	defer closeFeishuMentionResources()
 
 	console.Info("run server ...")
 
@@ -128,6 +129,7 @@ type gracefulHTTPServer interface {
 }
 
 func shutdownServerAndCrontab(ctx context.Context, srv gracefulHTTPServer) error {
+	stopFeishuMentionReceiver(ctx)
 	cronStopped := make(chan struct{})
 	go func() {
 		defer close(cronStopped)

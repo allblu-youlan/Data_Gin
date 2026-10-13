@@ -56,6 +56,7 @@ func setupScheduler() {
 	registerMallWeatherScheduledTasks(scheduler)
 
 	registerOfficePushScheduledTasks(scheduler)
+	registerFeishuMentionScheduledTasks(scheduler)
 
 	go func(scheduler *asynq.Scheduler) {
 		if err := scheduler.Run(); err != nil {

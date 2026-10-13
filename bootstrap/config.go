@@ -42,16 +42,30 @@ func setupConfig() {
 		console.Exit("invalid report center configuration: %v", err)
 	}
 	global.ReportCenterEnabledAtStartup = pkgConfig.GetBool("cfg.report_center.enabled")
+	mentionConfig, err := appConfig.LoadFeishuMentionConfig()
+	if err != nil {
+		console.Exit("invalid Feishu mention configuration: %v", err)
+	}
+	if mentionConfig.Enabled && pkgConfig.GetBool("cfg.queue_job.worker_enabled") {
+		queues, ok := pkgConfig.Get("cfg.queue_job.config_opt.queues").(map[string]int)
+		if !ok || queues["delivery"] <= 0 {
+			console.Exit("Feishu mention worker requires the delivery queue")
+		}
+	}
 
 	credentials, err := credential.Load(credential.Requirements{
 		Production:         pkgConfig.GetString("cfg.app.env") == "prod",
 		RequireMallWeather: global.MallWeatherEnabledAtStartup,
 		RequireFeishu:      pkgConfig.GetBool("cfg.mall_weather.feishu_enabled"),
+		RequireFeishuApp:   mentionConfig.Enabled && (mentionConfig.ReceiverEnabled || pkgConfig.GetBool("cfg.queue_job.worker_enabled")),
 	})
 	if err != nil {
 		console.Exit("invalid credential configuration: %v", err)
 	}
 	global.Credentials = credentials
+	if mentionConfig.Enabled && !credentials.Configured(credential.EnvFeishuAppID) {
+		console.Exit("Feishu mention requires FEISHU_APP_ID for application scoping")
+	}
 	logCredentialStatus(credentials)
 
 }

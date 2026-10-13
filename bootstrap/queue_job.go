@@ -66,6 +66,11 @@ func setupQueueJob() {
 	mux.Use(requireQueueDatabaseAvailability(database.RequireAvailable, repairEnabled), jobLoggingMiddleware)
 
 	addQueueJob(mux)
+	// Register even when disabled, so queued tasks pause instead of becoming unknown types.
+	if mentionRuntime.processor != nil {
+		mux.HandleFunc(job.TypeFeishuMentionDeliver, mentionRuntime.processor.HandleDelivery)
+		mux.HandleFunc(job.TypeFeishuMentionPlan, mentionRuntime.processor.HandlePlan)
+	}
 	officePushProcessor := data_svc.NewOfficePushProcessor()
 	mux.HandleFunc(job.TypeOfficePush, newOfficePushHandler(officePushProcessor))
 	officePushSchedulePlanner, err := data_svc.NewOfficePushSchedulePlanner()

@@ -39,9 +39,12 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 	}
 }
 
-func TestSchemaMigrationVersionIncludesOfficeWebDAV(t *testing.T) {
-	if schemaMigrationVersion != "2026-09-08-office-webdav-v22" {
+func TestSchemaMigrationVersionIncludesFeishuMention(t *testing.T) {
+	if schemaMigrationVersion != "2026-10-13-feishu-mention-v23" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
+	}
+	if officeWebDAVMigrationVersion != "2026-09-08-office-webdav-v22" {
+		t.Fatal("previous office WebDAV baseline must remain supported")
 	}
 	if previousSchemaMigrationVersion != "2026-09-04-report-category-access-v21" {
 		t.Fatalf("previousSchemaMigrationVersion = %q", previousSchemaMigrationVersion)
