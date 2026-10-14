@@ -31,6 +31,7 @@ export function DetailAccessSection({ access }: { access: DetailAccess | undefin
       <p className={styles.notice}>这里的完整回调地址仅用于 OAuth 登录。请在飞书开放平台中打开上方 App ID 对应的同一个应用，进入“安全设置 → 重定向 URL”，配置此地址。本地地址校验通过不代表飞书后台已完成配置。</p>
       <p className={styles.notice}>在“事件与回调 → 回调配置”中选择“长连接”，不要把这里的 OAuth 回调地址填入事件请求地址。如果提示“Challenge code 未返回”，请移除误填的事件请求地址并改用长连接。</p>
       <p className={styles.notice}>遇到错误 20029 时，请核对重定向 URL 与这里的地址完全一致，包括协议、域名、端口和路径。</p>
+      <p className={styles.notice}>详情中的消息定位需要应用具有“获取单聊、群组消息”（im:message:readonly）及对应的群消息读取权限；缺少发送人姓名时，会使用“获取用户姓名”（contact:user.basic_profile:readonly）补齐。新增权限后需发布应用版本使其生效。</p>
       <p className={styles.notice}>修改 APP_URL 后，需要重启 API 服务和 worker，再刷新本页确认生效地址。</p>
     </div>
   </Section>

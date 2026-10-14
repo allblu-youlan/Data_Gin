@@ -91,7 +91,8 @@ func TestFeishuMentionViewCallbackClearsStateAndUsesLocalReportRedirect(t *testi
 }
 
 func TestFeishuMentionViewRendersFullTextSafelyInShanghaiTime(t *testing.T) {
-	summary, original, unsafe := "摘要 <b>不能执行</b>", "https://applink.feishu.cn/client/chat/open?openChatId=oc_A&messageId=om_A", "javascript:alert(1)"
+	summary, original, unsafe := "摘要 <b>不能执行</b>", "https://applink.feishu.cn/client/chat/open?openChatId=oc_A&position=42", "javascript:alert(1)"
+	chatURL := "https://applink.feishu.cn/client/chat/open?openChatId=oc_A"
 	instant := time.Date(2026, 10, 13, 18, 1, 0, 0, time.UTC)
 	text := "第一行\n<script>alert('message')</script>\n" + strings.Repeat("完整原文", 2000)
 	controller := &FeishuMentionViewController{service: mentionViewStub{
@@ -106,7 +107,7 @@ func TestFeishuMentionViewRendersFullTextSafelyInShanghaiTime(t *testing.T) {
 				t.Fatalf("identity must come from session: %q %d %d", openID, id, page)
 			}
 			return &data_svc.FeishuMentionViewReportDTO{
-				Report:     data_svc.FeishuMentionViewReportSummary{ID: 27, ChatName: "采购群 <img>", RecipientName: "收件人", ReportDate: "2026-10-14", WindowStart: instant.Add(-24 * time.Hour), WindowEnd: instant, GeneratedAt: instant, MessageCount: 41, Summary: &summary},
+				Report:     data_svc.FeishuMentionViewReportSummary{ID: 27, ChatName: "采购群 <img>", RecipientName: "收件人", ReportDate: "2026-10-14", WindowStart: instant.Add(-24 * time.Hour), WindowEnd: instant, GeneratedAt: instant, MessageCount: 41, Summary: &summary, ChatURL: &chatURL},
 				Messages:   []data_svc.FeishuMentionViewMessageDTO{{SenderOpenID: "ou_private_sender", SenderName: "王五", MessageCreatedAt: instant, DisplayText: text, OriginalURL: &original}, {SenderOpenID: "ou_private_second", MessageCreatedAt: instant, DisplayText: "第二条", OriginalURL: &unsafe}},
 				Pagination: paginator.Pagination{Page: 2, PerPage: 20, TotalPage: 3, TotalCount: 41},
 			}, nil
@@ -120,7 +121,7 @@ func TestFeishuMentionViewRendersFullTextSafelyInShanghaiTime(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("status=%d body=%s", response.Code, body)
 	}
-	for _, want := range []string{"采购群 &lt;img&gt;", "王五", "2026-10-14 02:01", "2026-10-14T02:01:00&#43;08:00", strings.Repeat("完整原文", 2000), "&lt;script&gt;", "&lt;b&gt;不能执行&lt;/b&gt;", "/reports/27?page=1", "/reports/27?page=3", "前往飞书原消息"} {
+	for _, want := range []string{"采购群 &lt;img&gt;", "王五", "2026-10-14 02:01", "2026-10-14T02:01:00&#43;08:00", strings.Repeat("完整原文", 2000), "&lt;script&gt;", "&lt;b&gt;不能执行&lt;/b&gt;", "/reports/27?page=1", "/reports/27?page=3", "定位到原消息", "打开原群", "暂未取得这条消息的定位信息", "姓名暂不可用", "position=42"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing rendered content %q", want[:min(len(want), 70)])
 		}

@@ -73,6 +73,7 @@ func configureMentionViewNames(service *data_svc.FeishuMentionViewService) {
 	bot, err := feishu.NewBotClient(tokens, httpClient)
 	if err == nil {
 		service.SetUserNamesClient(bot)
+		service.SetMessageDetailsClient(bot)
 	}
 }
 
@@ -148,6 +149,7 @@ type mentionViewPage struct {
 	PreviousURL, NextURL                                              string
 	ErrorTitle, ErrorText                                             string
 	SenderNameNotice                                                  string
+	ChatURL                                                           string
 }
 
 type mentionViewMessage struct {
@@ -166,6 +168,12 @@ func mentionViewPageFromReport(dto *data_svc.FeishuMentionViewReportDTO) mention
 	}
 	if report.Summary != nil {
 		page.Summary = *report.Summary
+	}
+	if report.ChatURL != nil {
+		parsed, err := url.Parse(*report.ChatURL)
+		if err == nil && parsed.Scheme == "https" && parsed.Host == "applink.feishu.cn" && parsed.User == nil && parsed.Path == "/client/chat/open" {
+			page.ChatURL = parsed.String()
+		}
 	}
 	for _, message := range dto.Messages {
 		sender := strings.TrimSpace(message.SenderName)

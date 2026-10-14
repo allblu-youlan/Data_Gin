@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"gin-biz-web-api/connector/feishu"
 	"gin-biz-web-api/model"
 )
 
@@ -23,7 +24,7 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 		snapshot := model.FeishuDigestSnapshot{
 			SchemaVersion: 1, AppID: appID, ChatID: "chat_a", ChatName: "冻结群名", RecipientOpenID: recipient, RecipientName: recipient,
 			ReportDate: now.Format("2006-01-02"), WindowStart: now.Add(-time.Hour), WindowEnd: *now, GeneratedAt: *now, MessageCount: 1,
-			Messages: []model.FeishuDigestMessage{{SenderOpenID: "ou_sender", MessageCreatedAt: *now, DisplayText: "该收件人的全文"}},
+			Messages: []model.FeishuDigestMessage{{MessageID: "om_one", SenderOpenID: "ou_sender", MessageCreatedAt: *now, DisplayText: "该收件人的全文"}},
 		}
 		body, err := json.Marshal(snapshot)
 		if err != nil {
@@ -40,11 +41,16 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 	otherRecipient := create(fixture.appID, "ou_other")
 	otherApp := create(fixture.appID+"_other", "ou_viewer")
 	lookupCalls := 0
+	messageCalls := 0
+	s.SetMessageDetailsClient(mentionViewDetailsFunc(func(_ context.Context, ids []string) (map[string]feishu.MessageDetail, error) {
+		messageCalls++
+		return map[string]feishu.MessageDetail{"om_one": {OriginalURL: "https://applink.feishu.cn/client/chat/open?openChatId=oc_group&position=42"}}, nil
+	}))
 	s.SetUserNamesClient(mentionViewNamesFunc(func(_ context.Context, ids []string) (map[string]string, error) {
 		lookupCalls++
 		return map[string]string{"ou_sender": "李慧娜"}, nil
 	}))
-	if dto, err := s.Report(t.Context(), "ou_viewer", own.ID, 1); err != nil || len(dto.Messages) != 1 || dto.Messages[0].DisplayText != "该收件人的全文" || dto.Messages[0].SenderName != "李慧娜" {
+	if dto, err := s.Report(t.Context(), "ou_viewer", own.ID, 1); err != nil || len(dto.Messages) != 1 || dto.Messages[0].DisplayText != "该收件人的全文" || dto.Messages[0].SenderName != "李慧娜" || dto.Messages[0].OriginalURL == nil {
 		t.Fatalf("own report: %+v err=%v", dto, err)
 	}
 	for _, report := range []model.FeishuDailyReport{otherRecipient, otherApp} {
@@ -58,5 +64,8 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 	}
 	if lookupCalls != 1 {
 		t.Fatal("unauthorized report reached directory lookup")
+	}
+	if messageCalls != 1 {
+		t.Fatal("unauthorized report reached message metadata lookup")
 	}
 }

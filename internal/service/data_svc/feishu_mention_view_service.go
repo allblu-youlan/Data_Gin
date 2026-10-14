@@ -38,6 +38,7 @@ type FeishuMentionViewService struct {
 	cookieKey   []byte
 	identity    FeishuMentionIdentityClient
 	names       *mentionViewNames
+	messages    FeishuMentionMessageDetailsClient
 	now         func() time.Time
 }
 
@@ -72,6 +73,7 @@ type FeishuMentionViewReportSummary struct {
 	GeneratedAt   time.Time `json:"generatedAt"`
 	Timezone      string    `json:"timezone"`
 	Summary       *string   `json:"summary"`
+	ChatURL       *string   `json:"chatUrl,omitempty"`
 }
 
 type FeishuMentionViewMessageDTO struct {
@@ -115,6 +117,7 @@ func (s *FeishuMentionViewService) Report(ctx context.Context, openID string, id
 		return nil, ErrFeishuMentionViewUnavailable
 	}
 	dto := mentionViewReportDTO(report.ID, snapshot, page)
+	s.fillMessageDetails(ctx, dto, snapshot, page)
 	s.fillSenderNames(ctx, dto)
 	return dto, nil
 }
