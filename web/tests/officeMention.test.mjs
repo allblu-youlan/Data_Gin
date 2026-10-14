@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { canViewNavigationItem } from '../.test-dist/appShell/navigationPermissions.js'
-import { canRetryMentionJob, confirmationLabel, mentionQuery, parseMentionData, parseMentionPage, safeOriginalURL } from '../.test-dist/officeMention/contracts.js'
+import { canRetryMentionJob, confirmationLabel, mentionDigestSettingsRequest, mentionQuery, parseMentionData, parseMentionPage, safeOriginalURL } from '../.test-dist/officeMention/contracts.js'
 
 test('read and manage navigation are independent and old office permission grants neither', () => {
   for (const key of ['mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status']) assert.equal(canViewNavigationItem(key, ['office_message.read']), false)
@@ -36,4 +36,12 @@ test('original links cannot execute scripts and time filters use Shanghai offset
   assert.equal(q.get('receivedFrom'), '2026-10-13T10:00:00+08:00')
   assert.equal(q.get('chatId'), 'oc_A')
   assert.equal(q.get('page'), '2')
+})
+test('digest settings request only updates the strict Shanghai HH:mm clock', () => {
+  for (const digestTime of ['00:00', '08:05', '18:30', '23:59']) {
+    assert.deepEqual(mentionDigestSettingsRequest(digestTime), { path: '/digest-settings', options: { method: 'PUT', body: { digestTime } } })
+  }
+  for (const invalid of ['', '8:00', '24:00', '18:60', '18:00:00', ' 18:00', '18:00 ', '18:00\n']) {
+    assert.throws(() => mentionDigestSettingsRequest(invalid), /HH:mm/)
+  }
 })

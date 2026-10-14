@@ -11,6 +11,10 @@ export function confirmationLabel(row: Pick<Recipient, 'viewStatus' | 'confirmat
 export function canRetryMentionJob(job: Pick<Job, 'status' | 'retryable'>, permissions: readonly string[]) {
   return job.status === 'failed' && job.retryable !== false && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
 }
+export function mentionDigestSettingsRequest(digestTime: string) {
+  if (digestTime.length !== 5 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(digestTime)) throw new Error('请填写有效的日报时间，格式为 HH:mm（例如 18:00）。')
+  return { path: '/digest-settings', options: { method: 'PUT' as const, body: { digestTime } } }
+}
 export function safeOriginalURL(value: string | null | undefined) {
   if (!value) return null
   try { const parsed = new URL(value); return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null } catch { return null }
