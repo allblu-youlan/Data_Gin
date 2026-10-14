@@ -4,6 +4,7 @@ import (
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/controller/data_ctrl"
 	"gin-biz-web-api/internal/middleware"
+	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -17,12 +18,15 @@ func apiData(api *gin.RouterGroup) {
 	weatherCtrl := data_ctrl.NewMallWeatherController()
 	registerMallWeatherRoutes(api, weatherCtrl)
 	registerOpenWeatherRoutes(api, weatherCtrl, data_ctrl.NewOpenWeatherMallController())
+	bojunOracleProvider := data_svc.NewOpenBojunOracleProvider()
 	registerOpenBojunRoutes(
 		api,
 		data_ctrl.NewOpenBojunOrderController(),
 		data_ctrl.NewOpenBojunOrderDetailController(),
 		data_ctrl.NewOpenBojunProductController(),
 		data_ctrl.NewOpenBojunSyncStatusController(),
+		data_ctrl.NewOpenBojunStoreControllerWithService(data_svc.NewOpenBojunStoreQueryService(bojunOracleProvider)),
+		data_ctrl.NewOpenBojunStockControllerWithService(data_svc.NewOpenBojunStockQueryService(bojunOracleProvider)),
 	)
 	registerMallWeatherRefreshRoutes(api, data_ctrl.NewMallWeatherRefreshController())
 	registerMallWeatherExportProfileRoutes(api, data_ctrl.NewMallWeatherExportProfileController())
@@ -366,18 +370,44 @@ func registerOpenBojunRoutes(
 	detailController *data_ctrl.OpenBojunOrderDetailController,
 	productController *data_ctrl.OpenBojunProductController,
 	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
+	storeController *data_ctrl.OpenBojunStoreController,
+	stockController *data_ctrl.OpenBojunStockController,
+) {
+	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController,
+		middleware.LimitOpenAPIIP("bojun", openBojunPreAuthIPRateLimit),
+		middleware.LimitOpenAPIUserRoute("bojun", openBojunUserRouteRateLimit))
+}
+
+func registerOpenBojunRoutesWithLimiters(
+	api *gin.RouterGroup,
+	orderController *data_ctrl.OpenBojunOrderController,
+	detailController *data_ctrl.OpenBojunOrderDetailController,
+	productController *data_ctrl.OpenBojunProductController,
+	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
+	storeController *data_ctrl.OpenBojunStoreController,
+	stockController *data_ctrl.OpenBojunStockController,
+	preAuthLimiter, userRouteLimiter gin.HandlerFunc,
 ) {
 	bojunGroup := api.Group("/open/bojun")
 	bojunGroup.Use(
-		middleware.LimitOpenAPIIP("bojun", openBojunPreAuthIPRateLimit),
+		preAuthLimiter,
 		middleware.AuthOpenToken(),
-		middleware.RequirePermission(model.PermissionBojunOrderRead),
-		middleware.LimitOpenAPIUserRoute("bojun", openBojunUserRouteRateLimit),
 	)
-	bojunGroup.POST("/orders/query", orderController.Query)
-	bojunGroup.POST("/orders/details/query", detailController.Query)
-	bojunGroup.POST("/products/query", productController.Query)
-	bojunGroup.POST("/sync-status/query", syncStatusController.Query)
+	orderGroup := bojunGroup.Group("")
+	orderGroup.Use(
+		middleware.RequirePermission(model.PermissionBojunOrderRead),
+		userRouteLimiter,
+	)
+	orderGroup.POST("/orders/query", orderController.Query)
+	orderGroup.POST("/orders/details/query", detailController.Query)
+	orderGroup.POST("/products/query", productController.Query)
+	orderGroup.POST("/sync-status/query", syncStatusController.Query)
+	storeGroup := bojunGroup.Group("")
+	storeGroup.Use(middleware.RequirePermission(model.PermissionBojunStoreRead), userRouteLimiter)
+	storeGroup.POST("/stores/query", storeController.Query)
+	stockGroup := bojunGroup.Group("")
+	stockGroup.Use(middleware.RequirePermission(model.PermissionBojunStockRead), userRouteLimiter)
+	stockGroup.POST("/stocks/query", stockController.Query)
 }
 
 const (
