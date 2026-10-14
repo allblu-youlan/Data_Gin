@@ -13,6 +13,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestAccessLogRedactsFeishuOAuthWithoutChangingRequest(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/v1/feishu-mention-view/callback?code=oauth-secret&state=state-secret", nil)
+	u, uri, q := sanitizedAccessLogURL(req)
+	if strings.Contains(u+uri+q, "oauth-secret") || strings.Contains(u+uri+q, "state-secret") {
+		t.Fatal("OAuth credentials leaked")
+	}
+	if req.URL.Query().Get("code") != "oauth-secret" {
+		t.Fatal("logger changed authorization code")
+	}
+	var output bytes.Buffer
+	previous := gin.DefaultWriter
+	gin.DefaultWriter = &output
+	t.Cleanup(func() { gin.DefaultWriter = previous })
+	router := gin.New()
+	router.Use(ConsoleAccessLog())
+	router.GET("/api/v1/feishu-mention-view/callback", func(c *gin.Context) { c.Status(204) })
+	router.ServeHTTP(httptest.NewRecorder(), req)
+	if strings.Contains(output.String(), "oauth-secret") || strings.Contains(output.String(), "state-secret") {
+		t.Fatal("console leaked OAuth credentials")
+	}
+}
+
 func TestAccessLogSanitizesPrivateErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())

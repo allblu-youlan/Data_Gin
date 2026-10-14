@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -25,6 +26,14 @@ const maxAccessLogResponseBodyBytes = 64 << 10
 const maxAccessLogRequestBodyBytes = 64 << 10
 
 const accessLogRedactedValue = "[REDACTED]"
+
+// ConsoleAccessLog uses the same credential redaction as structured logs.
+func ConsoleAccessLog() gin.HandlerFunc {
+	return gin.LoggerWithFormatter(func(p gin.LogFormatterParams) string {
+		_, uri, _ := sanitizedAccessLogURL(p.Request)
+		return fmt.Sprintf("[GIN] %s | %3d | %13v | %15s | %-7s %s\n", p.TimeStamp.Format("2006/01/02 - 15:04:05"), p.StatusCode, p.Latency, p.ClientIP, p.Method, uri)
+	})
+}
 
 type AccessLogWriter struct {
 	gin.ResponseWriter
@@ -182,7 +191,15 @@ func sanitizedAccessLogURL(request *http.Request) (string, string, string) {
 		return "", "", ""
 	}
 	sanitizedURL := *request.URL
-	sanitizedURL.RawQuery = sanitizedAccessLogValues(request.URL.Query()).Encode()
+	values := sanitizedAccessLogValues(request.URL.Query())
+	if strings.HasSuffix(request.URL.Path, "/feishu-mention-view/callback") {
+		for _, key := range []string{"code", "state"} {
+			if values.Has(key) {
+				values.Set(key, accessLogRedactedValue)
+			}
+		}
+	}
+	sanitizedURL.RawQuery = values.Encode()
 	return request.Host + sanitizedURL.String(), sanitizedURL.RequestURI(), sanitizedURL.RawQuery
 }
 
