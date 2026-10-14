@@ -27,6 +27,8 @@ func TestNormalizeDataAuthorizationGrantEnforcesAllowlistAndExpiry(t *testing.T)
 		wantError  bool
 	}{
 		{name: "weather", permission: model.PermissionWeatherRead, expiresAt: now.Add(30 * 24 * time.Hour).Format(time.RFC3339), wantExpiry: true},
+		{name: "bojun store", permission: model.PermissionBojunStoreRead, permanent: true},
+		{name: "bojun stock", permission: model.PermissionBojunStockRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "bojun", permission: model.PermissionBojunOrderRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "permanent", permission: model.PermissionBojunOrderRead, permanent: true},
 		{name: "permanent conflicts with expiry", permission: model.PermissionWeatherRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), permanent: true, wantError: true},

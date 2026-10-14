@@ -4,8 +4,8 @@ import "testing"
 
 func TestMallWeatherAdminPermissions(t *testing.T) {
 	permissions := MallWeatherAdminPermissions()
-	if len(permissions) != 10 {
-		t.Fatalf("MallWeatherAdminPermissions() len = %d, want 10", len(permissions))
+	if len(permissions) != 12 {
+		t.Fatalf("MallWeatherAdminPermissions() len = %d, want 12", len(permissions))
 	}
 
 	seen := make(map[string]struct{}, len(permissions))

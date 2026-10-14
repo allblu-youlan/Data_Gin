@@ -64,3 +64,19 @@ func TestBusinessOverviewPermissionIsAPIGrantable(t *testing.T) {
 	}
 	t.Fatal("business overview permission is missing")
 }
+
+func TestBojunStoreStockPermissionsAreAPIGrantable(t *testing.T) {
+	for _, code := range []string{model.PermissionBojunStoreRead, model.PermissionBojunStockRead} {
+		t.Run(code, func(t *testing.T) {
+			for _, permission := range PermissionCatalog() {
+				if permission.Code == code {
+					if !permission.APIGrantable {
+						t.Fatal("permission must be grantable to open API accounts")
+					}
+					return
+				}
+			}
+			t.Fatal("permission missing from catalog")
+		})
+	}
+}

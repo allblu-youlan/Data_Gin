@@ -78,3 +78,16 @@ test('normalizes default and explicit expiry', () => {
     permanent: true,
   })
 })
+
+test('preserves independent store and stock grants including revoked and expired states', () => {
+  for (const permission of ['bojun.store.read', 'bojun.stock.read']) {
+    for (const status of ['ACTIVE', 'EXPIRED', 'NOT_GRANTED']) {
+      const parsed = parseDataAuthorizationAccounts({ data: { accounts: [{
+        id: 9, account: 'stock-partner', permissions: [{ permission, status, permanent: status === 'ACTIVE' }],
+      }] } })
+      assert.equal(parsed.accounts[0].permissions[0].permission, permission)
+      assert.equal(parsed.accounts[0].permissions[0].status, status)
+    }
+    assert.deepEqual(buildDataAuthorizationGrant(permission, '', true), { permission, permanent: true })
+  }
+})

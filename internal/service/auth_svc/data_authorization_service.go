@@ -619,6 +619,10 @@ func permissionDTO(permission string, expiresAt *time.Time, granted bool, now ti
 	switch permission {
 	case model.PermissionBojunOrderRead:
 		label = "Bojun 订单查询"
+	case model.PermissionBojunStoreRead:
+		label = "伯俊店仓查询"
+	case model.PermissionBojunStockRead:
+		label = "伯俊实时库存查询"
 	case model.PermissionBusinessOverviewRead:
 		label = "营业金额查询"
 	}

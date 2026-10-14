@@ -13,6 +13,8 @@ const (
 	PermissionWeatherConfigManage = "weather.config.manage"
 	PermissionWeatherRawRead      = "weather.raw.read"
 	PermissionBojunOrderRead      = "bojun.order.read"
+	PermissionBojunStoreRead      = "bojun.store.read"
+	PermissionBojunStockRead      = "bojun.stock.read"
 )
 
 var mallWeatherAdminPermissions = [...]string{
@@ -26,11 +28,15 @@ var mallWeatherAdminPermissions = [...]string{
 	PermissionWeatherConfigManage,
 	PermissionWeatherRawRead,
 	PermissionBojunOrderRead,
+	PermissionBojunStoreRead,
+	PermissionBojunStockRead,
 }
 
 var grantableDataPermissions = [...]string{
 	PermissionWeatherRead,
 	PermissionBojunOrderRead,
+	PermissionBojunStoreRead,
+	PermissionBojunStockRead,
 	PermissionBusinessOverviewRead,
 }
 
