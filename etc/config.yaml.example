@@ -221,9 +221,9 @@ FeishuMention:
   MaxFollowups: 1
   GroupFallbackEnabled: false
   DigestEnabled: true
-  # 每日日报时刻，严格使用 HH:mm（24 小时制），固定为 Asia/Shanghai。
-  # FEISHU_MENTION_DIGEST_TIME 环境变量优先；未配置时默认 18:00。
-  # 修改后需同步配置并重启所有接收、worker 和 scheduler 实例。
+  # Web 尚未保存设置时的日报默认时刻，严格使用 HH:mm，固定为上海时间。
+  # 优先级：Web 保存值 > FEISHU_MENTION_DIGEST_TIME 环境变量 > 此处 > 18:00。
+  # Web 修改后由各实例在下一轮调度时读取，无需重启。
   DigestTime: "18:00"
   DigestSkipEmpty: true
   AIEnabled: false

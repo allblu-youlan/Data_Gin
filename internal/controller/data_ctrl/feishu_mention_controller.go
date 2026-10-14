@@ -92,6 +92,22 @@ func (c *FeishuMentionController) Reports(ctx *gin.Context) {
 }
 func (c *FeishuMentionController) Jobs(ctx *gin.Context)       { mentionList(ctx, c, "jobs", c.service.Jobs) }
 func (c *FeishuMentionController) CreateChat(ctx *gin.Context) { c.saveChat(ctx, 0) }
+func (c *FeishuMentionController) SaveDigestSettings(ctx *gin.Context) {
+	if !c.check(ctx) {
+		return
+	}
+	var input data_svc.FeishuMentionDigestSettingsInput
+	if err := bindOfficeJSON(ctx, &input); err != nil {
+		writeFeishuMentionError(ctx, data_svc.ErrFeishuMentionAdminInvalid)
+		return
+	}
+	out, err := c.service.SaveDigestSettings(ctx.Request.Context(), auth.CurrentUserID(ctx), input)
+	if err != nil {
+		writeFeishuMentionError(ctx, err)
+		return
+	}
+	responses.New(ctx).ToResponse(out)
+}
 func (c *FeishuMentionController) UpdateChat(ctx *gin.Context) {
 	id, ok := mentionID(ctx, "id")
 	if ok {

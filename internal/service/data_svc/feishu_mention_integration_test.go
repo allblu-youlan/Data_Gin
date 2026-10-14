@@ -51,7 +51,7 @@ func mentionMySQLFixture(t *testing.T, personal bool) (*FeishuMentionService, *t
 	if !strings.HasPrefix(version, "8.") {
 		t.Fatalf("MySQL 8 is required, got %s", version)
 	}
-	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin").AutoMigrate(&model.FeishuMonitoredChat{}, &model.FeishuSourceMessage{}, &model.FeishuMessageRecipient{}, &model.FeishuDailyReport{}, &model.FeishuDeliveryJob{}, &model.FeishuDigestSchedule{}, &model.AsyncJobOutbox{}); err != nil {
+	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin").AutoMigrate(&model.FeishuMonitoredChat{}, &model.FeishuSourceMessage{}, &model.FeishuMessageRecipient{}, &model.FeishuDailyReport{}, &model.FeishuDeliveryJob{}, &model.FeishuDigestSchedule{}, &model.AsyncJobOutbox{}, &model.RuntimeConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := appConfig.FeishuMentionConfig{Enabled: true, ReceiverEnabled: true, PersonalReminderEnabled: personal, FollowupEnabled: personal, DigestEnabled: true, DigestTime: "18:00", MaxAttempts: 3, APITimeoutSeconds: 1, DeliveryLeaseSeconds: 10, RetentionDays: 90}
@@ -81,6 +81,7 @@ func mentionMySQLFixture(t *testing.T, personal bool) (*FeishuMentionService, *t
 			for _, value := range []any{&model.FeishuDeliveryJob{}, &model.FeishuDailyReport{}, &model.FeishuSourceMessage{}, &model.FeishuMonitoredChat{}, &model.FeishuDigestSchedule{}} {
 				tx.Where("app_id = ?", s.appID).Delete(value)
 			}
+			tx.Where("config_key = ?", mentionDigestSettingsKey(s.appID)).Delete(&model.RuntimeConfig{})
 			return nil
 		})
 		if sqlDB, err := db.DB(); err == nil {

@@ -62,7 +62,11 @@ func (s *FeishuMentionService) Initialize(ctx context.Context) error {
 		return nil
 	}
 	now := s.now()
-	cutoff, err := nextMentionCutoff(now, s.cfg.DigestTime)
+	settings, err := loadMentionDigestSettings(ctx, s.db, s.appID, s.cfg.DigestTime)
+	if err != nil {
+		return err
+	}
+	cutoff, err := nextMentionCutoff(now, settings.DigestTime)
 	if err != nil {
 		return err
 	}

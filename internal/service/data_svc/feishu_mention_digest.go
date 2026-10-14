@@ -20,6 +20,10 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 		return nil
 	}
 	for windows := 0; windows < 31; windows++ {
+		settings, err := loadMentionDigestSettings(ctx, s.db, s.appID, s.cfg.DigestTime)
+		if err != nil {
+			return err
+		}
 		var schedule model.FeishuDigestSchedule
 		due := false
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -33,7 +37,7 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 			// Finish every overdue window using its persisted clock before
 			// applying a changed clock to the next unplanned cutoff date.
 			if schedule.NextCutoffAt.After(now) {
-				next, err := rescheduleMentionCutoff(schedule, s.cfg.DigestTime)
+				next, err := rescheduleMentionCutoff(schedule, settings.DigestTime)
 				if err != nil {
 					return err
 				}

@@ -611,4 +611,5 @@ func registerFeishuMentionRoutes(api *gin.RouterGroup, controller *data_ctrl.Fei
 	group.GET("/jobs", read, controller.Jobs)
 	group.POST("/jobs/:id/retry", read, middleware.RequirePermission(model.PermissionOfficeMentionRetry), controller.Retry)
 	group.GET("/status", manage, controller.Status)
+	group.PUT("/digest-settings", manage, controller.SaveDigestSettings)
 }

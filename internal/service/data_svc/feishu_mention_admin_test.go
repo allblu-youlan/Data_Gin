@@ -133,7 +133,7 @@ func TestFeishuMentionAdminStatusKeepsPauseReasonWithoutDatabase(t *testing.T) {
 	}
 }
 
-func TestFeishuMentionAdminStatusExposesConfiguredDigestTime(t *testing.T) {
+func TestFeishuMentionAdminStatusDoesNotGuessDigestTimeWithoutDatabase(t *testing.T) {
 	for _, tc := range []struct {
 		time    string
 		enabled bool
@@ -154,15 +154,15 @@ func TestFeishuMentionAdminStatusExposesConfiguredDigestTime(t *testing.T) {
 				t.Fatal(err)
 			}
 			var decoded struct {
-				DigestTime    string `json:"digestTime"`
-				Timezone      string `json:"timezone"`
-				DigestEnabled bool   `json:"digestEnabled"`
+				DigestTime    *string `json:"digestTime"`
+				Timezone      string  `json:"timezone"`
+				DigestEnabled bool    `json:"digestEnabled"`
 			}
 			if err := json.Unmarshal(encoded, &decoded); err != nil {
 				t.Fatal(err)
 			}
-			if decoded.DigestTime != tc.time || decoded.Timezone != "Asia/Shanghai" || decoded.DigestEnabled != tc.enabled {
-				t.Fatalf("status must retain effective configuration even when storage is unavailable or digest is paused: %+v", decoded)
+			if decoded.DigestTime != nil || decoded.Timezone != "Asia/Shanghai" || decoded.DigestEnabled != tc.enabled {
+				t.Fatalf("status must not present process defaults as the persisted setting when storage is unavailable: %+v", decoded)
 			}
 		})
 	}

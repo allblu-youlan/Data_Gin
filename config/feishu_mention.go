@@ -14,7 +14,8 @@ const EnvFeishuMentionDigestTime = "FEISHU_MENTION_DIGEST_TIME"
 
 // FeishuMentionConfig is loaded once per process. Business switches must match
 // across receivers, workers and schedulers using the same Feishu application.
-// Restart each role after changing the daily digest's Shanghai clock.
+// DigestTime is the fallback until the Web setting is saved; the shared Web
+// setting is read at runtime and applies without restarting these roles.
 type FeishuMentionConfig struct {
 	Enabled                 bool
 	ReceiverEnabled         bool
