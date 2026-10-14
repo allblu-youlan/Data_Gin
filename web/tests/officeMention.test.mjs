@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { canViewNavigationItem } from '../.test-dist/appShell/navigationPermissions.js'
-import { canRetryMentionJob, confirmationLabel, mentionDigestSettingsRequest, mentionQuery, parseMentionData, parseMentionPage, safeOriginalURL } from '../.test-dist/officeMention/contracts.js'
+import { canResendMentionReport, canRetryMentionJob, confirmationLabel, mentionDigestSettingsRequest, mentionQuery, mentionResendReportRequest, parseMentionData, parseMentionPage, safeOriginalURL } from '../.test-dist/officeMention/contracts.js'
 
 test('read and manage navigation are independent and old office permission grants neither', () => {
   for (const key of ['mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status']) assert.equal(canViewNavigationItem(key, ['office_message.read']), false)
@@ -44,4 +44,16 @@ test('digest settings request only updates the strict Shanghai HH:mm clock', () 
   for (const invalid of ['', '8:00', '24:00', '18:60', '18:00:00', ' 18:00', '18:00 ', '18:00\n']) {
     assert.throws(() => mentionDigestSettingsRequest(invalid), /HH:mm/)
   }
+})
+test('report resend needs read and retry permissions and a finished delivery state', () => {
+  const permissions = ['office_mention.read', 'office_mention.retry']
+  for (const status of ['sent', 'failed']) {
+    assert.equal(canResendMentionReport({ status }, permissions), true)
+    assert.equal(canResendMentionReport({ status }, ['office_mention.read']), false)
+    assert.equal(canResendMentionReport({ status }, ['office_mention.retry']), false)
+    assert.equal(canResendMentionReport({ status }, ['office_mention.manage']), false)
+  }
+  for (const status of ['ready', 'pending', 'sending', 'retry_wait', 'cancelled']) assert.equal(canResendMentionReport({ status }, permissions), false)
+  assert.deepEqual(mentionResendReportRequest(27), { path: '/reports/27/resend', options: { method: 'POST', body: {} } })
+  for (const id of [0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => mentionResendReportRequest(id))
 })

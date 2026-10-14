@@ -2,6 +2,8 @@ package data_ctrl
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -10,6 +12,7 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/pkg/auth"
+	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/database"
 	"gin-biz-web-api/pkg/errcode"
 	"gin-biz-web-api/pkg/logger"
@@ -25,7 +28,7 @@ type FeishuMentionController struct {
 
 func NewFeishuMentionController() *FeishuMentionController {
 	cfg, err := appconfig.LoadFeishuMentionConfig()
-	return &FeishuMentionController{service: data_svc.NewFeishuMentionAdminService(database.DB, global.Credentials.FeishuAppID(), cfg), configError: err}
+	return &FeishuMentionController{service: data_svc.NewFeishuMentionAdminService(database.DB, global.Credentials.FeishuAppID(), cfg, config.GetString("cfg.app.url")), configError: err}
 }
 func (c *FeishuMentionController) check(ctx *gin.Context) bool {
 	if c.configError != nil {
@@ -182,6 +185,27 @@ func (c *FeishuMentionController) ReportMessages(ctx *gin.Context) {
 		return
 	}
 	responses.New(ctx).ToResponseWithPagination(out, p)
+}
+func (c *FeishuMentionController) ResendReport(ctx *gin.Context) {
+	if !c.check(ctx) {
+		return
+	}
+	id, ok := mentionID(ctx, "id")
+	if !ok {
+		return
+	}
+	var body map[string]interface{}
+	err := bindOfficeJSON(ctx, &body)
+	if (err != nil && !errors.Is(err, io.EOF)) || (err == nil && body == nil) || len(body) != 0 {
+		writeFeishuMentionError(ctx, data_svc.ErrFeishuMentionAdminInvalid)
+		return
+	}
+	out, err := c.service.ResendReport(ctx.Request.Context(), id, auth.CurrentUserID(ctx))
+	if err != nil {
+		writeFeishuMentionError(ctx, err)
+		return
+	}
+	responses.New(ctx).ToResponse(out)
 }
 func (c *FeishuMentionController) ReportPart(ctx *gin.Context) {
 	if !c.check(ctx) {

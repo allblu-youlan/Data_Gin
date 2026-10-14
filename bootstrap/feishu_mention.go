@@ -38,7 +38,7 @@ func setupFeishuMention() error {
 	if err != nil {
 		return err
 	}
-	s := data_svc.NewFeishuMentionService(database.DB, global.Credentials.FeishuAppID(), cfg)
+	s := data_svc.NewFeishuMentionService(database.DB, global.Credentials.FeishuAppID(), cfg, config.GetString("cfg.app.url"))
 	mentionRuntime.service = s
 	if cfg.Enabled {
 		if database.DB == nil {

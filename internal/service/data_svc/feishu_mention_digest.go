@@ -137,9 +137,15 @@ func (s *FeishuMentionService) freezeDigest(ctx context.Context, tx *gorm.DB, ch
 		snapshot.Messages[i].MessageCreatedAt = snapshot.Messages[i].MessageCreatedAt.In(loc)
 		snapshot.Messages[i].ReceivedAt = snapshot.Messages[i].ReceivedAt.In(loc)
 	}
-	parts, err := buildMentionDigestParts(snapshot)
-	if err != nil {
-		return err
+	var parts []model.FeishuDigestPart
+	if s.publicURL != "" {
+		snapshot.SchemaVersion = 2
+		parts = []model.FeishuDigestPart{{PartNo: 1, Title: mentionDigestTitle(snapshot, 1, 1)}}
+	} else {
+		parts, err = buildMentionDigestParts(snapshot)
+		if err != nil {
+			return err
+		}
 	}
 	snapshot.Parts = parts
 	raw, err := json.Marshal(snapshot)
@@ -164,7 +170,12 @@ func (s *FeishuMentionService) freezeDigest(ctx context.Context, tx *gorm.DB, ch
 		}
 	}
 	for _, part := range parts {
-		card, err := mentionDigestCard(snapshot, part)
+		var card string
+		if snapshot.SchemaVersion >= 2 {
+			card, err = compactMentionDigestCard(snapshot, report.ID, s.publicURL)
+		} else {
+			card, err = mentionDigestCard(snapshot, part)
+		}
 		if err != nil {
 			return err
 		}

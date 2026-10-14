@@ -35,6 +35,11 @@ func TestFeishuMentionControllerRejectsInvalidWrites(t *testing.T) {
 		{"digest app override", "PUT", "/digest-settings", `{"digestTime":"18:00","appId":"other"}`},
 		{"digest cannot enable module", "PUT", "/digest-settings", `{"digestTime":"18:00","enabled":true}`},
 		{"digest trailing JSON", "PUT", "/digest-settings", `{"digestTime":"18:00"}{}`},
+		{"resend null", "POST", "/reports/1/resend", `null`},
+		{"resend cannot override recipient", "POST", "/reports/1/resend", `{"recipientOpenId":"ou_other"}`},
+		{"resend cannot override content", "POST", "/reports/1/resend", `{"content":"replacement"}`},
+		{"resend trailing JSON", "POST", "/reports/1/resend", `{}{}`},
+		{"resend invalid report", "POST", "/reports/zero/resend", `{}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -44,6 +49,7 @@ func TestFeishuMentionControllerRejectsInvalidWrites(t *testing.T) {
 			router.PUT("/chats/:id", controller.UpdateChat)
 			router.POST("/jobs/:id/retry", controller.Retry)
 			router.PUT("/digest-settings", controller.SaveDigestSettings)
+			router.POST("/reports/:id/resend", controller.ResendReport)
 			request := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)

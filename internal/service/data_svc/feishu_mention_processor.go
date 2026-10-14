@@ -278,6 +278,13 @@ func (p *FeishuMentionProcessor) finish(ctx context.Context, claimed model.Feish
 				return createMentionJob(stateCtx, tx, &followup, true)
 			}
 		case "daily_digest":
+			var report model.FeishuDailyReport
+			if err := tx.Where("id = ? AND app_id = ?", *row.ReportID, s.appID).First(&report).Error; err != nil {
+				return err
+			}
+			if *row.PartNo >= report.PartCount {
+				return tx.Model(&report).Updates(map[string]any{"status": "sent", "sent_at": now}).Error
+			}
 			var next model.FeishuDeliveryJob
 			err := tx.Where("report_id = ? AND part_no = ?", row.ReportID, *row.PartNo+1).First(&next).Error
 			if err == nil {

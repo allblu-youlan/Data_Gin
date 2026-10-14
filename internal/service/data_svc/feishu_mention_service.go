@@ -43,18 +43,23 @@ type FeishuMentionConfirmation struct {
 	PayloadVersion                           int
 }
 type FeishuMentionService struct {
-	db    *gorm.DB
-	appID string
-	cfg   appConfig.FeishuMentionConfig
-	now   func() time.Time
+	db        *gorm.DB
+	appID     string
+	cfg       appConfig.FeishuMentionConfig
+	now       func() time.Time
+	publicURL string
 }
 
-func NewFeishuMentionService(db *gorm.DB, appID string, cfg appConfig.FeishuMentionConfig) *FeishuMentionService {
+func NewFeishuMentionService(db *gorm.DB, appID string, cfg appConfig.FeishuMentionConfig, publicURL ...string) *FeishuMentionService {
 	now := func() time.Time { return time.Now().In(mentionLocation()) }
 	if db != nil {
 		db = db.Session(&gorm.Session{Logger: db.Logger.LogMode(logger.Silent), NowFunc: now})
 	}
-	return &FeishuMentionService{db: db, appID: appID, cfg: cfg, now: now}
+	s := &FeishuMentionService{db: db, appID: appID, cfg: cfg, now: now}
+	if len(publicURL) > 0 {
+		s.publicURL = strings.TrimSpace(publicURL[0])
+	}
+	return s
 }
 
 func (s *FeishuMentionService) Initialize(ctx context.Context) error {

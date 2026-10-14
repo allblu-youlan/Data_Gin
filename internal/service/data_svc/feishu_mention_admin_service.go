@@ -28,17 +28,22 @@ var (
 )
 
 type FeishuMentionAdminService struct {
-	dao    *data_dao.FeishuMentionAdminDAO
-	config appconfig.FeishuMentionConfig
-	now    func() time.Time
+	dao       *data_dao.FeishuMentionAdminDAO
+	config    appconfig.FeishuMentionConfig
+	now       func() time.Time
+	publicURL string
 }
 
-func NewFeishuMentionAdminService(db *gorm.DB, appID string, cfg appconfig.FeishuMentionConfig) *FeishuMentionAdminService {
+func NewFeishuMentionAdminService(db *gorm.DB, appID string, cfg appconfig.FeishuMentionConfig, publicURL ...string) *FeishuMentionAdminService {
 	now := func() time.Time { return time.Now().In(mentionLocation()) }
 	if db != nil {
 		db = db.Session(&gorm.Session{Logger: db.Logger.LogMode(logger.Silent), NowFunc: now})
 	}
-	return &FeishuMentionAdminService{dao: &data_dao.FeishuMentionAdminDAO{DB: db, AppID: strings.TrimSpace(appID)}, config: cfg, now: now}
+	s := &FeishuMentionAdminService{dao: &data_dao.FeishuMentionAdminDAO{DB: db, AppID: strings.TrimSpace(appID)}, config: cfg, now: now}
+	if len(publicURL) > 0 {
+		s.publicURL = strings.TrimSpace(publicURL[0])
+	}
+	return s
 }
 func (s *FeishuMentionAdminService) ready() error {
 	if s == nil || s.dao == nil || s.dao.DB == nil {
@@ -396,7 +401,7 @@ func mentionReportDTO(r model.FeishuDailyReport, jobs []model.FeishuDeliveryJob,
 	}
 	out := FeishuMentionReportDTO{ID: r.ID, AppID: r.AppID, ChatID: r.ChatID, ChatName: snap.ChatName, RecipientOpenID: r.RecipientOpenID, RecipientName: snap.RecipientName, ReportDate: r.ReportDate, WindowStart: r.WindowStart.In(mentionLocation()), WindowEnd: r.WindowEnd.In(mentionLocation()), MessageCount: snap.MessageCount, Status: r.Status, PartCount: r.PartCount, GeneratedAt: r.GeneratedAt.In(mentionLocation()), SentAt: mentionAdminTime(r.SentAt)}
 	for _, j := range jobs {
-		if j.ReportID == nil || *j.ReportID != r.ID {
+		if j.ReportID == nil || *j.ReportID != r.ID || j.PartNo == nil || *j.PartNo > r.PartCount {
 			continue
 		}
 		if j.Status == "sent" {
@@ -506,6 +511,9 @@ func (s *FeishuMentionAdminService) ReportPart(ctx context.Context, id, partNo u
 	r, e := s.dao.Report(ctx, id)
 	if e != nil {
 		return nil, mentionAdminError(e)
+	}
+	if partNo > r.PartCount {
+		return nil, ErrFeishuMentionAdminNotFound
 	}
 	var snap model.FeishuDigestSnapshot
 	if e = json.Unmarshal([]byte(r.ContentSnapshot), &snap); e != nil {
@@ -772,9 +780,9 @@ func FeishuMentionAdminSafeError(err error) (int, string) {
 	case errors.Is(err, ErrFeishuMentionAdminNotFound):
 		return 404, "当前应用内记录不存在"
 	case errors.Is(err, ErrFeishuMentionAdminPaused):
-		return 409, "当前功能已暂停，暂不能重试"
+		return 409, "当前功能已暂停，暂不能发送或重试"
 	case errors.Is(err, ErrFeishuMentionAdminConflict):
-		return 409, "群已登记或任务状态不允许重试，请刷新"
+		return 409, "记录已存在或当前发送状态不允许此操作，请刷新后重试"
 	default:
 		return 500, "操作失败，请稍后重试"
 	}

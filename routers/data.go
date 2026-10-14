@@ -38,6 +38,7 @@ func apiData(api *gin.RouterGroup) {
 	registerReportCenterRoutes(api, global.ReportCenterEnabledAtStartup)
 	registerOfficeMessageRoutes(api, data_ctrl.NewOfficeMessageController())
 	registerFeishuMentionRoutes(api, data_ctrl.NewFeishuMentionController())
+	registerFeishuMentionViewRoutes(api, data_ctrl.NewFeishuMentionViewController())
 
 	sourceGroup := api.Group("/v1/sources")
 	sourceGroup.Use(middleware.AuthJWT())
@@ -606,10 +607,17 @@ func registerFeishuMentionRoutes(api *gin.RouterGroup, controller *data_ctrl.Fei
 	group.GET("/recipients/:id", read, controller.Recipient)
 	group.GET("/reports", read, controller.Reports)
 	group.GET("/reports/:id", read, controller.Report)
+	group.POST("/reports/:id/resend", read, middleware.RequirePermission(model.PermissionOfficeMentionRetry), controller.ResendReport)
 	group.GET("/reports/:id/messages", read, controller.ReportMessages)
 	group.GET("/reports/:id/parts/:partNo", read, controller.ReportPart)
 	group.GET("/jobs", read, controller.Jobs)
 	group.POST("/jobs/:id/retry", read, middleware.RequirePermission(model.PermissionOfficeMentionRetry), controller.Retry)
 	group.GET("/status", manage, controller.Status)
 	group.PUT("/digest-settings", manage, controller.SaveDigestSettings)
+}
+
+func registerFeishuMentionViewRoutes(api *gin.RouterGroup, controller *data_ctrl.FeishuMentionViewController) {
+	group := api.Group("/v1/feishu-mention-view")
+	group.GET("/reports/:id", controller.Report)
+	group.GET("/callback", controller.Callback)
 }

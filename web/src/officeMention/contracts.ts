@@ -1,15 +1,22 @@
-import type { Job, JobStatus, JobType, MentionSection, Page, Recipient } from './types'
+import type { Job, JobStatus, JobType, MentionSection, Page, Recipient, Report } from './types'
 export const mentionNotice = '个人提醒与确认默认关闭；开启后记录本人确认，无法获取原群消息实际已读状态。'
 export const sectionTitles: Record<MentionSection, string> = { chats: '监控群', recipients: '@ 消息记录', reports: '每日报告', jobs: '发送任务', status: '模块状态' }
 export const viewLabels: Record<Recipient['viewStatus'], string> = { not_required: '无需确认', pending: '待确认查看', confirmed: '已确认查看' }
 export const jobLabels: Record<JobType, string> = { initial_reminder: '首次提醒', followup_reminder: '二次提醒', daily_digest: '日报分段', card_update: '卡片更新' }
 export const statusLabels: Record<JobStatus | 'ready', string> = { pending: '等待发送', sending: '发送中', sent: '发送成功', retry_wait: '等待重试', failed: '发送失败', cancelled: '已取消', ready: '待发送' }
-export const cancelLabels: Record<string, string> = { confirmed: '本人已确认', group_disabled: '监控群已停用', personal_reminder_disabled: '个人提醒与确认已关闭', followup_disabled: '二次提醒已关闭' }
+export const cancelLabels: Record<string, string> = { confirmed: '本人已确认', group_disabled: '监控群已停用', personal_reminder_disabled: '个人提醒与确认已关闭', followup_disabled: '二次提醒已关闭', compact_report_resend: '重发已合并为紧凑卡片' }
 export function confirmationLabel(row: Pick<Recipient, 'viewStatus' | 'confirmationEnabled'>) {
   return viewLabels[row.viewStatus] + (row.viewStatus === 'pending' && !row.confirmationEnabled ? '（确认功能已关闭）' : '')
 }
 export function canRetryMentionJob(job: Pick<Job, 'status' | 'retryable'>, permissions: readonly string[]) {
   return job.status === 'failed' && job.retryable !== false && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
+}
+export function canResendMentionReport(report: Pick<Report, 'status'>, permissions: readonly string[]) {
+  return (report.status === 'sent' || report.status === 'failed') && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
+}
+export function mentionResendReportRequest(reportID: number) {
+  if (!Number.isSafeInteger(reportID) || reportID <= 0) throw new Error('日报标识无效，请刷新后重试。')
+  return { path: `/reports/${reportID}/resend`, options: { method: 'POST' as const, body: {} } }
 }
 export function mentionDigestSettingsRequest(digestTime: string) {
   if (digestTime.length !== 5 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(digestTime)) throw new Error('请填写有效的日报时间，格式为 HH:mm（例如 18:00）。')

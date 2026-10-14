@@ -3,9 +3,10 @@ import type { FormEvent, ReactNode } from 'react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { DataTable, Drawer, FeedbackState, PageCanvas, PageHeader, PaginationControls, Section, StatusTag } from '../ui'
 import { mentionRequest, useMentionPage, useMentionResource } from './api'
-import { cancelLabels, canRetryMentionJob, confirmationLabel, formatMentionTime as time, jobLabels, mentionNotice, mentionQuery, sectionTitles, statusLabels, viewLabels } from './contracts'
+import { cancelLabels, canResendMentionReport, canRetryMentionJob, confirmationLabel, formatMentionTime as time, jobLabels, mentionNotice, mentionQuery, sectionTitles, statusLabels, viewLabels } from './contracts'
 import { JobDetail, RecipientDetail, ReportDetail } from './MentionDetails'
 import { DigestSettingsSection } from './DigestSettingsSection'
+import { ReportResendDialog } from './ReportResendDialog'
 import type { Chat, Job, MentionSection, ModuleStatus, Recipient, Report } from './types'
 import styles from './OfficeMention.module.css'
 
@@ -34,6 +35,7 @@ function MentionListPage({ client, permissions, section }: Props & { section: Ex
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [retrying, setRetrying] = useState<number[]>([])
+  const [resendTarget, setResendTarget] = useState<Report | null>(null)
   const { data, loading, error } = useMentionPage<Row>(client, `/${section}?${mentionQuery(filters, page, perPage)}`, reload)
   const canManage = permissions.includes('office_mention.manage')
   const notify = (text: string, error = false) => setNotice({ text, error })
@@ -50,6 +52,7 @@ function MentionListPage({ client, permissions, section }: Props & { section: Ex
     try { await mentionRequest(client, `/jobs/${job.id}/retry`, { method: 'POST', body: {} }); notify('已重新排队'); setReload((r) => r + 1) } catch (reason) { notify(reason instanceof Error ? reason.message : '重试失败。', true) } finally { setRetrying((ids) => ids.filter((id) => id !== job.id)) }
   }
   function retryButton(job: Job) { return canRetryMentionJob(job, permissions) ? <button type="button" disabled={retrying.includes(job.id)} onClick={() => void retry(job)}>{retrying.includes(job.id) ? '重新排队中…' : '重试失败任务'}</button> : null }
+  function resendButton(report: Report) { return canResendMentionReport(report, permissions) ? <button type="button" onClick={() => setResendTarget(report)}>重发日报</button> : null }
   async function saveChat(event: FormEvent) {
     event.preventDefault(); if (!draft || saving) return
     if (!draft.chatName?.trim() || (!draft.id && !draft.chatId?.trim()) || (draft.followupMinutes !== undefined && (!Number.isInteger(draft.followupMinutes) || draft.followupMinutes <= 0)) || (Boolean(draft.id) && draft.followupMinutes === undefined)) { setSaveError('请填写群 ID、群名；提醒间隔须为正整数，新建时可留空使用服务端默认值。'); return }
@@ -57,7 +60,7 @@ function MentionListPage({ client, permissions, section }: Props & { section: Ex
     const body = { ...(!draft.id ? { chatId: draft.chatId?.trim() } : {}), chatName: draft.chatName.trim(), isExternal: draft.isExternal ?? false, enabled: draft.enabled ?? true, followupMinutes: draft.followupMinutes }
     try { await mentionRequest(client, draft.id ? `/chats/${draft.id}` : '/chats', { method: draft.id ? 'PUT' : 'POST', body }); setDraft(null); setReload((r) => r + 1); notify('监控群设置已保存。登记成功后仍需确认机器人已入群且权限可用。') } catch (reason) { setSaveError(reason instanceof Error ? reason.message : '保存失败。') } finally { setSaving(false) }
   }
-  const table = renderTable(section, data?.result ?? [], { onEdit: (chat) => { setDraft(chat); setSaveError('') }, onRecipient: (id) => setSelected({ kind: 'recipient', id }), onReport: (id) => setSelected({ kind: 'report', id }), onJob: (job) => setSelected({ kind: 'job', job }), retryButton, canManage })
+  const table = renderTable(section, data?.result ?? [], { onEdit: (chat) => { setDraft(chat); setSaveError('') }, onRecipient: (id) => setSelected({ kind: 'recipient', id }), onReport: (id) => setSelected({ kind: 'report', id }), onJob: (job) => setSelected({ kind: 'job', job }), retryButton, resendButton, canManage })
   return <PageCanvas>
     <PageHeader eyebrow="FEISHU MENTIONS" title={sectionTitles[section]} description={mentionNotice} actions={<div className={styles.actions}><button type="button" onClick={() => setReload((r) => r + 1)} disabled={loading}>刷新</button>{section === 'chats' && canManage ? <button type="button" className={styles.primary} onClick={() => { setDraft({ chatId: '', chatName: '', enabled: true, isExternal: false }); setSaveError('') }}>新增监控群</button> : null}</div>} />
     {notice ? <p role={notice.error ? 'alert' : 'status'} className={notice.error ? styles.error : styles.success}>{notice.text}</p> : null}
@@ -71,17 +74,18 @@ function MentionListPage({ client, permissions, section }: Props & { section: Ex
     </Drawer>
     {selected?.kind === 'job' ? <JobDetail job={selected.job} onClose={() => setSelected(null)} onRecipient={(id) => setSelected({ kind: 'recipient', id })} onReport={(id) => setSelected({ kind: 'report', id })} /> : null}
     {selected?.kind === 'recipient' ? <RecipientDetail key={selected.id} client={client} id={selected.id} onClose={() => setSelected(null)} onReport={(id) => setSelected({ kind: 'report', id })} /> : null}
-    {selected?.kind === 'report' ? <ReportDetail key={selected.id} client={client} id={selected.id} reload={reload} notice={notice} onRefresh={() => setReload((r) => r + 1)} onClose={() => setSelected(null)} retryButton={retryButton} /> : null}
+    {selected?.kind === 'report' ? <ReportDetail key={selected.id} client={client} id={selected.id} reload={reload} notice={notice} onRefresh={() => setReload((r) => r + 1)} onClose={() => setSelected(null)} retryButton={retryButton} resendButton={resendButton} /> : null}
+    {resendTarget ? <ReportResendDialog key={resendTarget.id} client={client} report={resendTarget} onClose={() => setResendTarget(null)} onSaved={() => { setResendTarget(null); notify('日报已重新排队，将按原统计内容使用最新样式发送。'); setReload((r) => r + 1) }} /> : null}
   </PageCanvas>
 }
 function identity(name: string, id: string) { return <><strong>{name || id}</strong>{name ? <code className={styles.cellHint}>{id}</code> : null}</> }
 function status(value: Job['status'] | Report['status']) { return <StatusTag tone={value === 'sent' ? 'success' : value === 'failed' ? 'danger' : 'neutral'}>{statusLabels[value]}</StatusTag> }
 function reminder(job: Job | null) { return job ? <>{status(job.status)}<small className={styles.cellHint}>{time(job.sentAt)}</small></> : '未安排提醒' }
-function renderTable(section: Exclude<MentionSection, 'status'>, rows: Row[], actions: { onEdit: (row: Chat) => void; onRecipient: (id: number) => void; onReport: (id: number) => void; onJob: (job: Job) => void; retryButton: (job: Job) => ReactNode; canManage: boolean }) {
+function renderTable(section: Exclude<MentionSection, 'status'>, rows: Row[], actions: { onEdit: (row: Chat) => void; onRecipient: (id: number) => void; onReport: (id: number) => void; onJob: (job: Job) => void; retryButton: (job: Job) => ReactNode; resendButton: (report: Report) => ReactNode; canManage: boolean }) {
   let headers: string[], body: ReactNode
   if (section === 'chats') { headers = ['来源群', '群类型', '监控状态', '提醒间隔', '更新时间', '操作']; body = (rows as Chat[]).map((r) => <tr key={r.id}><td>{identity(r.chatName, r.chatId)}</td><td>{r.isExternal ? '外部群' : '内部群'}</td><td><StatusTag tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? '启用' : '停用'}</StatusTag></td><td>{r.followupMinutes} 分钟</td><td>{time(r.updatedAt)}</td><td>{actions.canManage ? <button type="button" onClick={() => actions.onEdit(r)}>编辑 / 启停</button> : '—'}</td></tr>) }
   else if (section === 'recipients') { headers = ['来源群 / 收件人', '消息', '本人确认', '首次提醒', '二次提醒', '操作']; body = (rows as Recipient[]).map((r) => <tr key={r.id}><td>{identity(r.chatName, r.chatId)}<br />{identity(r.recipientName, r.recipientOpenId)}</td><td><span className={styles.preview}>{r.contentPreview}</span><small className={styles.cellHint}>{r.senderName} · 消息于 {time(r.messageCreatedAt)}</small><small className={styles.cellHint}>接收于 {time(r.receivedAt)}</small></td><td>{confirmationLabel(r)}<small className={styles.cellHint}>{time(r.confirmedAt)}</small></td><td>{reminder(r.initialReminder)}</td><td>{reminder(r.followupReminder)}</td><td><button type="button" onClick={() => actions.onRecipient(r.id)}>查看全文</button></td></tr>) }
-  else if (section === 'reports') { headers = ['来源群 / 收件人', '报告日期', '消息数', '已发送段数', '发送状态', '操作']; body = (rows as Report[]).map((r) => <tr key={r.id}><td>{identity(r.chatName, r.chatId)}<br />{identity(r.recipientName, r.recipientOpenId)}</td><td>{r.reportDate}</td><td>{r.messageCount}</td><td>{r.sentPartCount} / {r.partCount}</td><td>{status(r.status)}<small className={styles.cellHint}>{time(r.sentAt)}</small></td><td><button type="button" onClick={() => actions.onReport(r.id)}>查看固定日报</button></td></tr>) }
+  else if (section === 'reports') { headers = ['来源群 / 收件人', '报告日期', '消息数', '已发送段数', '发送状态', '操作']; body = (rows as Report[]).map((r) => <tr key={r.id}><td>{identity(r.chatName, r.chatId)}<br />{identity(r.recipientName, r.recipientOpenId)}</td><td>{r.reportDate}</td><td>{r.messageCount}</td><td>{r.sentPartCount} / {r.partCount}</td><td>{status(r.status)}<small className={styles.cellHint}>{time(r.sentAt)}</small></td><td><div className={styles.actions}><button type="button" onClick={() => actions.onReport(r.id)}>查看固定日报</button>{actions.resendButton(r)}</div></td></tr>) }
   else { headers = ['任务', '来源群 / 收件人', '发送状态', '计划 / 发送时间', '尝试次数', '错误 / 取消原因', '操作']; body = (rows as Job[]).map((r) => <tr key={r.id}><td>{jobLabels[r.jobType]}<small className={styles.cellHint}>#{r.id}{r.partNo ? ` · 第 ${r.partNo} 段` : ''}</small></td><td><code>{r.chatId}</code><small className={styles.cellHint}>{r.recipientOpenId}</small></td><td>{status(r.status)}</td><td>{time(r.scheduledAt)}<small className={styles.cellHint}>{time(r.sentAt)}</small></td><td>累计 {r.attempts}<small className={styles.cellHint}>本轮 {r.cycleAttempts}</small></td><td><span className={styles.preview}>{r.lastErrorMessage || cancelLabels[r.cancelReason] || r.cancelReason || '—'}</span><small className={styles.cellHint}>{r.lastErrorCode}</small></td><td><div className={styles.actions}><button type="button" onClick={() => actions.onJob(r)}>任务详情</button>{r.reportId ? <button type="button" onClick={() => actions.onReport(r.reportId!)}>日报</button> : r.recipientRecordId ? <button type="button" onClick={() => actions.onRecipient(r.recipientRecordId!)}>原文</button> : null}{actions.retryButton(r)}</div></td></tr>) }
   return <DataTable minWidth={section === 'jobs' ? 1150 : 950} scrollLabel={`${sectionTitles[section]}列表`}><thead><tr>{headers.map((header) => <th scope="col" key={header}>{header}</th>)}</tr></thead><tbody>{body}</tbody></DataTable>
 }

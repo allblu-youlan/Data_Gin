@@ -30,14 +30,14 @@ export function RecipientDetail({ client, id, onClose, onReport }: { client: Wor
     </div> : null}
   </Drawer>
 }
-export function ReportDetail({ client, id, reload, notice, onRefresh, onClose, retryButton }: { notice?: {text: string; error: boolean} | null; client: WorkspaceApiClient; id: number; reload: number; onRefresh: () => void; onClose: () => void; retryButton: (job: Job) => React.ReactNode }) {
+export function ReportDetail({ client, id, reload, notice, onRefresh, onClose, retryButton, resendButton }: { notice?: {text: string; error: boolean} | null; client: WorkspaceApiClient; id: number; reload: number; onRefresh: () => void; onClose: () => void; retryButton: (job: Job) => React.ReactNode; resendButton: (report: Report) => React.ReactNode }) {
   const [page, setPage] = useState(1)
   const [partNo, setPartNo] = useState<number | null>(null)
   const report = useMentionResource<Report>(client, `/reports/${id}`, reload)
   const messages = useMentionResource<Page<SnapshotMessage>>(client, `/reports/${id}/messages?page=${page}&per_page=10`, 0, true)
   const part = useMentionResource<ReportPart>(client, partNo ? `/reports/${id}/parts/${partNo}` : null, reload)
   const data = report.data
-  return <Drawer open title={data ? `${data.chatName}｜${data.recipientName || data.recipientOpenId}的每日总结` : '每日报告详情'} onClose={onClose} size="wide" description="原文清单、群名与分段均为生成时的固定快照；时间按 Asia/Shanghai 展示。" footer={<button type="button" disabled={report.loading} onClick={onRefresh}>刷新发送状态</button>}>
+  return <Drawer open title={data ? `${data.chatName}｜${data.recipientName || data.recipientOpenId}的每日总结` : '每日报告详情'} onClose={onClose} size="wide" description="原文清单和统计窗口保留生成时的内容，重发使用最新卡片样式；时间按 Asia/Shanghai 展示。" footer={<><button type="button" disabled={report.loading} onClick={onRefresh}>刷新发送状态</button>{data && !report.loading && !report.error ? resendButton(data) : null}</>}>
     {notice ? <p role={notice.error ? 'alert' : 'status'} className={notice.error ? styles.error : styles.success}>{notice.text}</p> : null}
     {report.loading ? <FeedbackState kind="loading" title="正在加载每日报告" /> : report.error ? <FeedbackState kind="error" title="日报加载失败" description={report.error} /> : data ? <div className={styles.detail}>
       <dl className={styles.facts}><dt>来源群 / 人员</dt><dd>{data.chatName}（{data.chatId}） / {data.recipientName}（{data.recipientOpenId}）</dd><dt>报告日期</dt><dd>{data.reportDate} · {statusLabels[data.status]}</dd><dt>统计窗口</dt><dd>{time(data.windowStart)} ～ {time(data.windowEnd)}</dd><dt>消息数 / 已发送段数</dt><dd>{data.messageCount} 条 / {data.sentPartCount} / {data.partCount} 段</dd><dt>生成 / 发送时间</dt><dd>{time(data.generatedAt)} / {time(data.sentAt)}</dd></dl>
