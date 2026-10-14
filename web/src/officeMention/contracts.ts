@@ -11,8 +11,12 @@ export function confirmationLabel(row: Pick<Recipient, 'viewStatus' | 'confirmat
 export function canRetryMentionJob(job: Pick<Job, 'status' | 'retryable'>, permissions: readonly string[]) {
   return job.status === 'failed' && job.retryable !== false && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
 }
-export function canResendMentionReport(report: Pick<Report, 'status'>, permissions: readonly string[]) {
-  return (report.status === 'sent' || report.status === 'failed') && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
+export function canResendMentionReport(report: Pick<Report, 'status' | 'reportKind'>, permissions: readonly string[]) {
+  const available = report.status === 'sent' || report.status === 'failed' || (report.status === 'ready' && report.reportKind !== 'manual')
+  return available && permissions.includes('office_mention.read') && permissions.includes('office_mention.retry')
+}
+export function reportKindLabel(report: Pick<Report, 'reportKind'>) {
+  return report.reportKind === 'manual' ? '手动统计' : '定时日报'
 }
 export function mentionResendReportRequest(reportID: number) {
   if (!Number.isSafeInteger(reportID) || reportID <= 0) throw new Error('日报标识无效，请刷新后重试。')

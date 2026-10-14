@@ -17,4 +17,5 @@
 .facts dd { margin:0; overflow-wrap:anywhere; }
 .entry { display:grid; gap:var(--space-2); padding-block:var(--space-3); border-top:1px solid var(--color-border); }
 .entryHeader { display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--space-2); align-items:center; }
+.callbackURL { display:block; white-space:pre-wrap; overflow-wrap:anywhere; user-select:all; }
 @media(max-width:700px) { .filters label { max-width:none; flex-basis:45%; } .facts { grid-template-columns: 100px minmax(0,1fr); } }
