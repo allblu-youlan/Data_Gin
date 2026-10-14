@@ -37,6 +37,7 @@ type FeishuMentionViewService struct {
 	callbackURL string
 	cookieKey   []byte
 	identity    FeishuMentionIdentityClient
+	names       *mentionViewNames
 	now         func() time.Time
 }
 
@@ -83,9 +84,10 @@ type FeishuMentionViewMessageDTO struct {
 }
 
 type FeishuMentionViewReportDTO struct {
-	Report     FeishuMentionViewReportSummary `json:"report"`
-	Messages   []FeishuMentionViewMessageDTO  `json:"messages"`
-	Pagination paginator.Pagination           `json:"pagination"`
+	Report           FeishuMentionViewReportSummary `json:"report"`
+	Messages         []FeishuMentionViewMessageDTO  `json:"messages"`
+	Pagination       paginator.Pagination           `json:"pagination"`
+	SenderNameNotice string                         `json:"senderNameNotice,omitempty"`
 }
 
 func (s *FeishuMentionViewService) Report(ctx context.Context, openID string, id uint, page int) (*FeishuMentionViewReportDTO, error) {
@@ -112,7 +114,9 @@ func (s *FeishuMentionViewService) Report(ctx context.Context, openID string, id
 	if json.Unmarshal([]byte(report.ContentSnapshot), &snapshot) != nil || snapshot.AppID != s.appID || snapshot.RecipientOpenID != openID {
 		return nil, ErrFeishuMentionViewUnavailable
 	}
-	return mentionViewReportDTO(report.ID, snapshot, page), nil
+	dto := mentionViewReportDTO(report.ID, snapshot, page)
+	s.fillSenderNames(ctx, dto)
+	return dto, nil
 }
 
 func mentionViewReportDTO(id uint, snapshot model.FeishuDigestSnapshot, page int) *FeishuMentionViewReportDTO {

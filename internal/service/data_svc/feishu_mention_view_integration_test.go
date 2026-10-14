@@ -3,6 +3,7 @@
 package data_svc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -22,7 +23,7 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 		snapshot := model.FeishuDigestSnapshot{
 			SchemaVersion: 1, AppID: appID, ChatID: "chat_a", ChatName: "冻结群名", RecipientOpenID: recipient, RecipientName: recipient,
 			ReportDate: now.Format("2006-01-02"), WindowStart: now.Add(-time.Hour), WindowEnd: *now, GeneratedAt: *now, MessageCount: 1,
-			Messages: []model.FeishuDigestMessage{{SenderName: "发送人", MessageCreatedAt: *now, DisplayText: "该收件人的全文"}},
+			Messages: []model.FeishuDigestMessage{{SenderOpenID: "ou_sender", MessageCreatedAt: *now, DisplayText: "该收件人的全文"}},
 		}
 		body, err := json.Marshal(snapshot)
 		if err != nil {
@@ -38,7 +39,12 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 	own := create(fixture.appID, "ou_viewer")
 	otherRecipient := create(fixture.appID, "ou_other")
 	otherApp := create(fixture.appID+"_other", "ou_viewer")
-	if dto, err := s.Report(t.Context(), "ou_viewer", own.ID, 1); err != nil || len(dto.Messages) != 1 || dto.Messages[0].DisplayText != "该收件人的全文" {
+	lookupCalls := 0
+	s.SetUserNamesClient(mentionViewNamesFunc(func(_ context.Context, ids []string) (map[string]string, error) {
+		lookupCalls++
+		return map[string]string{"ou_sender": "李慧娜"}, nil
+	}))
+	if dto, err := s.Report(t.Context(), "ou_viewer", own.ID, 1); err != nil || len(dto.Messages) != 1 || dto.Messages[0].DisplayText != "该收件人的全文" || dto.Messages[0].SenderName != "李慧娜" {
 		t.Fatalf("own report: %+v err=%v", dto, err)
 	}
 	for _, report := range []model.FeishuDailyReport{otherRecipient, otherApp} {
@@ -49,5 +55,8 @@ func TestFeishuMentionViewMySQLAuthorizesBeforeLoadingSnapshot(t *testing.T) {
 		if _, err := s.Report(t.Context(), "ou_viewer", report.ID, 1); !errors.Is(err, ErrFeishuMentionViewNotFound) {
 			t.Fatalf("unauthorized snapshot was loaded: %v", err)
 		}
+	}
+	if lookupCalls != 1 {
+		t.Fatal("unauthorized report reached directory lookup")
 	}
 }

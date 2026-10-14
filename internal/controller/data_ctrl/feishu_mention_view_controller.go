@@ -12,10 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"gin-biz-web-api/connector/feishu"
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/database"
+	"gin-biz-web-api/pkg/providerhttp"
+	projectredis "gin-biz-web-api/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 )
@@ -47,8 +50,30 @@ type FeishuMentionViewController struct {
 func NewFeishuMentionViewController() *FeishuMentionViewController {
 	publicURL := config.GetString("cfg.app.url")
 	service, err := data_svc.NewFeishuMentionViewService(database.DB, global.Credentials.FeishuAppID(), global.Credentials.FeishuAppSecret(), publicURL, nil)
+	if err == nil {
+		configureMentionViewNames(service)
+	}
 	parsed, _ := url.Parse(publicURL)
 	return &FeishuMentionViewController{service: service, configError: err, secure: parsed != nil && parsed.Scheme == "https"}
+}
+
+func configureMentionViewNames(service *data_svc.FeishuMentionViewService) {
+	rds := projectredis.Instance()
+	if rds == nil || rds.Client == nil {
+		return
+	}
+	httpClient, err := providerhttp.NewClient(providerhttp.ClientConfig{Timeout: 2 * time.Second})
+	if err != nil {
+		return
+	}
+	tokens, err := feishu.NewTenantTokenProvider(global.Credentials.FeishuAppID(), global.Credentials.FeishuAppSecret(), httpClient, rds.Client)
+	if err != nil {
+		return
+	}
+	bot, err := feishu.NewBotClient(tokens, httpClient)
+	if err == nil {
+		service.SetUserNamesClient(bot)
+	}
 }
 
 func (c *FeishuMentionViewController) Report(ctx *gin.Context) {
@@ -122,6 +147,7 @@ type mentionViewPage struct {
 	Messages                                                          []mentionViewMessage
 	PreviousURL, NextURL                                              string
 	ErrorTitle, ErrorText                                             string
+	SenderNameNotice                                                  string
 }
 
 type mentionViewMessage struct {
@@ -135,7 +161,8 @@ func mentionViewPageFromReport(dto *data_svc.FeishuMentionViewReportDTO) mention
 		Window:      mentionViewTime(report.WindowStart) + " ～ " + mentionViewTime(report.WindowEnd),
 		GeneratedAt: mentionViewTime(report.GeneratedAt), MessageCount: report.MessageCount,
 		Page: dto.Pagination.Page, TotalPages: dto.Pagination.TotalPage,
-		Messages: make([]mentionViewMessage, 0, len(dto.Messages)),
+		Messages:         make([]mentionViewMessage, 0, len(dto.Messages)),
+		SenderNameNotice: dto.SenderNameNotice,
 	}
 	if report.Summary != nil {
 		page.Summary = *report.Summary
@@ -143,7 +170,7 @@ func mentionViewPageFromReport(dto *data_svc.FeishuMentionViewReportDTO) mention
 	for _, message := range dto.Messages {
 		sender := strings.TrimSpace(message.SenderName)
 		if sender == "" {
-			sender = "发送人"
+			sender = "姓名暂不可用"
 		}
 		item := mentionViewMessage{Sender: sender, Time: mentionViewTime(message.MessageCreatedAt), DateTime: message.MessageCreatedAt.In(mentionViewShanghai).Format(time.RFC3339), Text: message.DisplayText}
 		if message.OriginalURL != nil {

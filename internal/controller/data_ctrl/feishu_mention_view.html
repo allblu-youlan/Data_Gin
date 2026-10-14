@@ -25,6 +25,7 @@
     </header>
     {{if .Summary}}<section class="summary" aria-labelledby="summary-title"><h2 id="summary-title">摘要</h2><p>{{.Summary}}</p></section>{{end}}
     <div class="list-heading"><h2 id="messages-title">消息全文</h2>{{if gt .TotalPages 1}}<span>第 {{.Page}} / {{.TotalPages}} 页</span>{{end}}</div>
+    {{if .SenderNameNotice}}<p class="footnote" role="status">{{.SenderNameNotice}}</p>{{end}}
     <section aria-labelledby="messages-title">
       {{range .Messages}}<article class="message"><div class="message-head"><span class="sender">{{.Sender}}</span><time datetime="{{.DateTime}}">{{.Time}}</time></div><pre class="text">{{.Text}}</pre>{{if .OriginalURL}}<a class="original" href="{{.OriginalURL}}" target="_blank" rel="noopener noreferrer">前往飞书原消息 ↗</a>{{end}}</article>{{else}}<p class="empty">本页没有消息。</p>{{end}}
     </section>
