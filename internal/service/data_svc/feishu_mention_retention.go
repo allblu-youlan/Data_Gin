@@ -33,7 +33,7 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 		var reports []model.FeishuDailyReport
 		// Retention only needs identifiers and state; large content snapshots
 		// must not be loaded into MySQL's sort buffer or application memory.
-		if err := tx.Select("id").Where("id > ? AND app_id = ? AND status = ? AND window_end < ?", afterID, s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
+		if err := tx.Select("id", "report_kind").Where("id > ? AND app_id = ? AND status = ? AND window_end < ?", afterID, s.appID, "sent", cutoff).Order("id").Limit(1000).Find(&reports).Error; err != nil {
 			return err
 		}
 		allowed := map[uint]bool{}
@@ -74,7 +74,17 @@ func (s *FeishuMentionService) cleanupMentionBatch(ctx context.Context, cutoff t
 			sources[recipient.SourceMessageID] = true
 		}
 		if len(sources) == 0 {
-			return nil
+			// Manual snapshots never own FirstReportID, including zero-message
+			// reports. They still need the delivery/outbox checks below.
+			for _, report := range reports {
+				if report.ReportKind != "manual" {
+					delete(allowed, report.ID)
+				}
+			}
+			if len(allowed) == 0 {
+				return nil
+			}
+			ids = mentionMapIDs(allowed)
 		}
 		var all []model.FeishuMessageRecipient
 		if err := tx.Select("id", "source_message_id", "first_report_id", "view_status").Where("source_message_id IN ?", mentionMapIDs(sources)).Find(&all).Error; err != nil {
