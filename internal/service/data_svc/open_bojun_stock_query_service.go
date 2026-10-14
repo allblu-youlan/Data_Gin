@@ -86,8 +86,25 @@ func (service *OpenBojunStockQueryService) Query(ctx context.Context, actorUserI
 	if !allowed {
 		return nil, ErrOpenBojunStockForbidden
 	}
-	query := reportoracle.BojunStockQuery{ProductCode: strings.TrimSpace(request.ProductCode), StoreCode: strings.TrimSpace(request.StoreCode)}
-	if query.ProductCode == "" || query.StoreCode == "" || len(query.ProductCode) > 80 || len(query.StoreCode) > 80 {
+	query := reportoracle.BojunStockQuery{
+		ProductCode:  strings.TrimSpace(request.ProductCode),
+		ProductColor: strings.TrimSpace(request.ProductColor),
+		ProductName:  strings.TrimSpace(request.ProductName),
+		StoreCode:    strings.TrimSpace(request.StoreCode),
+	}
+	if query.StoreCode == "" || len(query.StoreCode) > 80 {
+		return nil, ErrOpenBojunStockInvalidQuery
+	}
+	productFilters := 0
+	for _, value := range []string{query.ProductCode, query.ProductColor, query.ProductName} {
+		if len(value) > 80 {
+			return nil, ErrOpenBojunStockInvalidQuery
+		}
+		if value != "" {
+			productFilters++
+		}
+	}
+	if productFilters != 1 {
 		return nil, ErrOpenBojunStockInvalidQuery
 	}
 	pagination, err := normalizeOpenBojunQueryPagination(request.Page, request.PageSize)

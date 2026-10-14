@@ -53,7 +53,7 @@ const permissionCatalog: Array<{ permission: DataPermissionCode; label: string; 
   { permission: 'weather.read', label: '天气数据查询', description: '可查询全部商场的天气实况、预报、预警和生活指数。' },
   { permission: 'bojun.order.read', label: 'Bojun 订单查询', description: '可按时间、商场和游标分页查询脱敏订单明细。' },
   { permission: 'bojun.store.read', label: '伯俊店仓查询', description: '可按编码、名称前缀和状态分页查询店仓档案。' },
-  { permission: 'bojun.stock.read', label: '伯俊实时库存查询', description: '可按店仓编码和商品条码查询实时库存明细。' },
+  { permission: 'bojun.stock.read', label: '伯俊实时库存查询', description: '可按店仓编码及商品条码、款色或款号之一查询实时库存明细。' },
   { permission: 'business_overview.read', label: '营业金额查询', description: '可按日期和门店查询营业金额及支付方式构成。' },
 ]
 

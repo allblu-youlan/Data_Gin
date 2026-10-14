@@ -158,3 +158,29 @@ func TestOpenBojunStoreStockControllersMapSafeErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenBojunStockControllerParsesProductAlternatives(t *testing.T) {
+	for _, tt := range []struct {
+		name, body string
+		want       requestbody.OpenBojunStockQueryRequest
+	}{
+		{"code", `{"storeCode":"001","productCode":"SKU","productColor":null,"productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: "SKU"}},
+		{"color", `{"storeCode":"001","productCode":null,"productColor":"C44G3063CE146","productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductColor: "C44G3063CE146"}},
+		{"name", `{"storeCode":"001","productName":"C44G3063C"}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductName: "C44G3063C"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			stock := &fakeOpenBojunStockQueryService{}
+			response := performBojunQuery(newBojunStoreStockControllerRouter(&fakeOpenBojunStoreQueryService{}, stock), "/stocks", tt.body)
+			if response.Code != http.StatusOK || stock.calls != 1 || stock.request != tt.want {
+				t.Fatalf("status=%d calls=%d request=%+v want=%+v", response.Code, stock.calls, stock.request, tt.want)
+			}
+		})
+	}
+	for _, body := range []string{`{"storeCode":"001","productColor":123}`, `{"storeCode":"001","productName":["C44G3063C"]}`} {
+		stock := &fakeOpenBojunStockQueryService{}
+		response := performBojunQuery(newBojunStoreStockControllerRouter(&fakeOpenBojunStoreQueryService{}, stock), "/stocks", body)
+		if response.Code != http.StatusUnprocessableEntity || stock.calls != 0 {
+			t.Fatalf("invalid product alternative status=%d calls=%d", response.Code, stock.calls)
+		}
+	}
+}

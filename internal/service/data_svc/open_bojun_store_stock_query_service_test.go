@@ -115,6 +115,15 @@ func TestOpenBojunQueriesRejectInvalidInputBeforeOpeningOracle(t *testing.T) {
 		request requestbody.OpenBojunStockQueryRequest
 	}{
 		{"missing product", requestbody.OpenBojunStockQueryRequest{StoreCode: "001"}},
+		{"blank product identifiers", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: " ", ProductColor: " ", ProductName: " "}},
+		{"code and color", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: "SKU", ProductColor: "COLOR"}},
+		{"code and name", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: "SKU", ProductName: "STYLE"}},
+		{"color and name", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductColor: "COLOR", ProductName: "STYLE"}},
+		{"all product identifiers", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: "SKU", ProductColor: "COLOR", ProductName: "STYLE"}},
+		{"long color", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductColor: strings.Repeat("中", 27)}},
+		{"long name", requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductName: strings.Repeat("x", 81)}},
+		{"color missing store", requestbody.OpenBojunStockQueryRequest{ProductColor: "COLOR"}},
+		{"name missing store", requestbody.OpenBojunStockQueryRequest{ProductName: "STYLE"}},
 		{"missing store", requestbody.OpenBojunStockQueryRequest{ProductCode: "AbC"}},
 		{"blank product", requestbody.OpenBojunStockQueryRequest{ProductCode: " ", StoreCode: "001"}},
 		{"blank store", requestbody.OpenBojunStockQueryRequest{ProductCode: "AbC", StoreCode: " "}},
@@ -290,6 +299,43 @@ func TestOpenBojunQueriesDoNotReturnEmptySuccessForOracleFailures(t *testing.T) 
 			stocks, err := newOpenBojunStockQueryService(provider, permissions, time.Now).Query(context.Background(), 17, requestbody.OpenBojunStockQueryRequest{ProductCode: "ABC", StoreCode: "001"})
 			if stocks != nil || !errors.Is(err, ErrOpenBojunStockUnavailable) || !errors.Is(err, failure) {
 				t.Fatalf("stocks=%+v error=%v", stocks, err)
+			}
+		})
+	}
+}
+
+func TestOpenBojunStockQueriesByAnyProductIdentifier(t *testing.T) {
+	page, size := 3, 2
+	for _, tt := range []struct {
+		name    string
+		request requestbody.OpenBojunStockQueryRequest
+		want    reportoracle.BojunStockQuery
+	}{
+		{"code", requestbody.OpenBojunStockQueryRequest{ProductCode: " 001AbC ", ProductColor: " ", ProductName: " "}, reportoracle.BojunStockQuery{ProductCode: "001AbC"}},
+		{"color", requestbody.OpenBojunStockQueryRequest{ProductCode: " ", ProductColor: " C44G3063CE146 ", ProductName: " "}, reportoracle.BojunStockQuery{ProductColor: "C44G3063CE146"}},
+		{"name", requestbody.OpenBojunStockQueryRequest{ProductCode: " ", ProductColor: " ", ProductName: " C44G3063C "}, reportoracle.BojunStockQuery{ProductName: "C44G3063C"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opened := 0
+			oracle := &fakeOpenBojunOracle{stocks: []reportoracle.BojunStockRow{
+				{StoreCode: "001", ProductCode: "SKU090"},
+				{StoreCode: "001", ProductCode: "SKU100"},
+				{StoreCode: "001", ProductCode: "SKU110"},
+			}}
+			provider := newTestBojunProvider(oracle, &opened)
+			permission := &fakeOpenBojunProductPermissionReader{allowed: true}
+			service := newOpenBojunStockQueryService(provider, permission, time.Now)
+			tt.request.StoreCode, tt.request.Page, tt.request.PageSize = " 001 ", &page, &size
+			tt.want.StoreCode, tt.want.PageSize, tt.want.Offset = "001", size, 4
+			result, err := service.Query(context.Background(), 17, tt.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if oracle.stockQuery != tt.want || opened != 1 || permission.permission != model.PermissionBojunStockRead {
+				t.Fatalf("query=%+v want=%+v opened=%d permission=%s", oracle.stockQuery, tt.want, opened, permission.permission)
+			}
+			if len(result.Items) != 2 || !result.Pagination.HasMore || result.Pagination.Page != page || result.Pagination.PageSize != size || result.Items[0].ProductCode != "SKU090" || result.Items[1].ProductCode != "SKU100" {
+				t.Fatalf("multi-SKU pagination=%+v", result)
 			}
 		})
 	}

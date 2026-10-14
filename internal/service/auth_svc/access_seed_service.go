@@ -36,7 +36,7 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionWeatherRawRead, "查看天气原始数据", "天气", "查看供应商原始天气数据", "HIGH", false, 250},
 	{model.PermissionBojunOrderRead, "查看伯俊订单", "订单", "通过开放接口查询伯俊订单", "MEDIUM", true, 300},
 	{model.PermissionBojunStoreRead, "查询伯俊店仓", "店仓", "通过开放接口查询伯俊店仓档案", "MEDIUM", true, 310},
-	{model.PermissionBojunStockRead, "查询伯俊实时库存", "库存", "通过开放接口按店仓和条码查询实时库存", "MEDIUM", true, 320},
+	{model.PermissionBojunStockRead, "查询伯俊实时库存", "库存", "通过开放接口按店仓和商品条码、款色或款号查询实时库存", "MEDIUM", true, 320},
 	{model.PermissionSourceRead, "查看数据源", "数据处理", "查看数据源和拉取记录", "LOW", false, 400},
 	{model.PermissionSourceManage, "管理数据源", "数据处理", "维护并执行数据源", "HIGH", false, 410},
 	{model.PermissionPipelineRead, "查看流水线", "数据处理", "查看流水线、方法和运行记录", "LOW", false, 420},
