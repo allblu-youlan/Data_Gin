@@ -381,6 +381,7 @@ type FeishuMentionReportDTO struct {
 	RecipientOpenID string                `json:"recipientOpenId"`
 	RecipientName   string                `json:"recipientName"`
 	ReportDate      string                `json:"reportDate"`
+	ReportKind      string                `json:"reportKind"`
 	WindowStart     time.Time             `json:"windowStart"`
 	WindowEnd       time.Time             `json:"windowEnd"`
 	MessageCount    int                   `json:"messageCount"`
@@ -400,6 +401,10 @@ func mentionReportDTO(r model.FeishuDailyReport, jobs []model.FeishuDeliveryJob,
 		return FeishuMentionReportDTO{}, e
 	}
 	out := FeishuMentionReportDTO{ID: r.ID, AppID: r.AppID, ChatID: r.ChatID, ChatName: snap.ChatName, RecipientOpenID: r.RecipientOpenID, RecipientName: snap.RecipientName, ReportDate: r.ReportDate, WindowStart: r.WindowStart.In(mentionLocation()), WindowEnd: r.WindowEnd.In(mentionLocation()), MessageCount: snap.MessageCount, Status: r.Status, PartCount: r.PartCount, GeneratedAt: r.GeneratedAt.In(mentionLocation()), SentAt: mentionAdminTime(r.SentAt)}
+	out.ReportKind = r.ReportKind
+	if out.ReportKind == "" {
+		out.ReportKind = "daily"
+	}
 	for _, j := range jobs {
 		if j.ReportID == nil || *j.ReportID != r.ID || j.PartNo == nil || *j.PartNo > r.PartCount {
 			continue
@@ -727,6 +732,7 @@ func (s *FeishuMentionAdminService) Status(ctx context.Context) (map[string]inte
 		pauseReason = "日报已暂停，恢复后按原统计日补建"
 	}
 	status := map[string]interface{}{"appId": s.dao.AppID, "enabled": s.config.Enabled, "timezone": s.config.Timezone, "personalReminderEnabled": s.config.PersonalReminderEnabled, "followupEnabled": s.config.FollowupEnabled, "digestEnabled": s.config.DigestEnabled, "digestTime": nil, "receiver": receiver, "backlog": nil, "observations": nil, "pauseReason": pauseReason, "digest": map[string]interface{}{"scheduleEnabled": nil, "nextWindowStartAt": nil, "nextCutoffAt": nil, "lastPlannedAt": nil}, "dependencies": map[string]interface{}{"database": nil, "queue": queue}}
+	status["detailAccess"] = mentionDetailAccess(s.dao.AppID, s.publicURL)
 	if e := s.ready(); e != nil {
 		return status, nil
 	}

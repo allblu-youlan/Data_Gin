@@ -27,7 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const schemaMigrationVersion = "2026-10-13-feishu-mention-v23"
+const schemaMigrationVersion = "2026-10-14-feishu-manual-report-v24"
+const feishuMentionMigrationVersion = "2026-10-13-feishu-mention-v23"
 const officeWebDAVMigrationVersion = "2026-09-08-office-webdav-v22"
 const previousSchemaMigrationVersion = "2026-09-04-report-category-access-v21"
 const accessPermissionMigrationVersion = "2026-09-01-access-permission-v20"
@@ -136,6 +137,9 @@ func ApplySchemaMigrations() (resultErr error) {
 		AutoMigrate(feishuMentionMigrationModels()...); err != nil {
 		return fmt.Errorf("migrate Feishu mention tables: %w", err)
 	}
+	if err := finalizeFeishuMentionReportMigration(db); err != nil {
+		return err
+	}
 	marker := schemaMigrationRecord{Version: schemaMigrationVersion, AppliedAt: time.Now().UTC()}
 	if err := db.Create(&marker).Error; err != nil {
 		return fmt.Errorf("write schema migration marker: %w", err)
@@ -192,6 +196,7 @@ func bojunOracleMigrationModels() []interface{} {
 
 func schemaIncrementalMigrationBaselines() []string {
 	return []string{
+		feishuMentionMigrationVersion,
 		officeWebDAVMigrationVersion,
 		previousSchemaMigrationVersion,
 		accessPermissionMigrationVersion,

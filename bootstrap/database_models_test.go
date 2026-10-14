@@ -40,8 +40,11 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 }
 
 func TestSchemaMigrationVersionIncludesFeishuMention(t *testing.T) {
-	if schemaMigrationVersion != "2026-10-13-feishu-mention-v23" {
+	if schemaMigrationVersion != "2026-10-14-feishu-manual-report-v24" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
+	}
+	if feishuMentionMigrationVersion != "2026-10-13-feishu-mention-v23" {
+		t.Fatal("previous Feishu mention baseline must remain supported")
 	}
 	if officeWebDAVMigrationVersion != "2026-09-08-office-webdav-v22" {
 		t.Fatal("previous office WebDAV baseline must remain supported")
@@ -82,6 +85,12 @@ func TestOfficeMessagePreferredMigrationBaseline(t *testing.T) {
 		wantVersion     string
 		wantApplied     bool
 	}{
+		{
+			name:            "v23 direct upgrade",
+			appliedVersions: []string{"2026-10-13-feishu-mention-v23"},
+			wantVersion:     "2026-10-13-feishu-mention-v23",
+			wantApplied:     true,
+		},
 		{
 			name:            "v21 direct upgrade",
 			appliedVersions: []string{"2026-09-04-report-category-access-v21"},

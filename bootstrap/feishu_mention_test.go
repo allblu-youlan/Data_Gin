@@ -12,6 +12,8 @@ import (
 )
 
 func TestFeishuMentionMigrationRetainsUpgradeBaseline(t *testing.T) {
+	latest, found := preferredSchemaMigrationBaseline(schemaIncrementalMigrationBaselines(), []string{feishuMentionMigrationVersion})
+	if !found || latest != feishuMentionMigrationVersion { t.Fatal("missing v23 upgrade baseline") }
 	baseline, ok := preferredSchemaMigrationBaseline(schemaIncrementalMigrationBaselines(), []string{"2026-09-08-office-webdav-v22"})
 	if !ok || baseline != officeWebDAVMigrationVersion {
 		t.Fatalf("missing last deployed baseline: %q", baseline)

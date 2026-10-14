@@ -41,10 +41,8 @@ type FeishuMentionViewService struct {
 }
 
 func NewFeishuMentionViewService(db *gorm.DB, appID, appSecret, publicURL string, identity FeishuMentionIdentityClient) (*FeishuMentionViewService, error) {
-	base, err := url.Parse(publicURL)
-	if err != nil || base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" ||
-		(base.Scheme != "https" && !(base.Scheme == "http" && (base.Hostname() == "localhost" || base.Hostname() == "127.0.0.1" || base.Hostname() == "::1"))) ||
-		!mentionViewCredential(appID) || !mentionViewCredential(appSecret) {
+	base, err := mentionViewPublicBase(publicURL)
+	if err != nil || !mentionViewCredential(appID) || !mentionViewCredential(appSecret) {
 		return nil, ErrFeishuMentionViewUnavailable
 	}
 	if identity == nil {
@@ -53,8 +51,7 @@ func NewFeishuMentionViewService(db *gorm.DB, appID, appSecret, publicURL string
 			return nil, ErrFeishuMentionViewUnavailable
 		}
 	}
-	base.Path = strings.TrimRight(base.Path, "/") + FeishuMentionViewCallbackPath
-	base.RawPath = ""
+	base.Path = FeishuMentionViewCallbackPath
 	mac := hmac.New(sha256.New, []byte(appSecret))
 	_, _ = mac.Write([]byte("feishu-mention-view:v1:" + appID))
 	if db != nil {

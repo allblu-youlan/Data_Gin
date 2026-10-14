@@ -108,7 +108,7 @@ func rescheduleMentionCutoff(schedule model.FeishuDigestSchedule, clock string) 
 func (s *FeishuMentionService) freezeDigest(ctx context.Context, tx *gorm.DB, chatID, openID string, start, end time.Time) error {
 	date := end.In(mentionLocation()).Format("2006-01-02")
 	var existing model.FeishuDailyReport
-	err := tx.Where("app_id = ? AND chat_id = ? AND recipient_open_id = ? AND report_date = ?", s.appID, chatID, openID, date).First(&existing).Error
+	err := tx.Where("app_id = ? AND chat_id = ? AND recipient_open_id = ? AND report_date = ? AND report_kind = ?", s.appID, chatID, openID, date, "daily").First(&existing).Error
 	if err == nil {
 		return nil
 	}

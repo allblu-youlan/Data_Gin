@@ -54,6 +54,9 @@ func mentionMySQLFixture(t *testing.T, personal bool) (*FeishuMentionService, *t
 	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin").AutoMigrate(&model.FeishuMonitoredChat{}, &model.FeishuSourceMessage{}, &model.FeishuMessageRecipient{}, &model.FeishuDailyReport{}, &model.FeishuDeliveryJob{}, &model.FeishuDigestSchedule{}, &model.AsyncJobOutbox{}, &model.RuntimeConfig{}); err != nil {
 		t.Fatal(err)
 	}
+	if db.Migrator().HasIndex(&model.FeishuDailyReport{}, "uk_feishu_report") {
+		if err := db.Migrator().DropIndex(&model.FeishuDailyReport{}, "uk_feishu_report"); err != nil { t.Fatal(err) }
+	}
 	cfg := appConfig.FeishuMentionConfig{Enabled: true, ReceiverEnabled: true, PersonalReminderEnabled: personal, FollowupEnabled: personal, DigestEnabled: true, DigestTime: "18:00", MaxAttempts: 3, APITimeoutSeconds: 1, DeliveryLeaseSeconds: 10, RetentionDays: 90}
 	now := time.Date(2026, 10, 13, 10, 0, 0, 0, mentionLocation())
 	s := NewFeishuMentionService(db, "test_"+uuid.NewString(), cfg)

@@ -13,12 +13,11 @@ import (
 // A single compact card keeps chat height bounded. The report snapshot remains
 // the complete source for the authenticated, paginated detail view.
 func compactMentionDigestCard(snapshot model.FeishuDigestSnapshot, reportID uint, publicURL string) (string, error) {
-	base, err := url.Parse(strings.TrimRight(strings.TrimSpace(publicURL), "/"))
-	if err != nil || base.Hostname() == "" || (base.Scheme != "https" && !(base.Scheme == "http" && (base.Hostname() == "localhost" || base.Hostname() == "127.0.0.1" || base.Hostname() == "::1"))) || base.User != nil || base.RawQuery != "" || base.Fragment != "" || reportID == 0 {
+	base, err := mentionViewPublicBase(publicURL)
+	if err != nil || reportID == 0 {
 		return "", errors.New("feishu mention: configure a valid public App.Url for report details")
 	}
-	base.Path += fmt.Sprintf("/api/v1/feishu-mention-view/reports/%d", reportID)
-	base.RawPath = ""
+	base.Path = fmt.Sprintf("%s/reports/%d", FeishuMentionViewBasePath, reportID)
 	detailURL := "https://applink.feishu.cn/client/web_url/open?" + url.Values{"mode": {"sidebar-semi"}, "url": {base.String()}}.Encode()
 	plain := func(text string) map[string]any {
 		return map[string]any{"tag": "div", "text": map[string]any{"tag": "plain_text", "content": text}}
@@ -41,9 +40,13 @@ func compactMentionDigestCard(snapshot model.FeishuDigestSnapshot, reportID uint
 		elements = append(elements, plain(fmt.Sprintf("另有 %d 条消息，点击查看详情阅读全部内容", len(snapshot.Messages)-3)))
 	}
 	elements = append(elements, map[string]any{"tag": "action", "actions": []any{map[string]any{"tag": "button", "type": "primary", "text": map[string]any{"tag": "plain_text", "content": "查看详情"}, "url": detailURL}}})
+	label := "@ 消息日报"
+	if snapshot.ReportKind == "manual" {
+		label = "@ 消息今日统计"
+	}
 	raw, err := json.Marshal(map[string]any{
 		"config":   map[string]any{"width_mode": "compact", "update_multi": true},
-		"header":   map[string]any{"title": map[string]any{"tag": "plain_text", "content": mentionDigestPreview(snapshot.ChatName, 40) + "｜@ 消息日报"}},
+		"header":   map[string]any{"title": map[string]any{"tag": "plain_text", "content": mentionDigestPreview(snapshot.ChatName, 40) + "｜" + label}},
 		"elements": elements,
 	})
 	if err != nil {

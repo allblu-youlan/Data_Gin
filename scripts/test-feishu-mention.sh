@@ -10,8 +10,8 @@ cd "$(dirname "$0")/.."
 result_file=$(mktemp)
 trap 'rm -f "$result_file"' EXIT
 go test -mod=readonly -tags=integration -race -shuffle=on -count=1 -timeout=5m -json \
-  ./internal/service/data_svc ./connector/feishu \
-  -run 'Test(FeishuMention|MentionSendLimiter)' | tee "$result_file"
+  ./internal/service/data_svc ./connector/feishu ./bootstrap \
+  -run 'Test(FeishuMention|MentionSendLimiter|SchemaMigrationVersionIncludesFeishuMention)' | tee "$result_file"
 
 # A missing service configuration must not produce a falsely green CI run.
 if grep -q '"Action":"skip"' "$result_file"; then

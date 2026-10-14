@@ -60,10 +60,11 @@ func (FeishuMessageRecipient) TableName() string { return "feishu_message_recipi
 
 type FeishuDailyReport struct {
 	BaseModel
-	AppID           string     `gorm:"size:64;not null;uniqueIndex:uk_feishu_report,priority:1;index:idx_feishu_report_status,priority:1"`
-	ChatID          string     `gorm:"size:128;not null;uniqueIndex:uk_feishu_report,priority:2"`
-	RecipientOpenID string     `gorm:"size:128;not null;uniqueIndex:uk_feishu_report,priority:3"`
-	ReportDate      string     `gorm:"type:date;serializer:feishu_date;not null;uniqueIndex:uk_feishu_report,priority:4;index:idx_feishu_report_status,priority:3"`
+	AppID           string     `gorm:"size:64;not null;uniqueIndex:uk_feishu_report_kind,priority:1;index:idx_feishu_report_status,priority:1"`
+	ChatID          string     `gorm:"size:128;not null;uniqueIndex:uk_feishu_report_kind,priority:2"`
+	RecipientOpenID string     `gorm:"size:128;not null;uniqueIndex:uk_feishu_report_kind,priority:3"`
+	ReportDate      string     `gorm:"type:date;serializer:feishu_date;not null;uniqueIndex:uk_feishu_report_kind,priority:4;index:idx_feishu_report_status,priority:3"`
+	ReportKind      string     `gorm:"size:16;not null;default:daily;uniqueIndex:uk_feishu_report_kind,priority:5"`
 	WindowStart     time.Time  `gorm:"type:datetime(3);not null"`
 	WindowEnd       time.Time  `gorm:"type:datetime(3);not null"`
 	GeneratedAt     time.Time  `gorm:"type:datetime(3);not null"`
@@ -117,7 +118,8 @@ type FeishuDigestSchedule struct {
 
 func (FeishuDigestSchedule) TableName() string { return "feishu_digest_schedules" }
 
-// These snapshots are immutable; delivery state always comes from the jobs table.
+// Scheduled snapshots are immutable. Manual snapshots are refreshed only when
+// explicitly regenerated; delivery state always comes from the jobs table.
 type FeishuDigestSnapshot struct {
 	SchemaVersion   int                   `json:"schemaVersion"`
 	AppID           string                `json:"appId"`
@@ -126,6 +128,7 @@ type FeishuDigestSnapshot struct {
 	RecipientOpenID string                `json:"recipientOpenId"`
 	RecipientName   string                `json:"recipientName"`
 	ReportDate      string                `json:"reportDate"`
+	ReportKind      string                `json:"reportKind,omitempty"`
 	Timezone        string                `json:"timezone"`
 	WindowStart     time.Time             `json:"windowStart"`
 	WindowEnd       time.Time             `json:"windowEnd"`
