@@ -11,7 +11,7 @@ import (
 
 const BojunStockView = "YL_DBS.V_FA_V_STORAGE1_BJ"
 
-const bojunStockQuerySQL = `
+const bojunStockSelectSQL = `
 SELECT a.CODE,
        a.STORE_NAME,
        a.M_PRODUCT_ALIAS_NO,
@@ -40,19 +40,28 @@ SELECT a.CODE,
        a.QTYCAN,
        a.M_ATTRIBUTESETINSTANCE_ID,
        a.ISACTIVE
-FROM ` + BojunStockView + ` a
-WHERE a.M_PRODUCT_ALIAS_NO = :1
+FROM ` + BojunStockView + ` a`
+
+const bojunStockQuerySuffixSQL = `
   AND a.CODE = :2
 ORDER BY a.C_STORE_ID,
          a.M_PRODUCTALIAS_ID,
          a.M_ATTRIBUTESETINSTANCE_ID
 OFFSET :3 ROWS FETCH NEXT :4 ROWS ONLY`
 
+const (
+	bojunStockQuerySQL             = bojunStockSelectSQL + "\nWHERE a.M_PRODUCT_ALIAS_NO = :1" + bojunStockQuerySuffixSQL
+	bojunStockProductColorQuerySQL = bojunStockSelectSQL + "\nWHERE a.PROD_COLOR = :1" + bojunStockQuerySuffixSQL
+	bojunStockProductNameQuerySQL  = bojunStockSelectSQL + "\nWHERE a.M_PRODUCT_NAME = :1" + bojunStockQuerySuffixSQL
+)
+
 type BojunStockQuery struct {
-	ProductCode string
-	StoreCode   string
-	PageSize    int
-	Offset      int
+	ProductCode  string
+	ProductColor string
+	ProductName  string
+	StoreCode    string
+	PageSize     int
+	Offset       int
 }
 
 type BojunStockRow struct {
@@ -91,15 +100,33 @@ func (adapter *Adapter) QueryBojunStocks(ctx context.Context, query BojunStockQu
 		return nil, fmt.Errorf("query bojun stocks: adapter is closed")
 	}
 	query.ProductCode = strings.TrimSpace(query.ProductCode)
+	query.ProductColor = strings.TrimSpace(query.ProductColor)
+	query.ProductName = strings.TrimSpace(query.ProductName)
 	query.StoreCode = strings.TrimSpace(query.StoreCode)
-	if ctx == nil || query.ProductCode == "" || query.StoreCode == "" ||
-		len(query.ProductCode) > 80 || len(query.StoreCode) > 80 ||
+	if ctx == nil || query.StoreCode == "" || len(query.StoreCode) > 80 ||
+		len(query.ProductCode) > 80 || len(query.ProductColor) > 80 || len(query.ProductName) > 80 ||
 		query.PageSize < 1 || query.PageSize > 100 || query.Offset < 0 {
 		return nil, fmt.Errorf("query bojun stocks: invalid query")
 	}
 
-	rows, err := adapter.db.QueryContext(ctx, bojunStockQuerySQL,
-		query.ProductCode, query.StoreCode, query.Offset, query.PageSize+1, godror.NumberAsString(),
+	var statement, productValue string
+	productFilters := 0
+	for _, filter := range []struct{ value, statement string }{
+		{query.ProductCode, bojunStockQuerySQL},
+		{query.ProductColor, bojunStockProductColorQuerySQL},
+		{query.ProductName, bojunStockProductNameQuerySQL},
+	} {
+		if filter.value != "" {
+			productFilters++
+			statement, productValue = filter.statement, filter.value
+		}
+	}
+	if productFilters != 1 {
+		return nil, fmt.Errorf("query bojun stocks: invalid query")
+	}
+
+	rows, err := adapter.db.QueryContext(ctx, statement,
+		productValue, query.StoreCode, query.Offset, query.PageSize+1, godror.NumberAsString(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query bojun stocks: %w", err)
