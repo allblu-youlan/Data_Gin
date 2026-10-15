@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG ORACLE_LINUX_IMAGE=container-registry.oracle.com/os/oraclelinux:9-slim
+ARG ORACLE_LINUX_IMAGE=ghcr.io/oracle/oraclelinux:9-slim
 FROM golang:1.24-bullseye AS builder
 
 WORKDIR /app
