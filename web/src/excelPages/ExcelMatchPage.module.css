@@ -73,6 +73,15 @@
 .dialog .stepFilterEditor { display: grid; gap: var(--space-2); border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
 .stepFilterRow,
 .dialog .stepFilterRow { display: grid; grid-template-columns: minmax(140px, 1fr) 120px minmax(140px, 1fr) auto; align-items: end; gap: var(--space-2); }
+.page .matchFilterRow,
+.dialog .matchFilterRow { align-items: start; grid-template-columns: minmax(140px, 1fr) 160px minmax(180px, 1.5fr) auto; }
+.matchFilterRow > button { margin-top: var(--space-6); }
+.filterValueEditor { display: grid; min-width: 0; gap: var(--space-2); }
+.filterValueEditor textarea { resize: vertical; font-size: 13px; line-height: 1.5; }
+.filterValueEditor small { color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
+.filterValueEditor .filterEmptyOption { display: flex; align-items: center; gap: var(--space-2); font-weight: 400; }
+.page .filterEmptyOption input,
+.dialog .filterEmptyOption input { width: 16px; min-height: 16px; height: 16px; margin: 0; accent-color: var(--color-brand-active); }
 .importWriteRow,
 .dialog .importWriteRow { grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; }
 .stepFilterEmpty,
@@ -360,6 +369,7 @@
 }
 
 @media (max-width: 768px) {
+  .matchFilterRow > button { margin-top: 0; justify-self: start; }
   .ruleSummary { flex-wrap: wrap; gap: var(--space-2); }
   .ruleTitle { min-width: 0; flex-basis: calc(100% - 48px); }
   .ruleFlow { flex-basis: 100%; padding-left: 36px; }

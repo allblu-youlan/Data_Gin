@@ -37,7 +37,8 @@ export const bojunMatchFieldOptions = [
 export const excelChunkSize = 4 * 1024 * 1024
 export const excelJobPollMaxAttempts = 60
 export const excelMatchFilterOperatorOptions = [
-  { value: 'eq', label: '等于' }, { value: 'neq', label: '不等于' }, { value: 'contains', label: '包含' },
+  { value: 'eq', label: '等于' }, { value: 'eq_any', label: '等于任意一个' }, { value: 'neq', label: '不等于' },
+  { value: 'contains', label: '包含' }, { value: 'contains_any', label: '包含任意一个' },
   { value: 'not_contains', label: '不包含' }, { value: 'starts_with', label: '开头是' }, { value: 'ends_with', label: '结尾是' },
   { value: 'empty', label: '为空' }, { value: 'not_empty', label: '不为空' },
 ]

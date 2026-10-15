@@ -109,11 +109,11 @@ export function ExcelMatchPage({
       : step))
   }
 
-  function updateExportStepFilter(stepIndex: number, filterIndex: number, key: keyof ExcelMatchFilterConfig, value: string) {
+  function updateExportStepFilter(stepIndex: number, filterIndex: number, patch: Partial<ExcelMatchFilterConfig>) {
     setExportSteps((current) => current.map((step, currentStepIndex) => currentStepIndex === stepIndex
       ? {
           ...step,
-          filters: step.filters.map((filter, currentFilterIndex) => currentFilterIndex === filterIndex ? { ...filter, [key]: value } : filter),
+          filters: step.filters.map((filter, currentFilterIndex) => currentFilterIndex === filterIndex ? { ...filter, ...patch } : filter),
         }
       : step))
   }
@@ -657,7 +657,7 @@ export function ExcelMatchPage({
               onToggle={() => { setPreviewResult(null); setExportSteps((current) => current.map((item, i) => i === index ? { ...item, enabled: item.enabled === false } : item)) }}
               onMove={(direction) => moveExportStep(index, direction)} onRemove={() => removeExportStep(index)}
               onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)}
-              onFilterChange={(filterIndex, key, value) => updateExportStepFilter(index, filterIndex, key, value)}
+              onFilterChange={(filterIndex, patch) => updateExportStepFilter(index, filterIndex, patch)}
               onFilterAdd={() => { setPreviewResult(null); addExportStepFilter(index) }} onFilterRemove={(filterIndex) => { setPreviewResult(null); removeExportStepFilter(index, filterIndex) }}
             />
           ))}

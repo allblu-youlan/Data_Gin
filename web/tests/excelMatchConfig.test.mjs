@@ -15,6 +15,8 @@ import {
   migrateExcelMatchSteps,
   migrateExcelImportWriteMappings,
   selectExcelMatchStepModel,
+  selectExcelMatchFilterOperator,
+  normalizeExcelFilterValues,
 } from '../.test-dist/excelMatchConfig.js'
 
 test('Bojun Excel import exposes Oracle backfill fields with safe confirmation copy', () => {
@@ -106,6 +108,45 @@ test('saving disabled rules preserves unfinished filters and untrimmed draft fie
   const restored = migrateExcelMatchSteps(config, fallbackStep)
   assert.deepEqual(restored[0], paused)
   assert.notEqual(config.steps[0].filters, paused.filters)
+})
+
+test('multi-value filters save zero-or-empty and contains-any without changing legacy values', () => {
+  const filters = [
+    { column: ' 销售金额 ', op: 'eq_any', value: '旧单值', values: [' 0 ', '', '  '], includeEmpty: true },
+    { column: '店铺', op: 'contains_any', value: '', values: [' 天猫 ', '抖音', ''], includeEmpty: true },
+    { column: '订单类型', op: 'eq', value: ' 普通订单,预售订单 ', values: ['忽略隐藏候选'], includeEmpty: true },
+  ]
+  const config = buildExcelExportConfig({ sheetName: 'Sheet1', steps: [{ ...fallbackStep, filters }], emptyCellFills: [], exportColumnFormats: [], batchSize: 1000 })
+  assert.deepEqual(config.steps[0].filters, [
+    { column: '销售金额', op: 'eq_any', value: '', values: ['0'], includeEmpty: true },
+    { column: '店铺', op: 'contains_any', value: '', values: ['天猫', '抖音'] },
+    { column: '订单类型', op: 'eq', value: '普通订单,预售订单' },
+  ])
+  const restored = migrateExcelMatchSteps(JSON.parse(JSON.stringify(config)), fallbackStep)
+  assert.deepEqual(restored[0].filters, config.steps[0].filters)
+  const cloned = cloneExcelMatchSteps(restored)
+  cloned[0].filters[0].values.push('1')
+  assert.deepEqual(restored[0].filters[0].values, ['0'])
+})
+
+test('empty-only selection and disabled multi-value drafts survive scheme serialization', () => {
+  const emptyOnly = { column: '销售金额', op: 'eq_any', value: '', values: [], includeEmpty: true }
+  const draft = { column: '', op: 'contains_any', value: '', values: [' 天猫 ', '', '抖音', ''], includeEmpty: true }
+  const config = buildExcelExportConfig({ sheetName: 'Sheet1', steps: [{ ...fallbackStep, filters: [emptyOnly] }, { ...fallbackStep, enabled: false, filters: [draft] }], emptyCellFills: [], exportColumnFormats: [], batchSize: 1000 })
+  const restored = migrateExcelMatchSteps(config, fallbackStep)
+  assert.deepEqual(restored[0].filters[0], emptyOnly)
+  assert.deepEqual(restored[1].filters[0], draft)
+  assert.notEqual(config.steps[1].filters[0].values, draft.values)
+})
+
+test('switching to a multi-value operator preserves literal commas and existing candidates', () => {
+  const single = { column: '店铺', op: 'eq', value: '天猫,抖音' }
+  const multiple = selectExcelMatchFilterOperator(single, 'eq_any')
+  assert.deepEqual(multiple.values, ['天猫,抖音'])
+  const contains = selectExcelMatchFilterOperator({ ...multiple, values: ['天猫', '抖音'], includeEmpty: true }, 'contains_any')
+  assert.deepEqual(contains.values, ['天猫', '抖音'])
+  assert.equal(selectExcelMatchFilterOperator(contains, 'eq').value, single.value)
+  assert.deepEqual(normalizeExcelFilterValues([' 0 ', '\t', '', '天猫']), ['0', '天猫'])
 })
 
 test('migrateExcelMatchSteps moves legacy top-level filters to the first step only', () => {

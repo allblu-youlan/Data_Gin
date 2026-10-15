@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, Trash2 } from 'lucide-react'
 import { isExcelMatchStepComplete, type ExcelMatchFilterConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
-import { excelMatchFilterOperatorOptions } from './excelPageSupport'
+import { ExcelMatchFilterRow } from './ExcelMatchFilterRow'
 import { ExcelMatchStepFields, Field } from './ExcelMatchPageParts'
 import styles from './ExcelMatchPage.module.css'
 
@@ -17,7 +17,7 @@ type Props = {
   onRemove: () => void
   onChange: (key: Exclude<keyof ExcelMatchStepConfig, 'filters' | 'enabled'>, value: string) => void
   onModelChange: (value: string) => void
-  onFilterChange: (index: number, key: keyof ExcelMatchFilterConfig, value: string) => void
+  onFilterChange: (index: number, patch: Partial<ExcelMatchFilterConfig>) => void
   onFilterAdd: () => void
   onFilterRemove: (index: number) => void
 }
@@ -61,17 +61,11 @@ export function ExcelRuleEditor({ step, index, count, expanded, models, onExpand
           </ExcelMatchStepFields>
           {step.matchMode === 'order_item_sku' && <p className={styles.modeNote}>优先用规格编码匹配 mProductName 前缀，同时校验销售金额和数量，输出完整 no；规格编码为 15 位或 16 位时跳过。</p>}
           <div className={styles.stepFilterEditor}>
-            <div className={styles.stepFilterHeading}><div><strong>本规则筛选</strong><span>{step.matchMode === 'order_item_sku' ? '条件需同时满足，仅可引用未被前序条件写入修改的原始列。' : '条件需同时满足，可引用原始列或前序已启用规则的结果。'}</span></div><button type="button" onClick={onFilterAdd}>添加条件</button></div>
+            <div className={styles.stepFilterHeading}><div><strong>本规则筛选</strong><span>{step.matchMode === 'order_item_sku' ? '不同条件需同时满足；多值条件内匹配任意一项即可。仅可引用未被前序条件写入修改的原始列。' : '不同条件需同时满足；多值条件内匹配任意一项即可。可引用原始列或前序已启用规则的结果。'}</span></div><button type="button" onClick={onFilterAdd}>添加条件</button></div>
             {step.filters.length === 0 && <p className={styles.stepFilterEmpty}>未设置筛选，将处理全部 Excel 行。</p>}
-            {step.filters.map((filter, filterIndex) => {
-              const noValue = filter.op === 'empty' || filter.op === 'not_empty'
-              return <div className={styles.stepFilterRow} key={filterIndex}>
-                <Field label={`条件 ${filterIndex + 1} · Excel 列`} name={`step_filter_column_${index}_${filterIndex}`} value={filter.column} onChange={(value) => onFilterChange(filterIndex, 'column', value)} required />
-                <label>运算符<select value={filter.op} onChange={(event) => onFilterChange(filterIndex, 'op', event.currentTarget.value)}>{excelMatchFilterOperatorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                {noValue ? <label>筛选值<input value="无需填写" readOnly disabled /></label> : <Field label="筛选值" name={`step_filter_value_${index}_${filterIndex}`} value={filter.value} onChange={(value) => onFilterChange(filterIndex, 'value', value)} required />}
-                <button type="button" onClick={() => onFilterRemove(filterIndex)} aria-label={`删除规则 ${index + 1} 的条件 ${filterIndex + 1}`}>删除条件</button>
-              </div>
-            })}
+            {step.filters.map((filter, filterIndex) => (
+              <ExcelMatchFilterRow key={filterIndex} filter={filter} stepIndex={index} index={filterIndex} onChange={(patch) => onFilterChange(filterIndex, patch)} onRemove={() => onFilterRemove(filterIndex)} />
+            ))}
           </div>
         </fieldset>
       </div>

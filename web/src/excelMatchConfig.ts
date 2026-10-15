@@ -2,6 +2,23 @@ export type ExcelMatchFilterConfig = {
   column: string
   op: string
   value: string
+  values?: string[]
+  includeEmpty?: boolean
+}
+
+export function isExcelMultiValueFilter(op: string) {
+  return op === 'eq_any' || op === 'contains_any'
+}
+
+export function normalizeExcelFilterValues(values: string[] | undefined) {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean)
+}
+
+export function selectExcelMatchFilterOperator(filter: ExcelMatchFilterConfig, op: string): ExcelMatchFilterConfig {
+  if (isExcelMultiValueFilter(op)) {
+    return { ...filter, op, values: filter.values ? [...filter.values] : filter.value ? [filter.value] : [] }
+  }
+  return { ...filter, op }
 }
 
 export type ExcelEmptyCellFillConfig = {
@@ -131,6 +148,8 @@ function cloneFilters(filters: Array<Partial<ExcelMatchFilterConfig>> | undefine
     column: filter.column ?? '',
     op: filter.op ?? 'eq',
     value: filter.value ?? '',
+    ...(Array.isArray(filter.values) ? { values: [...filter.values] } : {}),
+    ...(filter.includeEmpty !== undefined ? { includeEmpty: filter.includeEmpty } : {}),
   }))
 }
 
@@ -275,6 +294,15 @@ export function buildExcelExportConfig(input: ExcelExportConfigInput) {
       filters: step.filters
         .map((filter) => {
           const op = filter.op.trim().toLowerCase() || 'eq'
+          if (isExcelMultiValueFilter(op)) {
+            return {
+              column: filter.column.trim(),
+              op,
+              value: '',
+              values: normalizeExcelFilterValues(filter.values),
+              ...(op === 'eq_any' ? { includeEmpty: filter.includeEmpty === true } : {}),
+            }
+          }
           return {
             column: filter.column.trim(),
             op,
