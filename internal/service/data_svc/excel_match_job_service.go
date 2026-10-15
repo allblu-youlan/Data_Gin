@@ -186,6 +186,7 @@ type ExcelImportWriteMapping struct {
 
 type ExcelMatchStep struct {
 	Name             string             `json:"name"`
+	Enabled          *bool              `json:"enabled,omitempty"`
 	Filters          []ExcelMatchFilter `json:"filters,omitempty"`
 	MatchMode        string             `json:"matchMode,omitempty"`
 	TableName        string             `json:"tableName"`
@@ -199,6 +200,10 @@ type ExcelMatchStep struct {
 	ConditionOp      string             `json:"conditionOp,omitempty"`
 	ContainsValue    string             `json:"containsValue,omitempty"`
 	WriteValue       string             `json:"writeValue,omitempty"`
+}
+
+func (step ExcelMatchStep) isEnabled() bool {
+	return step.Enabled == nil || *step.Enabled
 }
 
 type ExcelMatchConfig struct {
@@ -371,7 +376,7 @@ func (s *ExcelMatchJobService) createJobFromSource(ctx context.Context, source e
 	if err := json.Unmarshal([]byte(rawConfig), &config); err != nil {
 		return nil, fmt.Errorf("解析匹配配置失败: %w", err)
 	}
-	normalizedConfig, err := normalizeExcelMatchConfig(config)
+	normalizedConfig, err := normalizeExcelMatchExecutionConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +682,7 @@ func (s *ExcelMatchJobService) Preview(ctx context.Context, fileHeader *multipar
 		return nil, fmt.Errorf("解析匹配配置失败: %w", err)
 	}
 	config.Operation = excelOperationExportMatch
-	normalizedConfig, err := normalizeExcelMatchConfig(config)
+	normalizedConfig, err := normalizeExcelMatchExecutionConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -721,7 +726,7 @@ func (s *ExcelMatchJobService) PreviewUploaded(ctx context.Context, uploadID, ra
 		return nil, fmt.Errorf("解析匹配配置失败: %w", err)
 	}
 	config.Operation = excelOperationExportMatch
-	normalizedConfig, err := normalizeExcelMatchConfig(config)
+	normalizedConfig, err := normalizeExcelMatchExecutionConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +788,7 @@ func (s *ExcelMatchJobService) ProcessJob(ctx context.Context, id uint) error {
 		_ = s.jobDAO.MarkFailed(ctx, id, err.Error(), time.Now().Add(excelMatchRetention))
 		return err
 	}
-	config, err = normalizeExcelMatchConfig(config)
+	config, err = normalizeExcelMatchExecutionConfig(config)
 	if err != nil {
 		_ = s.jobDAO.MarkFailed(ctx, id, err.Error(), time.Now().Add(excelMatchRetention))
 		s.logJob(ctx, id, "error", "任务配置校验失败", map[string]interface{}{"error": err.Error()})
@@ -951,6 +956,28 @@ func (s *ExcelMatchJobService) requireCompletedUpload(uploadID string) (excelUpl
 	return meta, sourcePath, nil
 }
 
+func normalizeExcelMatchExecutionConfig(config ExcelMatchConfig) (ExcelMatchConfig, error) {
+	config, err := normalizeExcelMatchConfig(config)
+	if err != nil {
+		return config, err
+	}
+	if config.Operation == excelOperationExportMatch {
+		if err := requireEnabledExcelMatchStep(config); err != nil {
+			return config, err
+		}
+	}
+	return config, nil
+}
+
+func requireEnabledExcelMatchStep(config ExcelMatchConfig) error {
+	for _, step := range config.Steps {
+		if step.isEnabled() {
+			return nil
+		}
+	}
+	return errors.New("请至少启用一个匹配规则")
+}
+
 func normalizeExcelMatchConfig(config ExcelMatchConfig) (ExcelMatchConfig, error) {
 	config.Operation = strings.TrimSpace(config.Operation)
 	config.SheetName = strings.TrimSpace(config.SheetName)
@@ -1027,6 +1054,9 @@ func normalizeExcelExportConfig(config ExcelMatchConfig) (ExcelMatchConfig, erro
 	seenOutputs := make(map[string]struct{}, len(config.Steps))
 	for i := range config.Steps {
 		step := &config.Steps[i]
+		if !step.isEnabled() {
+			continue
+		}
 		step.Name = strings.TrimSpace(step.Name)
 		step.MatchMode = strings.ToLower(strings.TrimSpace(step.MatchMode))
 		step.TableName = strings.TrimSpace(step.TableName)
@@ -1170,7 +1200,7 @@ func normalizeExcelMatchFilters(filters []ExcelMatchFilter, scope string) ([]Exc
 
 func validateExcelExportSteps(ctx context.Context, config ExcelMatchConfig, validator ExcelMatchSchemaValidator) error {
 	for i, step := range config.Steps {
-		if step.MatchMode == excelMatchModeConditionalWrite {
+		if !step.isEnabled() || step.MatchMode == excelMatchModeConditionalWrite {
 			continue
 		}
 		if validator == nil {

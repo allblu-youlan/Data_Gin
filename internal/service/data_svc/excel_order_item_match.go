@@ -74,7 +74,7 @@ func collectExcelOrderItemReservations(ctx context.Context, input excelRowsSourc
 	reservations := make(excelOrderItemReservations)
 	hasOrderItemStep := false
 	for stepIndex, step := range config.Steps {
-		if step.MatchMode == excelMatchModeOrderItemSKU {
+		if step.isEnabled() && step.MatchMode == excelMatchModeOrderItemSKU {
 			reservations[stepIndex] = make(map[string]map[string][]excelOrderItemReservation)
 			hasOrderItemStep = true
 		}
@@ -116,7 +116,7 @@ func collectExcelOrderItemReservations(ctx context.Context, input excelRowsSourc
 		rowCount++
 		row := normalizeExcelRow(columns, len(headers))
 		for stepIndex, step := range config.Steps {
-			if step.MatchMode != excelMatchModeOrderItemSKU || !excelRowMatchesFilters(row, columnIndexes, step.Filters) {
+			if !step.isEnabled() || step.MatchMode != excelMatchModeOrderItemSKU || !excelRowMatchesFilters(row, columnIndexes, step.Filters) {
 				continue
 			}
 			orderNo := excelMatchRowValue(row, columnIndexes[step.MatchExcelColumn])

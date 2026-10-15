@@ -45,8 +45,9 @@ func processExcelMatchFile(ctx context.Context, inputPath, outputPath string, co
 
 func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excelMatchPipelineLayout, error) {
 	layout := excelMatchPipelineLayout{
-		originalWidth: len(headers),
-		columnIndexes: make(map[string]int, len(headers)+len(config.Steps)),
+		originalWidth:    len(headers),
+		columnIndexes:    make(map[string]int, len(headers)+len(config.Steps)),
+		stepInputIndexes: make([]int, len(config.Steps)),
 	}
 	layout.headers = append(layout.headers, headers...)
 	originalColumns := make(map[string]struct{}, len(headers))
@@ -55,6 +56,9 @@ func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excel
 		originalColumns[header] = struct{}{}
 	}
 	for index, step := range config.Steps {
+		if !step.isEnabled() {
+			continue
+		}
 		for _, filter := range step.Filters {
 			if _, ok := layout.columnIndexes[filter.Column]; !ok {
 				return layout, fmt.Errorf("第 %d 个匹配步骤缺少筛选列: %s", index+1, filter.Column)
@@ -80,7 +84,7 @@ func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excel
 		if outputExists && step.MatchMode != excelMatchModeConditionalWrite {
 			return layout, fmt.Errorf("第 %d 个匹配步骤输出列已存在: %s", index+1, step.OutputColumnName)
 		}
-		layout.stepInputIndexes = append(layout.stepInputIndexes, inputIndex)
+		layout.stepInputIndexes[index] = inputIndex
 		if !outputExists {
 			layout.columnIndexes[step.OutputColumnName] = len(layout.headers)
 			layout.headers = append(layout.headers, step.OutputColumnName)
@@ -115,6 +119,9 @@ func prepareExcelMatchPipeline(headers []string, config ExcelMatchConfig) (excel
 
 func runExcelMatchSteps(ctx context.Context, config ExcelMatchConfig, lookup ExcelMatchLookup, layout excelMatchPipelineLayout, state *excelMatchPipelineState, rows []*excelMatchPipelineRow) error {
 	for stepIndex, step := range config.Steps {
+		if !step.isEnabled() {
+			continue
+		}
 		if step.MatchMode == excelMatchModeConditionalWrite {
 			for _, row := range rows {
 				if err := ctx.Err(); err != nil {
@@ -286,8 +293,8 @@ func processExcelMatchPreview(ctx context.Context, input *excelize.File, config 
 	if sampleLimit <= 0 || sampleLimit > defaultExcelPreviewItems {
 		sampleLimit = defaultExcelPreviewItems
 	}
-	if len(config.Steps) == 0 {
-		return nil, errors.New("至少需要一个匹配步骤")
+	if err := requireEnabledExcelMatchStep(config); err != nil {
+		return nil, err
 	}
 	if !sheetExists(input.GetSheetList(), config.SheetName) {
 		return nil, fmt.Errorf("Excel 不存在 sheet: %s", config.SheetName)
@@ -383,8 +390,8 @@ func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPat
 		return ExcelMatchJobStats{}, err
 	}
 	defer func() { _ = input.Close() }()
-	if len(config.Steps) == 0 {
-		return ExcelMatchJobStats{}, errors.New("至少需要一个匹配步骤")
+	if err := requireEnabledExcelMatchStep(config); err != nil {
+		return ExcelMatchJobStats{}, err
 	}
 	if !sheetExists(input.GetSheetList(), config.SheetName) {
 		return ExcelMatchJobStats{}, fmt.Errorf("Excel 不存在 sheet: %s", config.SheetName)
