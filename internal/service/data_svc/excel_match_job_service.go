@@ -137,8 +137,10 @@ var allowedExcelExportColumnFormats = map[string]struct{}{
 
 var allowedExcelMatchFilterOps = map[string]struct{}{
 	"eq":           {},
+	"eq_any":       {},
 	"neq":          {},
 	"contains":     {},
+	"contains_any": {},
 	"not_contains": {},
 	"starts_with":  {},
 	"ends_with":    {},
@@ -160,9 +162,11 @@ func NewExcelMatchJobService() *ExcelMatchJobService {
 }
 
 type ExcelMatchFilter struct {
-	Column string `json:"column"`
-	Op     string `json:"op"`
-	Value  string `json:"value"`
+	Column       string   `json:"column"`
+	Op           string   `json:"op"`
+	Value        string   `json:"value"`
+	Values       []string `json:"values,omitempty"`
+	IncludeEmpty bool     `json:"includeEmpty,omitempty"`
 }
 
 type ExcelExportColumnFormat struct {
@@ -1181,7 +1185,7 @@ func normalizeExcelMatchFilters(filters []ExcelMatchFilter, scope string) ([]Exc
 		filter.Column = strings.TrimSpace(filter.Column)
 		filter.Op = strings.ToLower(strings.TrimSpace(filter.Op))
 		filter.Value = strings.TrimSpace(filter.Value)
-		if filter.Column == "" && filter.Op == "" && filter.Value == "" {
+		if filter.Column == "" && filter.Op == "" && filter.Value == "" && len(filter.Values) == 0 && !filter.IncludeEmpty {
 			continue
 		}
 		if filter.Column == "" {
@@ -1192,6 +1196,21 @@ func normalizeExcelMatchFilters(filters []ExcelMatchFilter, scope string) ([]Exc
 		}
 		if _, ok := allowedExcelMatchFilterOps[filter.Op]; !ok {
 			return nil, fmt.Errorf("%s暂不支持筛选操作: %s", scope, filter.Op)
+		}
+		if filter.Op == "eq_any" || filter.Op == "contains_any" {
+			values := make([]string, 0, len(filter.Values))
+			for _, value := range filter.Values {
+				if value = strings.TrimSpace(value); value != "" {
+					values = append(values, value)
+				}
+			}
+			filter.Values = values
+			if filter.Op == "contains_any" {
+				filter.IncludeEmpty = false
+			}
+			if len(filter.Values) == 0 && !filter.IncludeEmpty {
+				return nil, fmt.Errorf("%s多值筛选至少需要一个非空候选值，等于任意一个也可选择包含空值", scope)
+			}
 		}
 		normalized = append(normalized, filter)
 	}
@@ -1638,10 +1657,25 @@ func excelRowMatchesFilters(row []string, columnIndexes map[string]int, filters 
 		switch filter.Op {
 		case "eq", "":
 			matched = value == filter.Value
+		case "eq_any":
+			matched = filter.IncludeEmpty && value == ""
+			for _, candidate := range filter.Values {
+				if candidate != "" && value == candidate {
+					matched = true
+					break
+				}
+			}
 		case "neq":
 			matched = value != filter.Value
 		case "contains":
 			matched = strings.Contains(value, filter.Value)
+		case "contains_any":
+			for _, candidate := range filter.Values {
+				if candidate != "" && strings.Contains(value, candidate) {
+					matched = true
+					break
+				}
+			}
 		case "not_contains":
 			matched = !strings.Contains(value, filter.Value)
 		case "starts_with":
