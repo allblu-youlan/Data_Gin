@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+ARG ORACLE_LINUX_IMAGE=container-registry.oracle.com/os/oraclelinux:9-slim
 FROM golang:1.24-bullseye AS builder
 
 WORKDIR /app
@@ -17,7 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=1 GOOS=linux go build -o main .
 
-FROM oraclelinux:9-slim
+FROM ${ORACLE_LINUX_IMAGE}
 
 # godror compiles without Oracle Client headers, but requires libclntsh at
 # runtime. Oracle Linux keeps the official Instant Client and its native

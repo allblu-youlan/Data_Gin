@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        ORACLE_LINUX_IMAGE: ${ORACLE_LINUX_IMAGE:-container-registry.oracle.com/os/oraclelinux:9-slim}
     env_file:
       - .env
     command: ["./main", "migrate", "schema"]
@@ -27,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        ORACLE_LINUX_IMAGE: ${ORACLE_LINUX_IMAGE:-container-registry.oracle.com/os/oraclelinux:9-slim}
     container_name: gin-biz-web-api
     env_file:
       - .env
