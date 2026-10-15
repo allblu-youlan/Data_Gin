@@ -18,6 +18,7 @@ export type ExcelMatchMode = 'field' | 'order_item_sku' | 'conditional_write'
 export type ExcelMatchConditionOp = 'contains' | 'eq' | 'neq'
 
 export type ExcelMatchStepConfig = {
+  enabled?: boolean
   name: string
   filters: ExcelMatchFilterConfig[]
   matchMode: ExcelMatchMode
@@ -136,6 +137,7 @@ function cloneFilters(filters: Array<Partial<ExcelMatchFilterConfig>> | undefine
 export function cloneExcelMatchSteps(steps: ExcelMatchStepConfig[]) {
   return steps.map((step) => ({
     ...step,
+    enabled: step.enabled !== false,
     filters: cloneFilters(step.filters),
   }))
 }
@@ -222,6 +224,7 @@ export function selectExcelMatchStepModel(step: ExcelMatchStepConfig, tableName:
 export function migrateExcelMatchSteps(config: ExcelMatchSchemeSource, fallbackStep: ExcelMatchStepConfig): ExcelMatchStepConfig[] {
   const configuredSteps: ExcelMatchStepConfig[] = Array.isArray(config.steps) && config.steps.length > 0
     ? config.steps.map((step, index): ExcelMatchStepConfig => ({
+        enabled: step.enabled !== false,
         name: step.name ?? `步骤 ${index + 1}`,
         filters: cloneFilters(step.filters),
         matchMode: normalizeMatchMode(step.matchMode),
@@ -238,6 +241,7 @@ export function migrateExcelMatchSteps(config: ExcelMatchSchemeSource, fallbackS
         qtyExcelColumn: step.qtyExcelColumn ?? '',
       }))
     : [{
+        enabled: true,
         name: '兼容旧方案',
         filters: [],
         matchMode: 'field',
@@ -264,7 +268,8 @@ export function buildExcelExportConfig(input: ExcelExportConfigInput) {
   return {
     operation: 'export_match' as const,
     sheetName: input.sheetName.trim() || 'Sheet1',
-    steps: input.steps.map((step) => ({
+    steps: input.steps.map((step) => step.enabled === false ? { ...step, filters: cloneFilters(step.filters) } : ({
+      enabled: true,
       name: step.name.trim(),
       matchMode: normalizeMatchMode(step.matchMode),
       filters: step.filters

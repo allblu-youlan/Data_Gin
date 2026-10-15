@@ -25,11 +25,11 @@ export function ExcelSchemeList({ schemes, deletingSchemeID, onDelete, onOpen }:
   if (schemes.length === 0) return <EmptyState text="暂无已保存方案。" />
   return (
     <DataTable className={styles.schemeTable} density="compact" minWidth={620} scrollLabel="Excel 匹配方案">
-      <thead><tr><th scope="col">方案名称</th><th scope="col">步骤数</th><th scope="col">更新时间</th><th scope="col">操作</th></tr></thead>
+      <thead><tr><th scope="col">方案名称</th><th scope="col">启用 / 总数</th><th scope="col">更新时间</th><th scope="col">操作</th></tr></thead>
       <tbody>{schemes.map((scheme) => (
         <tr key={scheme.id}>
           <td>{scheme.name}</td>
-          <td>{scheme.operation === 'export_match' ? (scheme.config.steps?.length || 1) : '-'}</td>
+          <td>{scheme.operation === 'export_match' ? `${scheme.config.steps?.filter((step) => step.enabled !== false).length ?? 1} / ${scheme.config.steps?.length || 1}` : '-'}</td>
           <td>{formatUnixTime(scheme.updated_at)}</td>
           <td><div className={styles.tableActions}><button type="button" onClick={() => onOpen(scheme.id)} disabled={deletingSchemeID !== null}>打开配置</button><button type="button" className={styles.danger} onClick={() => onDelete(scheme)} disabled={deletingSchemeID !== null}>{deletingSchemeID === scheme.id ? '删除中…' : '删除'}</button></div></td>
         </tr>
@@ -109,7 +109,7 @@ export function ExcelMatchStepFields({ step, index, models, onChange, onModelCha
   step: ExcelMatchStepConfig
   index: number
   models: ExcelMatchModel[]
-  onChange: (key: Exclude<keyof ExcelMatchStepConfig, 'filters'>, value: string) => void
+  onChange: (key: Exclude<keyof ExcelMatchStepConfig, 'filters' | 'enabled'>, value: string) => void
   onModelChange: (value: string) => void
   children?: ReactNode
 }) {

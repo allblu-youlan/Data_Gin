@@ -1,5 +1,6 @@
 .page {
-  --excel-control-height: 40px;
+  --excel-control-height: 34px;
+  --button-height: 34px;
 }
 
 .panel {
@@ -52,10 +53,10 @@
 .formActions,
 .dialog .formActions { grid-column: 1 / -1; }
 
-.schemeToolbar { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(120px, .4fr) auto; align-items: end; gap: var(--space-3); margin-block-end: var(--space-4); }
+.schemeToolbar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(100px, .3fr) auto; align-items: end; gap: var(--space-3); margin-block-end: var(--space-4); }
 .schemeForm { display: block; }
 .stepEditor,
-.dialog .stepEditor { display: grid; grid-column: 1 / -1; gap: var(--space-4); border-block: 1px solid var(--color-border); padding-block: var(--space-4); }
+.dialog .stepEditor { display: grid; grid-column: 1 / -1; gap: var(--space-2); border-block: 1px solid var(--color-border); padding-block: var(--space-3); }
 .stepEditorTitle,
 .stepHeading,
 .stepFilterHeading,
@@ -291,7 +292,60 @@
 .schemeTable th:nth-child(3) { width: 32%; }
 .schemeTable th:nth-child(4) { width: 20%; }
 
+.matchWorkspace { min-width: 0; border: 1px solid var(--color-border); background: var(--color-canvas); padding: var(--space-4); }
+.workspaceHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.workspaceHeading > div { display: grid; gap: var(--space-1); min-width: 0; }
+.workspaceHeading strong { font-size: 15px; overflow-wrap: anywhere; }
+.workspaceHeading span { color: var(--color-text-secondary); font-size: 12px; }
+.workspaceHeading > button { flex-shrink: 0; }
+.stepEditorTitle > div, .stepFilterHeading > div { display: grid; gap: var(--space-1); }
+.stepEditorTitle > div > span, .stepFilterHeading span { color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
+.ruleCount { margin-left: var(--space-2); color: var(--color-success-text); font-size: 12px; font-weight: 500; }
+.rule { min-width: 0; border: 1px solid var(--color-border); background: var(--color-canvas); }
+.ruleExpanded { border-color: var(--color-border-strong); }
+.ruleHeader { display: flex; align-items: center; gap: var(--space-2); padding-right: var(--space-3); }
+.ruleSummary { display: flex; flex: 1; justify-content: flex-start; min-width: 0; gap: var(--space-3); padding: var(--space-3); border: 0; background: transparent; text-align: left; }
+.ruleNumber { flex: 0 0 28px; color: var(--color-brand-active); font: 13px var(--font-mono); }
+.ruleTitle { display: grid; flex: 1; min-width: 100px; gap: var(--space-1); }
+.ruleTitle strong { font-size: 13px; overflow-wrap: anywhere; }
+.ruleTitle > span { color: var(--color-text-secondary); font-size: 11px; font-weight: 400; }
+.ruleDivider { padding-inline: var(--space-2); }
+.ruleFlow { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
+.ruleFlow > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ruleFlow svg { width: 14px; height: 14px; }
+.ruleStatus { color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
+.ruleChevron { color: var(--color-text-secondary); transition: transform 150ms ease; }
+.ruleExpanded .ruleChevron { transform: rotate(180deg); }
+.ruleDisabled .ruleHeader { background: var(--color-surface-subtle); }
+.ruleDisabled .ruleNumber { color: var(--color-text-secondary); }
+.ruleToggle { flex-shrink: 0; gap: var(--space-2); border: 0; padding: var(--space-1); background: transparent; font-size: 12px; font-weight: 500; }
+.toggleTrack { display: inline-flex; align-items: center; width: 28px; height: 16px; padding: 2px; border-radius: var(--radius-pill); background: var(--color-text-secondary); }
+.toggleTrack > span { width: 12px; height: 12px; border-radius: 50%; background: var(--color-canvas); }
+.ruleToggle[aria-checked='true'] .toggleTrack { justify-content: flex-end; background: var(--color-success-text); }
+.ruleDetail { padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--color-border); }
+.ruleDetail[hidden] { display: none; }
+.ruleDetailHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ruleDetailHeading > span { color: var(--color-text-secondary); font-size: 12px; }
+.ruleFields { display: grid; min-width: 0; gap: var(--space-3); margin: 0; padding: 0; border: 0; }
+.ruleFields:disabled { opacity: .65; }
+.ruleFields .catalogExplanation { font-size: 11px; }
+.ruleFields .stepFields { align-items: start; }
+.supplementalSettings { border-top: 1px solid var(--color-border); margin-top: var(--space-1); padding-top: var(--space-3); }
+.supplementalSettings summary, .schemeAdvanced summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+.supplementalSettings summary span { margin-left: var(--space-2); font-size: 12px; color: var(--color-text-secondary); font-weight: 400; }
+.supplementalSettings > div { border: 0; }
+.fileInputLabel:focus-within span { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.fileInputLabel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.page .stepComplete { color: var(--color-success-text); }
+.page .stepIncomplete { color: var(--color-warning-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ruleChevron { transition: none; }
+}
+
 @media (max-width: 1180px) {
+  .schemeToolbar { grid-template-columns: minmax(0, 1fr) 120px; }
+  .schemeToolbarActions { grid-column: 1 / -1; }
   .masterDetail {
     grid-template-columns: 1fr;
   }
@@ -306,6 +360,18 @@
 }
 
 @media (max-width: 768px) {
+  .ruleSummary { flex-wrap: wrap; gap: var(--space-2); }
+  .ruleTitle { min-width: 0; flex-basis: calc(100% - 48px); }
+  .ruleFlow { flex-basis: 100%; padding-left: 36px; }
+  .ruleSummary > .stepComplete, .ruleSummary > .stepIncomplete, .ruleStatus { padding-left: 36px; }
+  .ruleHeader { align-items: flex-start; padding-right: var(--space-2); }
+  .ruleToggle { margin-top: var(--space-2); }
+  .ruleDetail { padding: var(--space-3); }
+  .ruleDetailHeading, .stepFilterHeading, .stepEditorTitle { flex-wrap: wrap; }
+  .stepFilterHeading > div { flex-basis: 100%; }
+  .workspaceHeading { align-items: flex-start; }
+  .matchWorkspace { padding: var(--space-3); }
+  .schemeToolbarActions { justify-content: flex-start; }
   .search {
     min-width: 100%;
   }

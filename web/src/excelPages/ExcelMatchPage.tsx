@@ -2,11 +2,12 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Database, Download, FileJson, ListChecks, RefreshCcw, Search, Upload } from 'lucide-react'
 import type { ClientResponse } from '../api/client'
 import { Dialog, Drawer, FeedbackState, FilterToolbar, MetricStrip, PageCanvas, PageHeader, PaginationControls, Section } from '../ui'
-import { bojunImportWriteConfirmation, bojunImportWriteFieldOptions, buildExcelExportConfig, cloneExcelEmptyCellFills, cloneExcelImportWriteMappings, cloneExcelMatchSteps, excelMatchSchemePath, isExcelMatchStepComplete, selectExcelMatchStepModel, type ExcelMatchFilterConfig, type ExcelEmptyCellFillConfig, type ExcelImportWriteMappingConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
-import { bojunMatchFieldOptions, canDownloadExcelJob, defaultExcelExportScheme, defaultExcelImportScheme, excelJobStatusLabel, excelMatchFilterOperatorOptions, exportSchemeDefaults, filterSensitiveExcelModels, formValue, importSchemeDefaults, parseExportColumnFormats, readDataField, readObject, type ExcelDialogMode, type ExcelExportSchemeConfig, type ExcelImportSchemeConfig, type ExcelMatchJob, type ExcelMatchPreviewResult, type ExcelMatchScheme, type PendingSchemeSave } from './excelPageSupport'
-import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelMatchStepFields, ExcelSchemeList, Field, Metric, Panel, SelectFilter } from './ExcelMatchPageParts'
+import { bojunImportWriteConfirmation, bojunImportWriteFieldOptions, buildExcelExportConfig, cloneExcelEmptyCellFills, cloneExcelImportWriteMappings, cloneExcelMatchSteps, excelMatchSchemePath, selectExcelMatchStepModel, type ExcelMatchFilterConfig, type ExcelEmptyCellFillConfig, type ExcelImportWriteMappingConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
+import { bojunMatchFieldOptions, canDownloadExcelJob, defaultExcelExportScheme, defaultExcelImportScheme, excelJobStatusLabel, exportSchemeDefaults, filterSensitiveExcelModels, formValue, importSchemeDefaults, parseExportColumnFormats, readDataField, readObject, type ExcelDialogMode, type ExcelExportSchemeConfig, type ExcelImportSchemeConfig, type ExcelMatchJob, type ExcelMatchPreviewResult, type ExcelMatchScheme, type PendingSchemeSave } from './excelPageSupport'
+import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelSchemeList, Field, Metric, Panel, SelectFilter } from './ExcelMatchPageParts'
 import { buildExcelUploadPayload, useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { useExcelJobs } from './useExcelJobs'
+import { ExcelRuleEditor } from './ExcelRuleEditor'
 import styles from './ExcelMatchPage.module.css'
 
 export type { ExcelPageClient, ExcelPageClientOptions } from './useExcelUploads'
@@ -47,6 +48,8 @@ export function ExcelMatchPage({
   const [excelModelsError, setExcelModelsError] = useState('')
   const [importDefaults, setImportDefaults] = useState<ExcelImportSchemeConfig>(defaultExcelImportScheme)
   const [importWriteMappings, setImportWriteMappings] = useState<ExcelImportWriteMappingConfig[]>(cloneExcelImportWriteMappings(defaultExcelImportScheme.writeMappings))
+  const [expandedStep, setExpandedStep] = useState<number | null>(null)
+  const [schemeLibraryOpen, setSchemeLibraryOpen] = useState(false)
   const [exportFormKey, setExportFormKey] = useState(0)
   const [importFormKey, setImportFormKey] = useState(0)
   const [selectedExportSchemeID, setSelectedExportSchemeID] = useState('')
@@ -66,7 +69,8 @@ export function ExcelMatchPage({
     ? (pendingSchemeSave.operation === 'export_match' ? exportSchemes : importSchemes)
       .find((scheme) => scheme.name === pendingSchemeSave.name.trim()) ?? null
     : null
-  const usesExcelModels = exportSteps.some((step) => step.matchMode !== 'conditional_write')
+  const enabledStepCount = exportSteps.filter((step) => step.enabled !== false).length
+  const usesExcelModels = exportSteps.some((step) => step.enabled !== false && step.matchMode !== 'conditional_write')
   const requestErrorMessage = (response: ClientResponse, fallback: string) => response.error?.message || fallback
 
   function resetExcelDialogFiles() {
@@ -95,7 +99,7 @@ export function ExcelMatchPage({
     })
   }
 
-  function updateExportStep(index: number, key: Exclude<keyof ExcelMatchStepConfig, 'filters'>, value: string) {
+  function updateExportStep(index: number, key: Exclude<keyof ExcelMatchStepConfig, 'filters' | 'enabled'>, value: string) {
     setExportSteps((current) => current.map((step, stepIndex) => stepIndex === index ? { ...step, [key]: value } : step))
   }
 
@@ -139,14 +143,17 @@ export function ExcelMatchPage({
   }
 
   function addExportStep() {
+    setPreviewResult(null)
+    setExpandedStep(Math.min(exportSteps.length, 19))
     setExportSteps((current) => {
       if (current.length >= 20) return current
       return [...current, {
-        name: `步骤 ${current.length + 1}`,
+        name: `规则 ${current.length + 1}`,
+        enabled: true,
         filters: [],
         matchMode: 'field',
         tableName: '',
-        matchExcelColumn: current[current.length - 1]?.outputColumnName ?? '',
+        matchExcelColumn: current.filter((step) => step.enabled !== false).slice(-1)[0]?.outputColumnName ?? '',
         dbMatchField: '',
         dbValueField: '',
         outputColumnName: '',
@@ -161,10 +168,14 @@ export function ExcelMatchPage({
   }
 
   function removeExportStep(index: number) {
+    setPreviewResult(null)
+    setExpandedStep(null)
     setExportSteps((current) => current.length === 1 ? current : current.filter((_, stepIndex) => stepIndex !== index))
   }
 
   function moveExportStep(index: number, direction: -1 | 1) {
+    setPreviewResult(null)
+    setExpandedStep(index + direction)
     setExportSteps((current) => {
       const nextIndex = index + direction
       if (nextIndex < 0 || nextIndex >= current.length) return current
@@ -361,6 +372,8 @@ export function ExcelMatchPage({
   }
 
   function applyExportScheme(schemeID: string) {
+    setExpandedStep(null)
+    setSchemeLibraryOpen(false)
     setSelectedExportSchemeID(schemeID)
     if (!schemeID) {
       setExportDefaults(defaultExcelExportScheme)
@@ -406,6 +419,7 @@ export function ExcelMatchPage({
 
   async function createExportJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!validateExportForm(event.currentTarget, true)) return
     const form = new FormData(event.currentTarget)
     const file = form.get('file')
     if (!(file instanceof File) || file.size === 0) {
@@ -438,6 +452,7 @@ export function ExcelMatchPage({
   }
 
   async function previewExportJob(formElement: HTMLFormElement) {
+    if (!validateExportForm(formElement, true)) return
     const form = new FormData(formElement)
     const file = form.get('file')
     if (!(file instanceof File) || file.size === 0) {
@@ -608,37 +623,61 @@ export function ExcelMatchPage({
     )
   }
 
+  function validateExportForm(form: HTMLFormElement, forExecution = false) {
+    if (forExecution && enabledStepCount === 0) {
+      setResult({ ok: false, status: 0, data: '请至少启用一条匹配规则后再预览或导出。' })
+      return false
+    }
+    const invalid = form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input:invalid, select:invalid, textarea:invalid')
+    if (!invalid) return true
+    const fieldset = invalid.closest<HTMLFieldSetElement>('[data-step-index]')
+    if (fieldset) setExpandedStep(Number(fieldset.dataset.stepIndex))
+    const details = invalid.closest('details')
+    if (details) details.open = true
+    requestAnimationFrame(() => invalid.reportValidity())
+    return false
+  }
+
   function renderExportMatchForm() {
     return (
-      <form className={`${styles.uploadForm} ${styles.schemeForm}`} onSubmit={createExportJob} key={exportFormKey}>
-        <div className={styles.schemeToolbar}><label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedExportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('export'); setPreviewResult(null) }} /><span>{selectedExportFileName || '请选择 Excel 文件'}</span></label><Field label="Sheet" name="sheetName" defaultValue={exportDefaults.sheetName} /><div className={styles.schemeToolbarActions}><button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加步骤</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'export_match', selectedExportSchemeID ? 'current' : 'new') }} disabled={loading}>保存方案</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) void previewExportJob(form) }} disabled={loading}><FileJson aria-hidden="true" />预览匹配</button><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建导出任务</button></div></div>
+      <form className={`${styles.uploadForm} ${styles.schemeForm}`} onSubmit={createExportJob} noValidate onChange={() => setPreviewResult(null)} key={exportFormKey}>
+        <div className={styles.schemeToolbar}><label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedExportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('export'); setPreviewResult(null) }} /><span>{selectedExportFileName || '请选择 Excel 文件'}</span></label><Field label="Sheet" name="sheetName" defaultValue={exportDefaults.sheetName} /><div className={styles.schemeToolbarActions}><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) beginSchemeSave(form, 'export_match', selectedExportSchemeID ? 'current' : 'new') }} disabled={loading}>保存方案</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) void previewExportJob(form) }} disabled={loading}><FileJson aria-hidden="true" />预览匹配</button><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建导出任务</button></div></div>
         <div className={styles.stepEditor}>
-          <div className={styles.stepEditorTitle}><div><strong>自定义匹配流程</strong><span>步骤按顺序执行，并可引用前序步骤输出。</span></div></div>
+          <div className={styles.stepEditorTitle}><div><strong>匹配规则 <span className={styles.ruleCount}>{enabledStepCount} / {exportSteps.length} 已启用</span></strong><span>按顺序执行，点击规则展开详情；停用后保留配置。</span></div><button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加规则</button></div>
+          {enabledStepCount === 0 && <p className={styles.modeNote} role="status">当前没有启用的规则。可保存方案，预览和导出前请至少启用一条规则。</p>}
           {usesExcelModels && excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
           {usesExcelModels && excelModelsError && <div className={styles.catalogError} role="alert"><span>模型与字段目录加载失败：{excelModelsError}</span><button type="button" onClick={() => void loadExcelModels()}>重试加载</button></div>}
           {usesExcelModels && !excelModelsLoading && !excelModelsError && excelModels.length === 0 && <p className={styles.modeNote}>当前数据库没有返回可选择的模型；历史配置仍可查看，但新步骤需要先确认数据库连接和模型表。</p>}
           {exportSteps.map((step, index) => (
-            <article className={styles.stepCard} key={`${exportFormKey}-${index}`}>
-              <div className={styles.stepHeading}><strong><span className={styles.stepIndex} aria-hidden="true">{index + 1}</span><input className={styles.stepNameInput} name={`step_name_${index}`} value={step.name} onChange={(event) => updateExportStep(index, 'name', event.currentTarget.value)} aria-label={`步骤 ${index + 1} 名称`} required />{index > 0 && <small>可引用前序步骤结果；上一步目标列（{exportSteps[index - 1]?.outputColumnName || '待配置'}）</small>}</strong><div className={styles.tableActions}><span className={isExcelMatchStepComplete(step) ? styles.stepComplete : styles.stepIncomplete}>{isExcelMatchStepComplete(step) ? '配置完整' : '待完善'}</span><button type="button" onClick={() => moveExportStep(index, -1)} disabled={index === 0}>↑ 上移</button><button type="button" onClick={() => moveExportStep(index, 1)} disabled={index === exportSteps.length - 1}>↓ 下移</button><button className={styles.danger} type="button" onClick={() => removeExportStep(index)} disabled={exportSteps.length === 1}>删除</button></div></div>
-              <ExcelMatchStepFields step={step} index={index} models={excelModels} onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)} />
-              {step.matchMode === 'order_item_sku' && <p className={styles.modeNote}>按数据库购物明细字段匹配并输出完整 no：优先用规格编码匹配 mProductName 前缀，并同时校验销售金额和数量；规格编码为 15 位或 16 位时直接跳过。</p>}
-              <div className={styles.stepFilterEditor}><div className={styles.stepFilterHeading}><div><strong>本步骤筛选</strong><span>{step.matchMode === 'order_item_sku' ? '多条条件需要同时满足，订单商品 SKU 模式仅可引用未被前序条件写入修改的原始 Excel 列。' : '多条条件需要同时满足，可引用原始列或前序步骤处理后的列。'}</span></div><button type="button" onClick={() => addExportStepFilter(index)}>添加条件</button></div>{step.filters.length === 0 && <p className={styles.stepFilterEmpty}>{step.matchMode === 'conditional_write' ? '未设置筛选，全部 Excel 行将继续判断写入条件。' : '未设置条件，本步骤处理全部 Excel 行。'}</p>}{step.filters.map((filter, filterIndex) => { const valueNotRequired = filter.op === 'empty' || filter.op === 'not_empty'; return <div className={styles.stepFilterRow} key={`${exportFormKey}-${index}-${filterIndex}`}><Field label={`条件 ${filterIndex + 1} · Excel 列`} name={`step_filter_column_${index}_${filterIndex}`} value={filter.column} onChange={(value) => updateExportStepFilter(index, filterIndex, 'column', value)} required /><label>运算符<select name={`step_filter_op_${index}_${filterIndex}`} value={filter.op} onChange={(event) => updateExportStepFilter(index, filterIndex, 'op', event.currentTarget.value)}>{excelMatchFilterOperatorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{valueNotRequired ? <label>筛选值<input value="此运算无需填写" readOnly disabled /></label> : <Field label="筛选值" name={`step_filter_value_${index}_${filterIndex}`} value={filter.value} onChange={(value) => updateExportStepFilter(index, filterIndex, 'value', value)} required />}<button type="button" onClick={() => removeExportStepFilter(index, filterIndex)} aria-label={`删除步骤 ${index + 1} 的条件 ${filterIndex + 1}`}>删除条件</button></div> })}</div>
-            </article>
+            <ExcelRuleEditor
+              key={`${exportFormKey}-${index}`}
+              step={step} index={index} count={exportSteps.length} models={excelModels}
+              expanded={expandedStep === index}
+              onExpand={() => setExpandedStep((current) => current === index ? null : index)}
+              onToggle={() => { setPreviewResult(null); setExportSteps((current) => current.map((item, i) => i === index ? { ...item, enabled: item.enabled === false } : item)) }}
+              onMove={(direction) => moveExportStep(index, direction)} onRemove={() => removeExportStep(index)}
+              onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)}
+              onFilterChange={(filterIndex, key, value) => updateExportStepFilter(index, filterIndex, key, value)}
+              onFilterAdd={() => { setPreviewResult(null); addExportStepFilter(index) }} onFilterRemove={(filterIndex) => { setPreviewResult(null); removeExportStepFilter(index, filterIndex) }}
+            />
           ))}
+          <details className={styles.supplementalSettings}>
+            <summary>空值填充 <span>{exportEmptyCellFills.length} 条规则 · 匹配完成后执行</span></summary>
           <div className={styles.stepFilterEditor}>
             <div className={styles.stepFilterHeading}>
               <div><strong>空值填充</strong><span>所有匹配步骤完成后，目标列为空时从同一行来源列填充；可引用原始列或追加输出列，不覆盖已有值。</span></div>
-              <button type="button" onClick={addExportEmptyCellFill}>添加填充规则</button>
+              <button type="button" onClick={() => { setPreviewResult(null); addExportEmptyCellFill() }}>添加填充规则</button>
             </div>
             {exportEmptyCellFills.length === 0 && <p className={styles.stepFilterEmpty}>未设置空值填充规则。</p>}
             {exportEmptyCellFills.map((fill, index) => <div className={styles.stepFilterRow} key={`${exportFormKey}-empty-cell-fill-${index}`}>
               <Field label="目标列（为空时）" name={`empty_cell_fill_target_${index}`} value={fill.targetColumn} onChange={(value) => updateExportEmptyCellFill(index, 'targetColumn', value)} required />
               <Field label="来源列（同一行）" name={`empty_cell_fill_source_${index}`} value={fill.sourceColumn} onChange={(value) => updateExportEmptyCellFill(index, 'sourceColumn', value)} required />
-              <button type="button" onClick={() => removeExportEmptyCellFill(index)} aria-label={`删除空值填充规则 ${index + 1}`}>删除规则</button>
+              <button type="button" onClick={() => { setPreviewResult(null); removeExportEmptyCellFill(index) }} aria-label={`删除空值填充规则 ${index + 1}`}>删除规则</button>
             </div>)}
           </div>
+          </details>
         </div>
-        <details className={styles.schemeAdvanced}><summary>方案与高级设置</summary><div><label>已保存方案<select name="exportSchemeID" value={selectedExportSchemeID} onChange={(event) => applyExportScheme(event.currentTarget.value)}><option value="">选择方案</option>{exportSchemes.map((scheme) => <option value={scheme.id} key={scheme.id}>{scheme.name}</option>)}</select></label><button type="button" disabled={!selectedExportSchemeID || loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'export_match', 'current') }}>保存到当前方案</button><button type="button" disabled={loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'export_match', 'new') }}>另存为新方案</button><label>导出列内容格式<textarea name="exportColumnFormats" defaultValue={exportDefaults.exportColumnFormats} rows={4} placeholder={'每行一个：列名=格式\n例如：金额=number\n下单时间=date'} /><small>支持 text、number、integer、bool、date。</small></label><Field label="批量查询大小" name="batchSize" defaultValue={exportDefaults.batchSize} /></div></details>
+        <details className={styles.schemeAdvanced}><summary>方案与高级设置</summary><div><label>已保存方案<select name="exportSchemeID" value={selectedExportSchemeID} onChange={(event) => applyExportScheme(event.currentTarget.value)}><option value="">选择方案</option>{exportSchemes.map((scheme) => <option value={scheme.id} key={scheme.id}>{scheme.name}</option>)}</select></label><button type="button" disabled={!selectedExportSchemeID || loading} onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) beginSchemeSave(form, 'export_match', 'current') }}>保存到当前方案</button><button type="button" disabled={loading} onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) beginSchemeSave(form, 'export_match', 'new') }}>另存为新方案</button><label>导出列内容格式<textarea name="exportColumnFormats" defaultValue={exportDefaults.exportColumnFormats} rows={4} placeholder={'每行一个：列名=格式\n例如：金额=number\n下单时间=date'} /><small>支持 text、number、integer、bool、date。</small></label><Field label="批量查询大小" name="batchSize" defaultValue={exportDefaults.batchSize} /></div></details>
         {previewResult && <ExcelMatchPreviewPanel preview={previewResult} />}
         {uploadProgress && <p className={styles.modeNote} role="status" aria-live="polite">{uploadProgress}</p>}
       </form>
@@ -679,7 +718,7 @@ export function ExcelMatchPage({
   }
 
   return (
-    <PageCanvas className={styles.page}>
+    <PageCanvas className={styles.page} density="compact">
       <PageHeader
         eyebrow="EXCEL WORKSPACE"
         title={section === 'jobs' ? 'Excel 任务' : section === 'schemes' ? 'Excel 多步骤匹配' : 'Excel 写入'}
@@ -716,19 +755,16 @@ export function ExcelMatchPage({
       </>}
 
       {section === 'schemes' && <>
-        <MetricStrip items={[{ key: 'schemes', label: '导出方案', value: exportSchemes.length }, { key: 'steps', label: '当前步骤', value: exportSteps.length }, { key: 'maximum', label: '最大步骤', value: 20 }, { key: 'filters', label: '筛选规则', value: '可选' }]} />
-        <section className={styles.masterDetail}>
-          <Panel title="匹配导出配置" icon={<Upload />} meta="步骤顺序与预览都基于真实导出配置">
-            <div className={styles.configSummary}>
-              <strong>{selectedExportSchemeID ? '正在编辑已保存方案' : '新建匹配方案'}</strong>
-              <span>当前包含 {exportSteps.length} 个步骤；可直接调整顺序、筛选和输出字段。</span>
-            </div>
-            {renderExportMatchForm()}
-          </Panel>
-          <aside className={styles.aside} aria-label="已保存导出方案">
-            <Panel title="已保存导出方案" icon={<ListChecks />} meta={`${exportSchemes.length} 个方案`}><ExcelSchemeList schemes={exportSchemes} deletingSchemeID={deletingSchemeID} onDelete={setPendingSchemeDelete} onOpen={(id) => applyExportScheme(String(id))} /></Panel>
-          </aside>
+        <section className={styles.matchWorkspace} aria-label="Excel 匹配配置">
+          <div className={styles.workspaceHeading}>
+            <div><strong>{exportSchemes.find((scheme) => String(scheme.id) === selectedExportSchemeID)?.name || '新建匹配方案'}</strong><span>最多 20 条规则 · 仅启用规则生效</span></div>
+            <button type="button" onClick={() => setSchemeLibraryOpen(true)}><ListChecks aria-hidden="true" />方案库 <span>{exportSchemes.length}</span></button>
+          </div>
+          {renderExportMatchForm()}
         </section>
+        <Drawer open={schemeLibraryOpen} size="wide" title="已保存导出方案" description="打开方案继续编辑；启停状态随方案保存。" onClose={() => setSchemeLibraryOpen(false)}>
+          <ExcelSchemeList schemes={exportSchemes} deletingSchemeID={deletingSchemeID} onDelete={setPendingSchemeDelete} onOpen={(id) => applyExportScheme(String(id))} />
+        </Drawer>
       </>}
 
       {section === 'write' && <>
@@ -749,177 +785,9 @@ export function ExcelMatchPage({
       {pendingWrite && excelDialog === null && <Dialog className={styles.dialog} open title={pendingWrite.slot === 'import' ? '确认写入数据库' : '确认退回未匹配'} closeDisabled={loading} onClose={() => { if (!loading) setPendingWrite(null) }}><div className={styles.viewStack}><p>{pendingWrite.message}</p><div className={styles.formActions}><button type="button" disabled={loading} onClick={() => setPendingWrite(null)}>返回修改</button><button className={pendingWrite.slot === 'clear' ? styles.danger : styles.primary} type="button" disabled={loading} onClick={() => void confirmPendingWrite()}>{loading ? '创建任务中…' : pendingWrite.slot === 'clear' ? '确认退回' : '确认写入'}</button></div></div></Dialog>}
 
       {excelDialog === 'export' && (
-        <Dialog className={`${styles.dialog} ${styles.wideDialog}`} open
-          title={pendingSchemeSave ? '保存 Excel 匹配方案' : '匹配导出参数'}
-
-          closeDisabled={loading || schemeSaveInFlightRef.current}
-          onClose={() => { if (!loading && !schemeSaveInFlightRef.current) closeExcelDialog() }}
-          footer={pendingSchemeSave ? undefined : (
-            <div className={styles.modalFooterContent}>
-              {uploadProgress && <p className={`${styles.modeNote} ${styles.modalFooterStatus}`} role="status" aria-live="polite">{uploadProgress}</p>}
-              <div className={styles.formActions}>
-                <button
-                  type="button"
-                  form="excel-export-job-form"
-                  onClick={(event) => {
-                    const form = event.currentTarget.form
-                    if (form?.reportValidity()) void previewExportJob(form)
-                  }}
-                  disabled={loading}
-                >
-                  <FileJson aria-hidden="true" />
-                  预览匹配
-                </button>
-                <button className={styles.primary} type="submit" form="excel-export-job-form" disabled={loading}>
-                  <Upload aria-hidden="true" />
-                  创建导出任务
-                </button>
-              </div>
-            </div>
-          )}
-        >
+        <Dialog className={`${styles.dialog} ${styles.wideDialog}`} open title={pendingSchemeSave ? '保存 Excel 匹配方案' : '匹配导出配置'} closeDisabled={loading || schemeSaveInFlightRef.current} onClose={() => { if (!loading && !schemeSaveInFlightRef.current) closeExcelDialog() }}>
           {renderPendingSchemeSave()}
-          <form id="excel-export-job-form" className={styles.uploadForm} onSubmit={createExportJob} key={exportFormKey} hidden={pendingSchemeSave !== null}>
-            <label>
-              已保存方案
-              <select name="exportSchemeID" value={selectedExportSchemeID} onChange={(event) => applyExportScheme(event.currentTarget.value)}>
-                <option value="">选择方案</option>
-                {exportSchemes.map((scheme) => <option value={scheme.id} key={scheme.id}>{scheme.name}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={!selectedExportSchemeID || loading}
-              onClick={(event) => {
-                const form = event.currentTarget.form
-                if (form?.reportValidity()) beginSchemeSave(form, 'export_match', 'current')
-              }}
-            >
-              保存到当前方案
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={(event) => {
-                const form = event.currentTarget.form
-                if (form?.reportValidity()) beginSchemeSave(form, 'export_match', 'new')
-              }}
-            >
-              另存为新方案
-            </button>
-            <label className={styles.fileInputLabel}>
-              Excel 文件
-              <input
-                name="file"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={(event) => {
-                  setSelectedExportFileName(event.currentTarget.files?.[0]?.name ?? '')
-                  clearUploadRef('export')
-                  setPreviewResult(null)
-                }}
-              />
-              <span>{selectedExportFileName || '请选择需要匹配导出的 .xlsx 文件'}</span>
-            </label>
-            <Field label="Sheet 页名称" name="sheetName" defaultValue={exportDefaults.sheetName} />
-            <div className={styles.stepEditor}>
-              <div className={styles.stepEditorTitle}>
-                <div>
-                  <strong>匹配步骤</strong>
-                  <span>每一步都从完整 Excel 行集独立筛选；前一步跳过的行仍可进入后续步骤。</span>
-                </div>
-                <button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加步骤</button>
-              </div>
-              {usesExcelModels && excelModelsLoading && <p className={styles.modeNote}>正在加载模型与字段目录…</p>}
-              {usesExcelModels && excelModelsError && (
-                <div className={styles.catalogError} role="alert">
-                  <span>模型与字段目录加载失败：{excelModelsError}</span>
-                  <button type="button" onClick={() => void loadExcelModels()}>重试加载</button>
-                </div>
-              )}
-              {usesExcelModels && !excelModelsLoading && !excelModelsError && excelModels.length === 0 && (
-                <p className={styles.modeNote}>当前数据库没有返回可选择的模型；历史配置仍可查看，但新步骤需要先确认数据库连接和模型表。</p>
-              )}
-              {exportSteps.map((step, index) => (
-                <article className={styles.stepCard} key={`${exportFormKey}-${index}`}>
-                  <div className={styles.stepHeading}>
-                    <strong>步骤 {index + 1}</strong>
-                    <div className={styles.tableActions}>
-                      <button type="button" onClick={() => moveExportStep(index, -1)} disabled={index === 0}>上移</button>
-                      <button type="button" onClick={() => moveExportStep(index, 1)} disabled={index === exportSteps.length - 1}>下移</button>
-                      <button type="button" onClick={() => removeExportStep(index)} disabled={exportSteps.length === 1}>删除</button>
-                    </div>
-                  </div>
-                  <ExcelMatchStepFields step={step} index={index} models={excelModels} onChange={(key, value) => updateExportStep(index, key, value)} onModelChange={(value) => selectExportStepModel(index, value)}>
-                    <Field label="步骤名称" name={`step_name_${index}`} value={step.name} onChange={(value) => updateExportStep(index, 'name', value)} required />
-                  </ExcelMatchStepFields>
-                  {step.matchMode === 'order_item_sku' && (
-                    <p className={styles.modeNote}>
-                      按数据库购物明细字段（例如 items_json）匹配并输出完整 no：优先用 Excel 规格编码匹配 mProductName 前缀，并同时校验 totAmtActual（销售金额）和 qty，mProductName 长度不限；若规格编码在订单明细中没有候选，则按销售金额和数量兜底匹配。Excel 规格编码为 15 位或 16 位时直接跳过。每条购物明细按其在 JSON 中的出现次数使用一次；相同明细重复出现时，可按次数重复输出同一 no。
-                    </p>
-                  )}
-                  <div className={styles.stepFilterEditor}>
-                    <div className={styles.stepFilterHeading}>
-                      <div>
-                        <strong>本步骤筛选</strong>
-                        <span>{step.matchMode === 'order_item_sku'
-                          ? '只决定本步骤处理哪些行；多条条件需要同时满足。订单商品 SKU 模式仅可引用未被前序条件写入修改的原始 Excel 列。'
-                          : '只决定本步骤处理哪些行；多条条件需要同时满足。可引用原始列或前序步骤处理后的列。'}</span>
-                      </div>
-                      <button type="button" onClick={() => addExportStepFilter(index)}>添加条件</button>
-                    </div>
-                    {step.filters.length === 0 && <p className={styles.stepFilterEmpty}>{step.matchMode === 'conditional_write' ? '未设置筛选，全部 Excel 行将继续判断写入条件。' : '未设置条件，本步骤处理全部 Excel 行。'}</p>}
-                    {step.filters.map((filter, filterIndex) => {
-                      const valueNotRequired = filter.op === 'empty' || filter.op === 'not_empty'
-                      return (
-                        <div className={styles.stepFilterRow} key={`${exportFormKey}-${index}-${filterIndex}`}>
-                          <Field
-                            label={`条件 ${filterIndex + 1} · Excel 列`}
-                            name={`step_filter_column_${index}_${filterIndex}`}
-                            value={filter.column}
-                            onChange={(value) => updateExportStepFilter(index, filterIndex, 'column', value)}
-                            required
-                          />
-                          <label>
-                            运算符
-                            <select
-                              name={`step_filter_op_${index}_${filterIndex}`}
-                              value={filter.op}
-                              onChange={(event) => updateExportStepFilter(index, filterIndex, 'op', event.currentTarget.value)}
-                            >
-                              {excelMatchFilterOperatorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                            </select>
-                          </label>
-                          {valueNotRequired
-                            ? <label>筛选值<input name={`step_filter_value_${index}_${filterIndex}`} value="此运算无需填写" readOnly disabled /></label>
-                            : <Field
-                                label="筛选值"
-                                name={`step_filter_value_${index}_${filterIndex}`}
-                                value={filter.value}
-                                onChange={(value) => updateExportStepFilter(index, filterIndex, 'value', value)}
-                                required
-                              />}
-                          <button type="button" onClick={() => removeExportStepFilter(index, filterIndex)} aria-label={`删除步骤 ${index + 1} 的条件 ${filterIndex + 1}`}>删除条件</button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </article>
-              ))}
-            </div>
-            <label>
-              导出列内容格式
-              <textarea
-                name="exportColumnFormats"
-                defaultValue={exportDefaults.exportColumnFormats}
-                rows={4}
-                placeholder={'每行一个：列名=格式\n例如：金额=number\n下单时间=date'}
-              />
-              <small>支持格式：text、number、integer、bool、date。列名可填原 Excel 表头或追加列名。</small>
-            </label>
-            <Field label="批量查询大小" name="batchSize" defaultValue={exportDefaults.batchSize} />
-            {previewResult && <ExcelMatchPreviewPanel preview={previewResult} />}
-          </form>
+          <div hidden={pendingSchemeSave !== null}>{renderExportMatchForm()}</div>
         </Dialog>
       )}
 

@@ -7,6 +7,7 @@ import {
   buildExcelExportConfig,
   cloneExcelEmptyCellFills,
   cloneExcelImportWriteMappings,
+  cloneExcelMatchSteps,
   excelMatchSchemePath,
   excelFieldSelectOptions,
   excelModelSelectOptions,
@@ -81,6 +82,31 @@ const fallbackStep = {
   priceExcelColumn: '',
   qtyExcelColumn: '',
 }
+
+test('legacy rules default to enabled and saved disabled rules retain their configuration', () => {
+  const source = { steps: [fallbackStep, { ...fallbackStep, enabled: false, name: '暂停规则', writeValue: ' 保留 ' }] }
+  const migrated = migrateExcelMatchSteps(source, fallbackStep)
+  assert.deepEqual(migrated.map((step) => step.enabled), [true, false])
+  assert.equal(migrateExcelMatchSteps({}, fallbackStep)[0].enabled, true)
+  const cloned = cloneExcelMatchSteps(migrated)
+  assert.deepEqual(cloned.map((step) => step.enabled), [true, false])
+  cloned[1].filters.push({ column: '店铺', op: 'eq', value: '幼岚' })
+  assert.deepEqual(migrated[1].filters, [])
+  const config = buildExcelExportConfig({ sheetName: 'Sheet1', steps: cloned, emptyCellFills: [], exportColumnFormats: [], batchSize: 1000 })
+  assert.deepEqual(config.steps.map((step) => step.enabled), [true, false])
+  assert.equal(config.steps[1].name, '暂停规则')
+  assert.equal(config.steps[1].writeValue, ' 保留 ')
+  assert.deepEqual(config.steps[1].filters, [{ column: '店铺', op: 'eq', value: '幼岚' }])
+})
+
+test('saving disabled rules preserves unfinished filters and untrimmed draft fields', () => {
+  const paused = { ...fallbackStep, enabled: false, name: ' 暂存规则 ', matchExcelColumn: ' 未完成 ', filters: [{ column: '', op: 'contains', value: ' 待补列名 ' }] }
+  const config = buildExcelExportConfig({ sheetName: 'Sheet1', steps: [paused], emptyCellFills: [], exportColumnFormats: [], batchSize: 1000 })
+  assert.deepEqual(config.steps[0], paused)
+  const restored = migrateExcelMatchSteps(config, fallbackStep)
+  assert.deepEqual(restored[0], paused)
+  assert.notEqual(config.steps[0].filters, paused.filters)
+})
 
 test('migrateExcelMatchSteps moves legacy top-level filters to the first step only', () => {
   const source = {
@@ -280,6 +306,7 @@ test('buildExcelExportConfig emits trimmed order item SKU matching fields', () =
   })
 
   assert.deepEqual(config.steps[0], {
+    enabled: true,
     name: '匹配伯俊门店',
     matchMode: 'order_item_sku',
     filters: [],
