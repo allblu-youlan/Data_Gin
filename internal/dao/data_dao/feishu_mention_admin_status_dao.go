@@ -74,7 +74,7 @@ func (d *FeishuMentionAdminDAO) Observations(ctx context.Context, now time.Time,
 	if schedule != nil {
 		var count int64
 		err = d.DB.WithContext(ctx).Model(&model.FeishuSourceMessage{}).
-			Where("app_id = ? AND received_at >= ? AND received_at < ?", d.AppID, schedule.NextWindowStartAt, schedule.NextCutoffAt).Count(&count).Error
+			Where("app_id = ? AND received_at >= ? AND received_at < ? AND message_created_at >= ? AND message_created_at < ?", d.AppID, schedule.NextWindowStartAt, schedule.NextCutoffAt, schedule.NextWindowStartAt, schedule.NextCutoffAt).Count(&count).Error
 		if err != nil {
 			return nil, err
 		}

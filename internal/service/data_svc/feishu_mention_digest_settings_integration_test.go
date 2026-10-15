@@ -189,8 +189,8 @@ func TestFeishuMentionMySQLWebDigestTimePreservesWindowsAndBacklog(t *testing.T)
 	if err := core.db.Where("app_id = ?", core.appID).First(&frozen).Error; err != nil {
 		t.Fatal(err)
 	}
-	if !frozen.WindowStart.Equal(start) || !frozen.WindowEnd.Equal(*now) {
-		t.Fatal("earlier web cutoff discarded the first unreported interval")
+	if !frozen.WindowStart.Equal(mentionDayStart(start)) || !frozen.WindowEnd.Equal(*now) {
+		t.Fatal("earlier web cutoff must start at Shanghai midnight")
 	}
 	core.cfg.DigestEnabled = false
 	for _, item := range []struct {
@@ -219,12 +219,12 @@ func TestFeishuMentionMySQLWebDigestTimePreservesWindowsAndBacklog(t *testing.T)
 	if err := core.db.Where("app_id = ?", core.appID).Order("id").Find(&reports).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(reports) != 3 || string(reports[0].ContentSnapshot) != string(frozen.ContentSnapshot) {
-		t.Fatal("saved time changed an immutable report or lost a backlog window")
+	if len(reports) != 2 || string(reports[0].ContentSnapshot) != string(frozen.ContentSnapshot) {
+		t.Fatal("saved time changed a frozen report or carried yesterday's late messages into an empty day")
 	}
 	for i, report := range reports {
-		if !report.WindowEnd.Equal(start.Add(time.Duration(7+24*i) * time.Hour)) {
-			t.Fatalf("overdue window changed to the new time: %s", report.WindowEnd)
+		if !report.WindowEnd.Equal(start.Add(time.Duration(7+24*i)*time.Hour)) || !report.WindowStart.Equal(mentionDayStart(report.WindowEnd)) {
+			t.Fatalf("overdue window must keep its cutoff and start on the same day: %+v", report)
 		}
 	}
 	var schedule model.FeishuDigestSchedule

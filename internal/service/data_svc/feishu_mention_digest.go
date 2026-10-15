@@ -56,18 +56,21 @@ func (s *FeishuMentionService) PlanDigests(ctx context.Context) error {
 		if !due {
 			return nil
 		}
-		// Every intake transaction with received_at before this cutoff committed
-		// before the fence above. Newly received events belong to a later window.
+		// The persisted start is a scheduling cursor used when changing the clock.
+		// Report content always starts at midnight of its Shanghai report date.
+		start := mentionDayStart(schedule.NextCutoffAt)
+		// Every intake transaction received before this cutoff committed before
+		// the fence above. Later arrivals cannot change the frozen snapshot.
 		var pairs []struct {
 			ChatID          string
 			RecipientOpenID string
 		}
-		if err := s.db.WithContext(ctx).Table("feishu_message_recipients AS r").Select("DISTINCT m.chat_id, r.recipient_open_id").Joins("JOIN feishu_source_messages m ON m.id = r.source_message_id").Where("m.app_id = ? AND m.received_at >= ? AND m.received_at < ?", s.appID, schedule.NextWindowStartAt, schedule.NextCutoffAt).Order("m.chat_id, r.recipient_open_id").Scan(&pairs).Error; err != nil {
+		if err := s.db.WithContext(ctx).Table("feishu_message_recipients AS r").Select("DISTINCT m.chat_id, r.recipient_open_id").Joins("JOIN feishu_source_messages m ON m.id = r.source_message_id").Where("m.app_id = ? AND m.received_at >= ? AND m.received_at < ? AND m.message_created_at >= ? AND m.message_created_at < ?", s.appID, start, schedule.NextCutoffAt, start, schedule.NextCutoffAt).Order("m.chat_id, r.recipient_open_id").Scan(&pairs).Error; err != nil {
 			return err
 		}
 		for _, pair := range pairs {
 			if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-				return s.freezeDigest(ctx, tx, pair.ChatID, pair.RecipientOpenID, schedule.NextWindowStartAt, schedule.NextCutoffAt)
+				return s.freezeDigest(ctx, tx, pair.ChatID, pair.RecipientOpenID, start, schedule.NextCutoffAt)
 			}); err != nil {
 				return err
 			}
@@ -98,7 +101,7 @@ func rescheduleMentionCutoff(schedule model.FeishuDigestSchedule, clock string) 
 	date := schedule.NextCutoffAt.In(mentionLocation())
 	next := time.Date(date.Year(), date.Month(), date.Day(), parsed.Hour(), parsed.Minute(), 0, 0, mentionLocation())
 	// A first activation can begin after the newly configured cutoff time.
-	// Move only the cutoff forward; never discard the unreported interval.
+	// Keep the next cutoff after the persisted scheduling cursor.
 	for !next.After(schedule.NextWindowStartAt) {
 		next = next.AddDate(0, 0, 1)
 	}
@@ -116,7 +119,7 @@ func (s *FeishuMentionService) freezeDigest(ctx context.Context, tx *gorm.DB, ch
 		return err
 	}
 	var messages []model.FeishuDigestMessage
-	if err := tx.Table("feishu_message_recipients r").Select("r.id AS recipient_record_id, m.id AS source_message_id, m.message_id, m.sender_open_id, m.sender_name, m.message_created_at, m.received_at, m.display_text, NULLIF(m.original_url, '') AS original_url").Joins("JOIN feishu_source_messages m ON m.id = r.source_message_id").Where("m.app_id = ? AND m.chat_id = ? AND r.recipient_open_id = ? AND m.received_at >= ? AND m.received_at < ?", s.appID, chatID, openID, start, end).Order("m.message_created_at, r.id").Scan(&messages).Error; err != nil {
+	if err := tx.Table("feishu_message_recipients r").Select("r.id AS recipient_record_id, m.id AS source_message_id, m.message_id, m.sender_open_id, m.sender_name, m.message_created_at, m.received_at, m.display_text, NULLIF(m.original_url, '') AS original_url").Joins("JOIN feishu_source_messages m ON m.id = r.source_message_id").Where("m.app_id = ? AND m.chat_id = ? AND r.recipient_open_id = ? AND m.received_at >= ? AND m.received_at < ? AND m.message_created_at >= ? AND m.message_created_at < ?", s.appID, chatID, openID, start, end, start, end).Order("m.message_created_at, r.id").Scan(&messages).Error; err != nil {
 		return err
 	}
 	if len(messages) == 0 {

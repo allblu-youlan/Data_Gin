@@ -27,7 +27,7 @@ func (s *FeishuMentionAdminService) ResendReport(ctx context.Context, id, actor 
 		return nil, ErrFeishuMentionAdminPaused
 	}
 	clickedAt := s.now().In(mentionLocation())
-	start := time.Date(clickedAt.Year(), clickedAt.Month(), clickedAt.Day(), 0, 0, 0, 0, mentionLocation())
+	start := mentionDayStart(clickedAt)
 	date := clickedAt.Format("2006-01-02")
 	var source model.FeishuDailyReport
 	if err := s.dao.DB.WithContext(ctx).Select("id", "chat_id", "recipient_open_id").Where("app_id = ? AND id = ?", s.dao.AppID, id).Take(&source).Error; err != nil {
@@ -143,7 +143,7 @@ func mentionManualSnapshot(db *gorm.DB, appID string, group model.FeishuMonitore
 	if err := db.Table("feishu_message_recipients r").
 		Select("r.id AS recipient_record_id, m.id AS source_message_id, m.message_id, m.sender_open_id, m.sender_name, m.message_created_at, m.received_at, m.display_text, NULLIF(m.original_url, '') AS original_url").
 		Joins("JOIN feishu_source_messages m ON m.id = r.source_message_id").
-		Where("m.app_id = ? AND m.chat_id = ? AND r.recipient_open_id = ? AND m.received_at >= ? AND m.received_at < ?", appID, group.ChatID, openID, start, end).
+		Where("m.app_id = ? AND m.chat_id = ? AND r.recipient_open_id = ? AND m.received_at >= ? AND m.received_at < ? AND m.message_created_at >= ? AND m.message_created_at < ?", appID, group.ChatID, openID, start, end, start, end).
 		Order("m.message_created_at, r.id").Scan(&messages).Error; err != nil {
 		return model.FeishuDigestSnapshot{}, err
 	}

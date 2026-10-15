@@ -762,6 +762,8 @@ func (s *FeishuMentionAdminService) Status(ctx context.Context) (map[string]inte
 		return nil, e
 	}
 	if schedule != nil {
+		// Expose the report interval, not the internal scheduling cursor.
+		schedule.NextWindowStartAt = mentionDayStart(schedule.NextCutoffAt)
 		status["digest"] = map[string]interface{}{"scheduleEnabled": schedule.Enabled, "nextWindowStartAt": schedule.NextWindowStartAt.In(mentionLocation()), "nextCutoffAt": schedule.NextCutoffAt.In(mentionLocation()), "lastPlannedAt": mentionAdminTime(schedule.LastPlannedAt)}
 		if pauseReason == "" && !schedule.Enabled {
 			status["pauseReason"] = "日报调度已暂停，恢复后按原统计日补建"

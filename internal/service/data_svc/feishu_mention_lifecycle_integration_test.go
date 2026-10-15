@@ -11,7 +11,7 @@ import (
 	"gin-biz-web-api/model"
 )
 
-func TestFeishuMentionMySQLChangedDigestTimeKeepsWindowStart(t *testing.T) {
+func TestFeishuMentionMySQLChangedDigestTimeUsesCutoffDay(t *testing.T) {
 	for _, tt := range []struct {
 		clock string
 		hours time.Duration
@@ -36,6 +36,12 @@ func TestFeishuMentionMySQLChangedDigestTimeKeepsWindowStart(t *testing.T) {
 			if !schedule.NextWindowStartAt.Equal(start) || !schedule.NextCutoffAt.Equal(wantCutoff) {
 				t.Fatalf("changed window: start=%s cutoff=%s", schedule.NextWindowStartAt, schedule.NextCutoffAt)
 			}
+			if wantCutoff.Day() != start.Day() {
+				*now = wantCutoff.Add(-time.Hour)
+				if err := s.Archive(ctx, mentionTestEvent(s, "chat_a", "next_day", "u1")); err != nil {
+					t.Fatal(err)
+				}
+			}
 			*now = wantCutoff
 			if err := s.PlanDigests(ctx); err != nil {
 				t.Fatal(err)
@@ -48,8 +54,8 @@ func TestFeishuMentionMySQLChangedDigestTimeKeepsWindowStart(t *testing.T) {
 			if err := json.Unmarshal([]byte(report.ContentSnapshot), &snapshot); err != nil {
 				t.Fatal(err)
 			}
-			if !report.WindowStart.Equal(start) || !report.WindowEnd.Equal(wantCutoff) || snapshot.MessageCount != 1 {
-				t.Fatalf("changed cutoff lost the original interval: %#v", report)
+			if !report.WindowStart.Equal(mentionDayStart(wantCutoff)) || !report.WindowEnd.Equal(wantCutoff) || snapshot.MessageCount != 1 || snapshot.Messages[0].MessageCreatedAt.Before(report.WindowStart) {
+				t.Fatalf("changed cutoff included another day's messages: %#v", report)
 			}
 		})
 	}

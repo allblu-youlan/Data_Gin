@@ -413,6 +413,12 @@ func mentionLocation() *time.Location {
 	}
 	return loc
 }
+
+func mentionDayStart(at time.Time) time.Time {
+	local := at.In(mentionLocation())
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location())
+}
+
 func nextMentionCutoff(now time.Time, clock string) (time.Time, error) {
 	parsed, err := time.Parse("15:04", clock)
 	if err != nil {

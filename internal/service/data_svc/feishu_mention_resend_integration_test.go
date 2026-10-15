@@ -80,7 +80,8 @@ func TestFeishuMentionMySQLRegenerateTodayIncludesNewArchivedMessages(t *testing
 	clickedAt := start.Add(12 * time.Hour)
 	mentionRegenerateArchive(t, core, now, "before-midnight", "不能包含昨天", start.Add(-time.Millisecond), start.Add(-time.Hour))
 	mentionRegenerateArchive(t, core, now, "at-midnight", "包含今天零点", start, start)
-	mentionRegenerateArchive(t, core, now, "late-message", "按收到时间纳入，发送时间是昨天", start.Add(11*time.Hour), start.Add(-2*time.Hour))
+	mentionRegenerateArchive(t, core, now, "late-message", "今天才收到的昨天消息也不能包含", start.Add(11*time.Hour), start.Add(-2*time.Hour))
+	mentionRegenerateArchive(t, core, now, "today-message", "包含今天发送的消息", start.Add(11*time.Hour), start.Add(10*time.Hour))
 	mentionRegenerateArchive(t, core, now, "at-click", "截止瞬间下一次纳入", clickedAt, clickedAt)
 	mentionRegenerateArchive(t, core, now, "after-click", "点击之后下一次纳入", clickedAt.Add(time.Minute), clickedAt)
 	*now = clickedAt
@@ -107,12 +108,12 @@ func TestFeishuMentionMySQLRegenerateTodayIncludesNewArchivedMessages(t *testing
 		t.Fatalf("wrong manual interval: report=%+v snapshot=%+v", manual, snapshot)
 	}
 	body := string(manual.ContentSnapshot)
-	for _, excluded := range []string{"不能包含昨天", "截止瞬间下一次纳入", "点击之后下一次纳入", "昨天的正式日报原文"} {
+	for _, excluded := range []string{"不能包含昨天", "今天才收到的昨天消息也不能包含", "截止瞬间下一次纳入", "点击之后下一次纳入", "昨天的正式日报原文"} {
 		if strings.Contains(body, excluded) {
 			t.Fatalf("out-of-window content included: %s", excluded)
 		}
 	}
-	for _, included := range []string{"包含今天零点", "按收到时间纳入，发送时间是昨天"} {
+	for _, included := range []string{"包含今天零点", "包含今天发送的消息"} {
 		if !strings.Contains(body, included) {
 			t.Fatalf("missing today content: %s", included)
 		}
