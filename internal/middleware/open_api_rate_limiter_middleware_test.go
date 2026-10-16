@@ -15,7 +15,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	limiterLib "github.com/ulule/limiter/v3"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
+
+func TestOpenAPIUserRouteAllows60RequestsAndRejects61st(t *testing.T) {
+	rate, err := limiterLib.NewRateFromFormatted("60-M")
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter := limiterLib.New(memory.NewStore(), rate)
+	checker := func(c *gin.Context, key, _ string) (limiterLib.Context, error) {
+		return counter.Get(c, key)
+	}
+	handler := limitOpenAPIUserRoute("bojun", "60-M", checker)
+	for request := 1; request <= 61; request++ {
+		recorder, calls := performOpenRateLimitRequest(t, handler)
+		wantStatus, wantCalls := http.StatusNoContent, 1
+		if request == 61 {
+			wantStatus, wantCalls = http.StatusTooManyRequests, 0
+			assertOpenRateLimitCode(t, recorder, errcode.TooManyRequests.Code())
+			if recorder.Header().Get("Retry-After") == "" {
+				t.Fatal("missing retry delay")
+			}
+		}
+		if recorder.Code != wantStatus || calls != wantCalls || recorder.Header().Get("X-RateLimit-Limit") != "60" {
+			t.Fatalf("request=%d status=%d calls=%d headers=%v", request, recorder.Code, calls, recorder.Header())
+		}
+	}
+}
 
 func TestLimitOpenAPIUserRouteUsesScopedPrincipalKey(t *testing.T) {
 	var gotKey, gotLimit string

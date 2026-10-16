@@ -36,6 +36,7 @@ type bojunRouteTestState struct {
 	t                 *testing.T
 	grants            map[string]*time.Time
 	events            []string
+	userRateLimit     string
 	credentialRevoked bool
 	authErr           error
 	permissionErr     error
@@ -183,15 +184,38 @@ func newBojunRouteTestRouter(t *testing.T) (*gin.Engine, *bojunRouteTestState) {
 			}
 			c.Next()
 		},
-		func(c *gin.Context) {
-			state.events = append(state.events, "user")
-			if c.GetString(constant.CurrentUserID) != "17" {
-				t.Fatal("user limiter ran before authentication")
+		func(module, limit string) gin.HandlerFunc {
+			if module != "bojun" {
+				t.Fatalf("user limiter module = %q", module)
 			}
-			c.Next()
+			return func(c *gin.Context) {
+				state.events = append(state.events, "user")
+				state.userRateLimit = limit
+				if c.GetString(constant.CurrentUserID) != "17" {
+					t.Fatal("user limiter ran before authentication")
+				}
+				c.Next()
+			}
 		},
 	)
 	return router, state
+}
+
+func TestOpenBojunStockRouteUses60PerMinuteWithoutChangingStoreQuota(t *testing.T) {
+	router, state := newBojunRouteTestRouter(t)
+	state.grants[model.PermissionBojunStockRead] = nil
+	state.grants[model.PermissionBojunStoreRead] = nil
+	for _, route := range []struct{ path, limit string }{
+		{"stocks", "60-M"},
+		{"stores", "30-M"},
+	} {
+		t.Run(route.path, func(t *testing.T) {
+			requestBojunRoute(t, router, route.path, bojunRouteTestToken, "{}", http.StatusOK)
+			if state.userRateLimit != route.limit {
+				t.Fatalf("%s limit=%s want=%s", route.path, state.userRateLimit, route.limit)
+			}
+		})
+	}
 }
 
 func requestBojunRoute(t *testing.T, router *gin.Engine, path, token, body string, wantStatus int) {

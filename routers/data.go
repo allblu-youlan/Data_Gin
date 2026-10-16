@@ -361,8 +361,9 @@ func registerReportDatasourceRoutes(api *gin.RouterGroup, controller *data_ctrl.
 }
 
 const (
-	openBojunPreAuthIPRateLimit = "300-M"
-	openBojunUserRouteRateLimit = "30-M"
+	openBojunPreAuthIPRateLimit      = "300-M"
+	openBojunUserRouteRateLimit      = "30-M"
+	openBojunStockUserRouteRateLimit = "60-M"
 )
 
 func registerOpenBojunRoutes(
@@ -376,7 +377,7 @@ func registerOpenBojunRoutes(
 ) {
 	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController,
 		middleware.LimitOpenAPIIP("bojun", openBojunPreAuthIPRateLimit),
-		middleware.LimitOpenAPIUserRoute("bojun", openBojunUserRouteRateLimit))
+		middleware.LimitOpenAPIUserRoute)
 }
 
 func registerOpenBojunRoutesWithLimiters(
@@ -387,8 +388,11 @@ func registerOpenBojunRoutesWithLimiters(
 	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
 	storeController *data_ctrl.OpenBojunStoreController,
 	stockController *data_ctrl.OpenBojunStockController,
-	preAuthLimiter, userRouteLimiter gin.HandlerFunc,
+	preAuthLimiter gin.HandlerFunc,
+	newUserRouteLimiter func(module, limit string) gin.HandlerFunc,
 ) {
+	userRouteLimiter := newUserRouteLimiter("bojun", openBojunUserRouteRateLimit)
+	stockRouteLimiter := newUserRouteLimiter("bojun", openBojunStockUserRouteRateLimit)
 	bojunGroup := api.Group("/open/bojun")
 	bojunGroup.Use(
 		preAuthLimiter,
@@ -407,7 +411,7 @@ func registerOpenBojunRoutesWithLimiters(
 	storeGroup.Use(middleware.RequirePermission(model.PermissionBojunStoreRead), userRouteLimiter)
 	storeGroup.POST("/stores/query", storeController.Query)
 	stockGroup := bojunGroup.Group("")
-	stockGroup.Use(middleware.RequirePermission(model.PermissionBojunStockRead), userRouteLimiter)
+	stockGroup.Use(middleware.RequirePermission(model.PermissionBojunStockRead), stockRouteLimiter)
 	stockGroup.POST("/stocks/query", stockController.Query)
 }
 
