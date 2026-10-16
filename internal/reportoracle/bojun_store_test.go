@@ -189,7 +189,7 @@ func TestBojunQueriesReturnEmptyListsAndPropagateDatabaseErrors(t *testing.T) {
 			}},
 		{"stocks", make([]string, 28), make([]driver.Value, 28),
 			func(adapter *Adapter) (int, bool, error) {
-				items, err := adapter.QueryBojunStocks(t.Context(), BojunStockQuery{ProductCode: "SKU", StoreCode: "001", PageSize: 50})
+				items, err := adapter.QueryBojunStocks(t.Context(), BojunStockQuery{ProductCode: []string{"SKU"}, StoreCode: "001", PageSize: 50})
 				return len(items), items == nil, err
 			}},
 	} {

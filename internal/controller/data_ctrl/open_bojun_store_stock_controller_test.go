@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func (f *fakeOpenBojunStockQueryService) Query(_ context.Context, actor uint, re
 		return nil, f.err
 	}
 	qty := "-123456789012345678.1234567890"
-	return &data_svc.OpenBojunStockQueryDTO{Items: []data_svc.OpenBojunStockDTO{{StoreCode: request.StoreCode, ProductCode: request.ProductCode, Qty: &qty}}, Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}}, nil
+	return &data_svc.OpenBojunStockQueryDTO{Items: []data_svc.OpenBojunStockDTO{{StoreCode: request.StoreCode, ProductCode: "AbC", Qty: &qty}}, Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}}, nil
 }
 
 func newBojunStoreStockControllerRouter(store *fakeOpenBojunStoreQueryService, stock *fakeOpenBojunStockQueryService) *gin.Engine {
@@ -99,7 +100,7 @@ func TestOpenBojunStoreStockControllersReturnExactPublicFields(t *testing.T) {
 		fields     []string
 	}{
 		{"/stores", `{"storeCode":"001","isActive":null,"isStop":null,"page":null,"pageSize":null}`, []string{"storeId", "storeCode", "storeName", "isActive", "isStop"}},
-		{"/stocks", `{"storeCode":"001","productCode":"AbC","page":2,"pageSize":100}`, []string{"storeCode", "storeName", "productCode", "productColor", "productName", "value", "value1", "sizeCode", "value2", "priceList", "qty", "amtPriceQty", "qtyBas", "qtyPreOut", "qtyBasPreOut", "amtPriceQtyPreOut", "qtyPreIn", "amtPriceQtyPreIn", "qtyFreeze", "qtyOms", "qtyValid", "amtPriceQtyValid", "qtyConsign", "jstPreOut", "jstDiffQty", "qtyCan", "attributeSetInstanceId", "isActive"}},
+		{"/stocks", `{"storeCode":"001","productCode":["AbC"],"page":2,"pageSize":100}`, []string{"storeCode", "storeName", "productCode", "productColor", "productName", "value", "value1", "sizeCode", "value2", "priceList", "qty", "amtPriceQty", "qtyBas", "qtyPreOut", "qtyBasPreOut", "amtPriceQtyPreOut", "qtyPreIn", "amtPriceQtyPreIn", "qtyFreeze", "qtyOms", "qtyValid", "amtPriceQtyValid", "qtyConsign", "jstPreOut", "jstDiffQty", "qtyCan", "attributeSetInstanceId", "isActive"}},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
 			w := performBojunQuery(router, tt.path, tt.body)
@@ -164,19 +165,19 @@ func TestOpenBojunStockControllerParsesProductAlternatives(t *testing.T) {
 		name, body string
 		want       requestbody.OpenBojunStockQueryRequest
 	}{
-		{"code", `{"storeCode":"001","productCode":"SKU","productColor":null,"productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: "SKU"}},
-		{"color", `{"storeCode":"001","productCode":null,"productColor":"C44G3063CE146","productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductColor: "C44G3063CE146"}},
-		{"name", `{"storeCode":"001","productName":"C44G3063C"}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductName: "C44G3063C"}},
+		{"code", `{"storeCode":"001","productCode":["SKU","SKU2"],"productColor":null,"productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductCode: []string{"SKU", "SKU2"}}},
+		{"color", `{"storeCode":"001","productCode":null,"productColor":["C44G3063CE146","C44G3063CE147"],"productName":null}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductColor: []string{"C44G3063CE146", "C44G3063CE147"}}},
+		{"name", `{"storeCode":"001","productName":["C44G3063C","C44G3064C"]}`, requestbody.OpenBojunStockQueryRequest{StoreCode: "001", ProductName: []string{"C44G3063C", "C44G3064C"}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			stock := &fakeOpenBojunStockQueryService{}
 			response := performBojunQuery(newBojunStoreStockControllerRouter(&fakeOpenBojunStoreQueryService{}, stock), "/stocks", tt.body)
-			if response.Code != http.StatusOK || stock.calls != 1 || stock.request != tt.want {
+			if response.Code != http.StatusOK || stock.calls != 1 || !reflect.DeepEqual(stock.request, tt.want) {
 				t.Fatalf("status=%d calls=%d request=%+v want=%+v", response.Code, stock.calls, stock.request, tt.want)
 			}
 		})
 	}
-	for _, body := range []string{`{"storeCode":"001","productColor":123}`, `{"storeCode":"001","productName":["C44G3063C"]}`} {
+	for _, body := range []string{`{"storeCode":"001","productColor":123}`, `{"storeCode":"001","productName":"C44G3063C"}`, `{"storeCode":"001","productCode":["SKU",123]}`} {
 		stock := &fakeOpenBojunStockQueryService{}
 		response := performBojunQuery(newBojunStoreStockControllerRouter(&fakeOpenBojunStoreQueryService{}, stock), "/stocks", body)
 		if response.Code != http.StatusUnprocessableEntity || stock.calls != 0 {

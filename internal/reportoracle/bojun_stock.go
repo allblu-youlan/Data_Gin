@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/godror/godror"
@@ -43,22 +44,15 @@ SELECT a.CODE,
 FROM ` + BojunStockView + ` a`
 
 const bojunStockQuerySuffixSQL = `
-  AND a.CODE = :2
 ORDER BY a.C_STORE_ID,
          a.M_PRODUCTALIAS_ID,
          a.M_ATTRIBUTESETINSTANCE_ID
-OFFSET :3 ROWS FETCH NEXT :4 ROWS ONLY`
-
-const (
-	bojunStockQuerySQL             = bojunStockSelectSQL + "\nWHERE a.M_PRODUCT_ALIAS_NO = :1" + bojunStockQuerySuffixSQL
-	bojunStockProductColorQuerySQL = bojunStockSelectSQL + "\nWHERE a.PROD_COLOR = :1" + bojunStockQuerySuffixSQL
-	bojunStockProductNameQuerySQL  = bojunStockSelectSQL + "\nWHERE a.M_PRODUCT_NAME = :1" + bojunStockQuerySuffixSQL
-)
+OFFSET :%d ROWS FETCH NEXT :%d ROWS ONLY`
 
 type BojunStockQuery struct {
-	ProductCode  string
-	ProductColor string
-	ProductName  string
+	ProductCode  []string
+	ProductColor []string
+	ProductName  []string
 	StoreCode    string
 	PageSize     int
 	Offset       int
@@ -99,35 +93,15 @@ func (adapter *Adapter) QueryBojunStocks(ctx context.Context, query BojunStockQu
 	if adapter == nil || adapter.db == nil {
 		return nil, fmt.Errorf("query bojun stocks: adapter is closed")
 	}
-	query.ProductCode = strings.TrimSpace(query.ProductCode)
-	query.ProductColor = strings.TrimSpace(query.ProductColor)
-	query.ProductName = strings.TrimSpace(query.ProductName)
-	query.StoreCode = strings.TrimSpace(query.StoreCode)
-	if ctx == nil || query.StoreCode == "" || len(query.StoreCode) > 80 ||
-		len(query.ProductCode) > 80 || len(query.ProductColor) > 80 || len(query.ProductName) > 80 ||
-		query.PageSize < 1 || query.PageSize > 100 || query.Offset < 0 {
+	if ctx == nil {
 		return nil, fmt.Errorf("query bojun stocks: invalid query")
 	}
-
-	var statement, productValue string
-	productFilters := 0
-	for _, filter := range []struct{ value, statement string }{
-		{query.ProductCode, bojunStockQuerySQL},
-		{query.ProductColor, bojunStockProductColorQuerySQL},
-		{query.ProductName, bojunStockProductNameQuerySQL},
-	} {
-		if filter.value != "" {
-			productFilters++
-			statement, productValue = filter.statement, filter.value
-		}
+	statement, arguments, err := buildBojunStockQuery(query)
+	if err != nil {
+		return nil, err
 	}
-	if productFilters != 1 {
-		return nil, fmt.Errorf("query bojun stocks: invalid query")
-	}
-
-	rows, err := adapter.db.QueryContext(ctx, statement,
-		productValue, query.StoreCode, query.Offset, query.PageSize+1, godror.NumberAsString(),
-	)
+	arguments = append(arguments, godror.NumberAsString())
+	rows, err := adapter.db.QueryContext(ctx, statement, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("query bojun stocks: %w", err)
 	}
@@ -172,4 +146,57 @@ func (adapter *Adapter) QueryBojunStocks(ctx context.Context, query BojunStockQu
 		return nil, fmt.Errorf("close bojun stocks: %w", err)
 	}
 	return result, nil
+}
+
+func buildBojunStockQuery(query BojunStockQuery) (string, []any, error) {
+	query.StoreCode = strings.TrimSpace(query.StoreCode)
+	if query.StoreCode == "" || len(query.StoreCode) > 80 ||
+		query.PageSize < 1 || query.PageSize > 100 || query.Offset < 0 {
+		return "", nil, fmt.Errorf("query bojun stocks: invalid query")
+	}
+	var productValues []string
+	var productColumn string
+	productFilters := 0
+	for _, filter := range []struct {
+		values []string
+		column string
+	}{
+		{query.ProductCode, "a.M_PRODUCT_ALIAS_NO"},
+		{query.ProductColor, "a.PROD_COLOR"},
+		{query.ProductName, "a.M_PRODUCT_NAME"},
+	} {
+		if len(filter.values) > 100 {
+			return "", nil, fmt.Errorf("query bojun stocks: invalid query")
+		}
+		if len(filter.values) > 0 {
+			productFilters++
+			productValues, productColumn = filter.values, filter.column
+		}
+	}
+	if productFilters != 1 {
+		return "", nil, fmt.Errorf("query bojun stocks: invalid query")
+	}
+
+	placeholders := make([]string, 0, len(productValues))
+	arguments := make([]any, 0, len(productValues)+3)
+	arguments = append(arguments, query.StoreCode)
+	seen := make(map[string]struct{}, len(productValues))
+	for _, value := range productValues {
+		value = strings.TrimSpace(value)
+		if value == "" || len(value) > 80 {
+			return "", nil, fmt.Errorf("query bojun stocks: invalid query")
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		placeholders = append(placeholders, ":"+strconv.Itoa(len(arguments)+1))
+		arguments = append(arguments, value)
+	}
+	// godror binds unnamed arguments by SQL occurrence, so pagination follows the products.
+	statement := bojunStockSelectSQL + "\nWHERE a.CODE = :1\n  AND " + productColumn +
+		" IN (" + strings.Join(placeholders, ", ") + ")" +
+		fmt.Sprintf(bojunStockQuerySuffixSQL, len(arguments)+1, len(arguments)+2)
+	arguments = append(arguments, query.Offset, query.PageSize+1)
+	return statement, arguments, nil
 }

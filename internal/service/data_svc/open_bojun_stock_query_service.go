@@ -87,20 +87,22 @@ func (service *OpenBojunStockQueryService) Query(ctx context.Context, actorUserI
 		return nil, ErrOpenBojunStockForbidden
 	}
 	query := reportoracle.BojunStockQuery{
-		ProductCode:  strings.TrimSpace(request.ProductCode),
-		ProductColor: strings.TrimSpace(request.ProductColor),
-		ProductName:  strings.TrimSpace(request.ProductName),
+		ProductCode:  request.ProductCode,
+		ProductColor: request.ProductColor,
+		ProductName:  request.ProductName,
 		StoreCode:    strings.TrimSpace(request.StoreCode),
 	}
 	if query.StoreCode == "" || len(query.StoreCode) > 80 {
 		return nil, ErrOpenBojunStockInvalidQuery
 	}
 	productFilters := 0
-	for _, value := range []string{query.ProductCode, query.ProductColor, query.ProductName} {
-		if len(value) > 80 {
-			return nil, ErrOpenBojunStockInvalidQuery
+	for _, values := range []*[]string{&query.ProductCode, &query.ProductColor, &query.ProductName} {
+		normalized, err := normalizeOpenBojunStockProductValues(*values)
+		if err != nil {
+			return nil, err
 		}
-		if value != "" {
+		*values = normalized
+		if len(normalized) > 0 {
 			productFilters++
 		}
 	}
@@ -160,4 +162,27 @@ func (service *OpenBojunStockQueryService) Query(ctx context.Context, actorUserI
 		})
 	}
 	return &OpenBojunStockQueryDTO{Items: items, Pagination: pagination}, nil
+}
+
+func normalizeOpenBojunStockProductValues(values []string) ([]string, error) {
+	if len(values) > 100 {
+		return nil, ErrOpenBojunStockInvalidQuery
+	}
+	if len(values) == 0 {
+		return nil, nil
+	}
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || len(value) > 80 {
+			return nil, ErrOpenBojunStockInvalidQuery
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized, nil
 }
