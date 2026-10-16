@@ -2,10 +2,12 @@ package send
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"gin-biz-web-api/pkg/config"
@@ -208,7 +210,33 @@ func SendSalesDataWithResult(
 	salestype string,
 ) (*SalesDataResult, error) {
 	xmlData := buildSoapXML(payAmount, tid, completedAt, storecode, mallitemcode, salestype)
-	return sendPostRequestWithResult(xmlData)
+	result, err := sendPostRequestWithResult(xmlData)
+	if err == nil && result != nil && !result.Success && result.HTTPStatus >= http.StatusOK && result.HTTPStatus < http.StatusMultipleChoices {
+		result.Success = isDuplicateSalesResponse(result.ResponseBody, tid)
+	}
+	return result, err
+}
+
+func isDuplicateSalesResponse(responseBody, tid string) bool {
+	if tid == "" {
+		return false
+	}
+	var response struct {
+		XMLName xml.Name `xml:"Envelope"`
+		Result  struct {
+			Code    string `xml:"header>responsecode"`
+			Message string `xml:"header>responsemessage"`
+			DocNo   string `xml:"salestotal>txdocno"`
+		} `xml:"Body>postsalescreateResponse>postsalescreateResult"`
+	}
+	if err := xml.Unmarshal([]byte(responseBody), &response); err != nil {
+		return false
+	}
+
+	// 同一流水已在 MPOS 保存时，重试按成功处理，让调用方补齐同步状态。
+	_, existingDocNo, exists := strings.Cut(response.Result.Message, "已存在交易流水")
+	return strings.TrimSpace(response.Result.Code) == "1" && exists &&
+		strings.TrimSpace(existingDocNo) == tid && strings.TrimSpace(response.Result.DocNo) == tid
 }
 
 func redactSalesXML(xmlData string) string {
