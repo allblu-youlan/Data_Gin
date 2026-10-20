@@ -498,7 +498,7 @@ export type ReportQuerySpec = {
 }
 export type ReportExecutionPolicy = { exportPolicy: 'MANUAL' | 'AUTO'; resultRetentionHours: number; purgeAfterExport: boolean }
 export type ReportQueryInputs = { where?: ReportQueryConditionGroup; orderBy?: ReportQueryOrder[] }
-export type BojunDataScope = { mode: 'GLOBAL_APPROVED' | 'SCOPE_COLUMN'; columnId?: string; values?: string[] }
+export type BojunDataScope = { mode: 'GLOBAL_APPROVED' | 'SCOPE_COLUMN'; columnId?: string; userValues?: Record<string, string[]> }
 export type BojunTable = {
   id: number
   bojunTableId: string
