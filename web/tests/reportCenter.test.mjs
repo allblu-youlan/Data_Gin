@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { isBojunColumnAllowed } from '../.test-dist/reportCenter/bojunQueryConfig.js'
 import { readdirSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 import ts from 'typescript'
@@ -6,7 +7,7 @@ import ts from 'typescript'
 import { activateReportVersion, cancelReportRun, createReportExport, createReportInputQueryDefinition, createReportRun, deleteReportDraft, getReportAudits, getReportDownloads, getReportInputOptions, getReportInputQueries, getReportInputQueryDefinitions, getReportProcedureSignature, getReportProcedures, getReportResultTableSchema, getReportResultTables, getReportRun, getReportVersion, isRetryableReportPollFailure, parsePublication, parseReportAuditPage, parseReportCatalogPage, parseReportDatasource, parseReportDatasources, parseReportDatasourceTest, parseReportDraft, parseReportExport, parseReportExportPage, parseReportInputQueryDefinitions, parseReportInputQueryTestResult, parseReportProcedurePage, parseReportProcedureSignature, parseReportResultPage, parseReportResultTablePage, parseReportResultTableSchema, parseReportRun, parseReportRunContract, parseReportVersionDetail, parseReportVersionDiff, parseReportVersionPage, reportPollRetryDelay, saveAndPublishReportDraft, saveReportDraft, testReportDatasourceConnection, testReportInputQueryDefinition } from '../.test-dist/reportCenter/api.js'
 import { applyExcelMapping, buildReportConditions, excelMappingFromColumns, initialReportConditionValues, moveReportInputField, orderedReportInputEntries, parseExcelMappingDocument, parseReportInputSchemaDocument, parseReportInputSchemaText, reconcileReportColumnsWithResultSchema, renameExcelMappingField, reportColumnsFromResultSchema } from '../.test-dist/reportCenter/refCursorConfig.js'
 import { reportParameterControls, reportParameterFlagDisabled, updateReportParameterFlag, updateReportParameterLogicalType } from '../.test-dist/reportCenter/parameterConfig.js'
-import { buildNewReportRunState, canBindReportExport, canRetryReportExportBinding, canStartNewReportRun, initialReportParameterValues } from '../.test-dist/reportCenter/queryParameters.js'
+import { buildNewReportRunState, canBindReportExport, canRetryReportExportBinding, canStartNewReportRun, initialReportParameterValues, isReportExportSettled } from '../.test-dist/reportCenter/queryParameters.js'
 import { createLatestRequestGuard } from '../.test-dist/reportCenter/components/ReportVersionDrawer/requestGuard.js'
 import { normalizeDatasourceCode, validateDatasourceConnection, validateDatasourceSave } from '../.test-dist/reportCenter/datasourceValidation.js'
 import { mergeReportInputOptions, reportInputOptionMatches, reportInputSelectionKeys, reportInputSelectionValue } from '../.test-dist/reportCenter/inputOptions.js'
@@ -1119,4 +1120,52 @@ test('SELECT run contract and result preserve display values separately from raw
   const queryInputs = { where: { logic: 'AND', items: [] }, orderBy: [] }
   await createReportRun(async (_path, options) => { sent = options.body; return { ok: true, data: { data: run } } }, 9, { id: '000123' }, 'SELECT_SNAPSHOT', true, undefined, queryInputs)
   assert.deepEqual(sent, { conditions: { id: '000123' }, queryInputs })
+})
+
+
+test('manual exports settle when ready while legacy exports still wait for cleanup', () => {
+  const ready = { status: 'READY', purgedAt: null }
+  assert.equal(isReportExportSettled(ready), false)
+  assert.equal(isReportExportSettled(ready, false), true)
+  assert.equal(canStartNewReportRun('SUCCEEDED', ready, false, false), true)
+  assert.equal(canStartNewReportRun('SUCCEEDED', ready, false), false)
+  assert.equal(isReportExportSettled({ status: 'RUNNING', purgedAt: null }, false), false)
+})
+
+test('relation input bindings retain key text and reject competing option sources', () => {
+  const schema = parseReportInputSchemaDocument({ product: { type: 'str', displayName: '商品', control: 'SELECT', required: false, relationId: 'rel_product', relationKeyColumnId: '123' } })
+  assert.equal(schema.product.relationId, 'rel_product')
+  assert.equal(schema.product.relationKeyColumnId, '123')
+  assert.deepEqual(buildReportConditions(schema, { product: '00012345678901234567890' }), { ok: true, conditions: { product: '00012345678901234567890' } })
+  assert.throws(() => parseReportInputSchemaDocument({ product: { ...schema.product, queryName: 'products' } }))
+  assert.throws(() => parseReportInputSchemaDocument({ product: { ...schema.product, type: 'number' } }))
+  assert.throws(() => parseReportInputSchemaDocument({ product: { ...schema.product, relationKeyColumnId: 'raw_field' } }))
+})
+
+
+test('SELECT publication summary does not require a procedure or physical result table', () => {
+ const publication = parsePublication({ data: { definitionId: 9, versionId: 21, version: 2, contractHash: 'a'.repeat(64), validation: { executionMode: 'SELECT_SNAPSHOT', validatedAt: '2026-10-20T12:00:00Z', query: { baseTableId: '1', relationCount: 2, columnCount: 3, schemaHash: 'b'.repeat(64) }, executionPolicy: { exportPolicy: 'MANUAL', resultRetentionHours: 24, purgeAfterExport: false }, export: { exportableColumnCount: 3, schemaHash: 'c'.repeat(64) } } } })
+ assert.equal(publication.validation.executionMode, 'SELECT_SNAPSHOT')
+ assert.equal(publication.validation.query.relationCount, 2)
+ assert.equal(publication.validation.executionPolicy.purgeAfterExport, false)
+})
+
+test('SELECT version comparison retains query and execution policy changes', () => {
+ const version = (id) => ({ id, version: id, status: 'PUBLISHED', contractFingerprint: 'a'.repeat(12), parameterCount: 0, columnCount: 2, grantCount: 0 })
+ const sections = [{ key: 'procedure', label: '存储过程', changes: [] }, { key: 'parameters', label: '{{形参}}', changes: [] }, { key: 'results', label: '结果字段与 Excel', changes: [] }, { key: 'excel', label: 'Excel 契约', changes: [] }, { key: 'permissions', label: '权限', changes: [] }, { key: 'query', label: '查询定义', changes: [{ kind: 'CHANGED', key: 'querySpec', label: '查询定义', before: 'b'.repeat(12), after: 'c'.repeat(12) }] }, { key: 'policy', label: '执行策略', changes: [{ kind: 'CHANGED', key: 'executionPolicy', label: '执行策略', before: 'd'.repeat(12), after: 'e'.repeat(12) }] }]
+ const diff = parseReportVersionDiff({ data: { base: version(1), target: version(2), sections } })
+ assert.equal(diff.sections.length, 7)
+ assert.equal(diff.sections[5].changes[0].after, 'c'.repeat(12))
+ assert.equal(diff.sections[6].changes[0].key, 'executionPolicy')
+ assert.throws(() => parseReportVersionDiff({ data: { base: version(1), target: version(2), sections: sections.filter((section) => section.key !== 'permissions' && section.key !== 'excel') } }))
+})
+
+
+test('designers respect query and detail field restrictions while null inherits defaults', () => {
+ const column = { id: 11, isPhysical: true, isSelectable: true }
+ assert.equal(isBojunColumnAllowed({ config: { selectableColumns: [] } }, column), false)
+ assert.equal(isBojunColumnAllowed({ config: { selectableColumns: ['11'], detailColumns: [] } }, column), true)
+ assert.equal(isBojunColumnAllowed({ config: { selectableColumns: ['11'], detailColumns: [] } }, column, true), false)
+ assert.equal(isBojunColumnAllowed({ config: { selectableColumns: null, detailColumns: null } }, column, true), true)
+ assert.equal(isBojunColumnAllowed({ config: {} }, { ...column, isPhysical: false }), false)
 })

@@ -168,6 +168,8 @@ export type ReportInputField = {
   default?: unknown
   allowedValues?: unknown[]
 	queryName?: string
+  relationId?: string
+  relationKeyColumnId?: string
 }
 
 export type ReportInputOption = {
@@ -290,7 +292,18 @@ export type ReportDraft = {
   updatedAt: string | null
 }
 
-export type ReportValidationSummary = {
+export type ReportValidationSummary = ReportProcedureValidationSummary | ReportSelectValidationSummary
+
+export type ReportSelectValidationSummary = {
+  executionMode: 'SELECT_SNAPSHOT'
+  validatedAt: string
+  query: { baseTableId: string; relationCount: number; columnCount: number; schemaHash: string }
+  executionPolicy: ReportExecutionPolicy
+  export: { exportableColumnCount: number; schemaHash: string }
+}
+
+export type ReportProcedureValidationSummary = {
+  executionMode?: 'TABLE_SNAPSHOT' | 'REF_CURSOR'
   validatedAt: string
   procedure: {
     owner: string
@@ -458,7 +471,7 @@ export type ReportColumnSource =
   | { kind: 'RELATION_COLUMN'; relationId: string; columnId: string }
 
 export type ReportQueryOperator = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'BETWEEN' | 'IN' | 'NOT_IN' | 'PREFIX' | 'CONTAINS' | 'IS_NULL' | 'IS_NOT_NULL'
-export type ReportQueryField = { aliasId: string; columnId: string }
+export type ReportQueryField = { aliasId: string; columnId: string; label?: string }
 export type ReportQueryValue = { kind: 'CONSTANT'; value: unknown } | { kind: 'PARAMETER'; code: string } | { kind: 'FIELD'; aliasId: string; columnId: string }
 export type ReportQueryCondition = ReportQueryField & { operator: ReportQueryOperator; value?: ReportQueryValue }
 export type ReportQueryConditionGroup = { logic: 'AND' | 'OR'; items: Array<ReportQueryCondition | ReportQueryConditionGroup> }
@@ -499,7 +512,16 @@ export type ReportQuerySpec = {
 export type ReportExecutionPolicy = { exportPolicy: 'MANUAL' | 'AUTO'; resultRetentionHours: number; purgeAfterExport: boolean }
 export type ReportQueryInputs = { where?: ReportQueryConditionGroup; orderBy?: ReportQueryOrder[] }
 export type BojunDataScope = { mode: 'GLOBAL_APPROVED' | 'SCOPE_COLUMN'; columnId?: string; userValues?: Record<string, string[]> }
+export type BojunTableConfig = {
+  primaryKeys?: string[] | null
+  displayFields?: string[] | null
+  searchFields?: string[] | null
+  selectableColumns?: string[] | null
+  detailColumns?: string[] | null
+  requiredFilterColumns?: string[]
+}
 export type BojunTable = {
+  config?: BojunTableConfig
   id: number
   bojunTableId: string
   logicalName: string

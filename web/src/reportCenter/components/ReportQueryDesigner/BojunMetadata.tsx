@@ -3,6 +3,7 @@ import Select from 'antd/es/select'
 import { getBojunTables } from '../../bojunApi'
 import type { ReportCenterClient } from '../../api'
 import type { BojunColumn, BojunTable } from '../../types'
+import styles from './ReportQueryDesigner.module.css'
 
 export type BojunMetadata = Record<string, { table: BojunTable; columns: BojunColumn[] }>
 
@@ -38,5 +39,5 @@ export function BojunTableSelect({ client, datasourceId, value, selected, onChan
     setItems((current) => [...current, ...response.data.items]); setCursor(response.data.hasMore ? response.data.nextAfter : ''); setState({ loading: false, error: '' })
   }
   const options = selected && !items.some((item) => item.id === selected.id) ? [selected, ...items] : items
-  return <div><Select aria-label={label} value={value || undefined} disabled={disabled || !datasourceId} showSearch filterOption={false} onSearch={setSearch} loading={state.loading} placeholder="按表名或显示名称搜索" style={{ width: '100%' }} options={options.map((table) => ({ value: String(table.id), label: `${table.logicalName} · ${table.description || '无说明'}${table.enabled ? '' : '（未启用）'}` }))} onChange={(id) => { const table = options.find((item) => String(item.id) === id); if (table) onChange(table) }} onPopupScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight >= element.scrollHeight - 24) void more() }} notFoundContent={state.loading ? '正在读取…' : state.error || '没有匹配的可用目录'} />{state.error ? <small role="alert">{state.error}</small> : null}{cursor ? <button type="button" onClick={() => void more()} disabled={state.loading}>加载更多表</button> : null}</div>
+  return <div><Select aria-label={label} value={value || undefined} disabled={disabled || !datasourceId} showSearch filterOption={false} onSearch={setSearch} loading={state.loading} placeholder="按表名或显示名称搜索" className={styles.select} options={options.map((table) => ({ value: String(table.id), label: `${table.logicalName} · ${table.description || '无说明'}${table.enabled ? '' : '（未启用）'}` }))} onChange={(id) => { const table = options.find((item) => String(item.id) === id); if (table) onChange(table) }} onPopupScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight >= element.scrollHeight - 24) void more() }} notFoundContent={state.loading ? '正在读取…' : state.error || '没有匹配的可用目录'} />{state.error ? <small role="alert">{state.error}</small> : null}{cursor ? <button type="button" onClick={() => void more()} disabled={state.loading}>加载更多表</button> : null}</div>
 }

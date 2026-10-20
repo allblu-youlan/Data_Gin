@@ -206,3 +206,10 @@ test('accepts empty payment data and rejects mismatched or malformed rows', () =
     { billDate: 20260901, storeId: 462, storeName: 'store', storeCode: 'ABCN001A002', paywayId: 24, payAmount: '3164.76', paywayName: '微信' },
   ] } }, '2026-09-01', 'ABCN001A002'), null)
 })
+
+
+test('query-only report users can enter query navigation without export access', () => {
+  assert.equal(canViewNavigationItem('report_query', ['report.read', 'report.execute']), true)
+  assert.equal(canViewNavigationItem('report_exports', ['report.read', 'report.execute']), false)
+  assert.equal(canViewNavigationItem('report_query', ['report.execute']), false)
+})

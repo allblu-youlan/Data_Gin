@@ -174,7 +174,7 @@ function Editor({ dirty, tab, client, draft, datasources, datasourcesLoading, da
   }
   if (draft.executionMode === 'SELECT_SNAPSHOT') {
     if (tab === 'validation') return <ReportQueryValidationPanel client={client} draft={draft} dirty={dirty} />
-    if (tab === 'conditions') return <><ReportInputSchemaEditor client={client} schema={draft.inputSchema} onChange={(inputSchema) => set('inputSchema', inputSchema)} /><ReportQueryDesigner client={client} draft={draft} section="conditions" onChange={onChange} /></>
+    if (tab === 'conditions') return <><ReportInputSchemaEditor allowEmpty relations={draft.querySpec?.relations} client={client} schema={draft.inputSchema} onChange={(inputSchema) => set('inputSchema', inputSchema)} /><ReportQueryDesigner client={client} draft={draft} section="conditions" onChange={onChange} /></>
     return <ReportQueryDesigner client={client} draft={draft} section={tab === 'procedure' ? 'sources' : 'columns'} onChange={onChange} />
   }
   if (tab === 'procedure') return <ReportProcedureEditor client={client} draft={draft} onChange={onChange} />

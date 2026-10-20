@@ -1,5 +1,5 @@
 import { parseReportColumnSource, parseReportExecutionPolicy, parseReportQueryOperator, parseReportQueryRelation, parseReportQuerySpec } from './bojunQueryConfig.js'
-import type { ReportAllowedFilter, ReportQueryInputs } from './types'
+import type { ReportAllowedFilter, ReportQueryInputs, ReportValidationSummary } from './types'
 import type { ClientFailureKind, ClientResponse, HTTPMethod } from '../api/client'
 import { isReportInputQueryName } from './inputQueryName.js'
 import { parseReportInputSchemaDocument, reportInputSchemaDocument } from './refCursorConfig.js'
@@ -406,8 +406,8 @@ export async function getReportVersionDiff(client: ReportCenterClient, reportId:
   return requestAndParse(client, `/v1/reports/${reportId}/version-diff?${search}`, { method: 'GET', signal }, parseReportVersionDiff, '报表版本差异加载失败。')
 }
 
-export async function createReportRun(client: ReportCenterClient, reportId: number, input: Record<string, unknown>, executionMode: ReportDraft['executionMode'], jsonInput = executionMode === 'REF_CURSOR' || executionMode === 'SELECT_SNAPSHOT', signal?: AbortSignal, queryInputs?: ReportQueryInputs): Promise<ReportAPIResult<ReportRun>> {
-  const body = { ...(jsonInput ? { conditions: input } : { parameters: input }), ...(executionMode === 'SELECT_SNAPSHOT' && queryInputs ? { queryInputs } : {}) }
+export async function createReportRun(client: ReportCenterClient, reportId: number, input: Record<string, unknown>, executionMode: ReportDraft['executionMode'], jsonInput = executionMode === 'REF_CURSOR' || executionMode === 'SELECT_SNAPSHOT', signal?: AbortSignal, queryInputs?: ReportQueryInputs, refreshNonce?: string): Promise<ReportAPIResult<ReportRun>> {
+  const body = { ...(jsonInput ? { conditions: input } : { parameters: input }), ...(executionMode === 'SELECT_SNAPSHOT' && queryInputs ? { queryInputs } : {}), ...(refreshNonce ? { refreshNonce } : {}) }
   return requestAndParse(client, `/v1/reports/${reportId}/runs`, { method: 'POST', body, signal }, parseReportRun, '报表运行创建失败。')
 }
 
@@ -477,7 +477,7 @@ export function parseReportRunContract(payload: unknown): ReportRunContract {
     name: publicString(data.name, 128),
     description: publicString(data.description, 500),
     executionMode,
-    ...(executionMode === 'SELECT_SNAPSHOT' ? { executionPolicy: parseReportExecutionPolicy(data.executionPolicy), allowedFilters: parseAllowedQueryFilters(data.allowedFilters), allowedSortFields: firstArray(data.allowedSortFields).map((value) => { const field = isRecord(value) ? value : {}; return { aliasId: publicString(field.aliasId, 64), columnId: String(field.columnId ?? '') } }), relations: firstArray(data.relations).map(parseReportQueryRelation) } : {}),
+    ...(executionMode === 'SELECT_SNAPSHOT' ? { executionPolicy: parseReportExecutionPolicy(data.executionPolicy), allowedFilters: parseAllowedQueryFilters(data.allowedFilters), allowedSortFields: firstArray(data.allowedSortFields).map((value) => { const field = isRecord(value) ? value : {}; return { aliasId: publicString(field.aliasId, 64), columnId: String(field.columnId ?? ''), ...(field.label ? { label: publicString(field.label, 128) } : {}) } }), relations: firstArray(data.relations).map(parseReportQueryRelation) } : {}),
     jsonInput,
     inputSchema,
     parameters: parameters.sort((left, right) => left.displayOrder - right.displayOrder || left.position - right.position),
@@ -834,9 +834,21 @@ export function parsePublication(payload: unknown): ReportPublication {
   return { definitionId, versionId, version, status: publicString(data.status, 32), contractHash, publishedAt: publicDate(data.publishedAt), validation }
 }
 
-function parseReportValidationSummary(value: unknown) {
+function parseReportValidationSummary(value: unknown): ReportValidationSummary {
   if (!isRecord(value)) throw new Error('invalid publication validation')
   const validation = value
+  if (validation.executionMode === 'SELECT_SNAPSHOT') {
+    const query = isRecord(validation.query) ? validation.query : {}
+    const result = isRecord(validation.result) ? validation.result : {}
+    const reportExport = isRecord(validation.export) ? validation.export : {}
+    const validatedAt = publicDate(validation.validatedAt)
+    const schemaHash = safeHash(query.schemaHash ?? result.schemaHash)
+    const exportSchemaHash = safeHash(reportExport.schemaHash)
+    const baseTableId = typeof query.baseTableId === 'string' ? publicString(query.baseTableId, 64) : String(positiveInteger(query.baseTableId) ?? '')
+    const columnCount = positiveInteger(query.columnCount ?? result.columnCount)
+    if (!validatedAt || !schemaHash || !exportSchemaHash || !baseTableId || !columnCount) throw new Error('invalid query publication validation')
+    return { executionMode: 'SELECT_SNAPSHOT', validatedAt, query: { baseTableId, relationCount: nonNegativeInteger(query.relationCount), columnCount, schemaHash }, executionPolicy: parseReportExecutionPolicy(validation.executionPolicy), export: { exportableColumnCount: nonNegativeInteger(reportExport.exportableColumnCount), schemaHash: exportSchemaHash } }
+  }
   const procedure = isRecord(validation.procedure) ? validation.procedure : {}
   const result = isRecord(validation.result) ? validation.result : {}
   const snapshot = isRecord(validation.snapshot) ? validation.snapshot : {}
@@ -885,6 +897,8 @@ const reportVersionDiffContract = {
   results: { label: '结果字段与 Excel', changes: { columnCount: '字段数量', resultSchemaHash: '结果 Schema' } },
   excel: { label: 'Excel 契约', changes: { exportSchemaHash: 'Excel Schema' } },
   permissions: { label: '权限', changes: { grantCount: '授权数量', permissionHash: '权限契约' } },
+  query: { label: '查询定义', changes: { querySpec: '查询定义' } },
+  policy: { label: '执行策略', changes: { executionPolicy: '执行策略' } },
 } as const
 
 type ReportVersionSectionKey = keyof typeof reportVersionDiffContract
@@ -904,7 +918,7 @@ export function parseReportVersionDiff(payload: unknown): ReportVersionDiff {
   const data = unwrapData(payload)
   const base = parseReportVersionSummary(data.base)
   const target = parseReportVersionSummary(data.target)
-  if (base.id === target.id || !Array.isArray(data.sections) || data.sections.length !== Object.keys(reportVersionDiffContract).length) throw new Error('invalid report version diff')
+  if (base.id === target.id || !Array.isArray(data.sections) || ![5, 7].includes(data.sections.length)) throw new Error('invalid report version diff')
   const seenSections = new Set<string>()
   const sections = data.sections.map((section) => {
     if (!isRecord(section) || !Array.isArray(section.changes)) throw new Error('invalid report version diff')
@@ -928,6 +942,7 @@ export function parseReportVersionDiff(payload: unknown): ReportVersionDiff {
     })
     return { key, label: contract.label, changes }
   })
+  if (!['procedure', 'parameters', 'results', 'excel', 'permissions'].every((key) => seenSections.has(key))) throw new Error('missing version diff section')
   return { base, target, sections }
 }
 

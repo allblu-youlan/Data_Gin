@@ -36,7 +36,7 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
   for (const [code, rawField] of Object.entries(value)) {
     if (!conditionCodePattern.test(code)) throw new Error(`筛选字段 ${code || '（空）'} 的编码不合法。`)
     if (!isRecord(rawField)) throw new Error(`筛选字段 ${code} 必须使用 JSON 对象配置。`)
-    const unknownKeys = Object.keys(rawField).filter((key) => !['type', 'displayName', 'displayOrder', 'control', 'format', 'required', 'multiple', 'example', 'default', 'allowedValues', 'queryName'].includes(key))
+    const unknownKeys = Object.keys(rawField).filter((key) => !['type', 'displayName', 'displayOrder', 'control', 'format', 'required', 'multiple', 'example', 'default', 'allowedValues', 'queryName', 'relationId', 'relationKeyColumnId'].includes(key))
     if (unknownKeys.length) throw new Error(`筛选字段 ${code} 含有未知配置：${unknownKeys.join('、')}。`)
     if (rawField.multiple !== undefined && typeof rawField.multiple !== 'boolean') throw new Error(`筛选字段 ${code} 的 multiple 必须是布尔值。`)
     const normalizedType = normalizeReportInputType(rawField.type, rawField.multiple === true)
@@ -58,6 +58,11 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
     if (rawField.allowedValues !== undefined && (!Array.isArray(rawField.allowedValues) || rawField.allowedValues.length === 0)) throw new Error(`筛选字段 ${code} 的 allowedValues 必须是非空数组。`)
 		if (rawField.queryName !== undefined && (!queryName || !isReportInputQueryName(queryName) || control !== 'SELECT' || !['str', 'number', 'list[str]', 'list[number]'].includes(normalizedType.type))) throw new Error(`筛选字段 ${code} 的 queryName 必须绑定在文本、数字或对应列表字段上。`)
 		if (queryName && rawField.allowedValues !== undefined) throw new Error(`筛选字段 ${code} 的 queryName 不能与 allowedValues 同时配置。`)
+    const relationId = normalizedString(rawField.relationId)
+    const relationKeyColumnId = normalizedString(rawField.relationKeyColumnId)
+    if (rawField.relationId !== undefined && (!relationId || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(relationId) || control !== 'SELECT' || !['str', 'list[str]'].includes(normalizedType.type))) throw new Error(`筛选字段 ${code} 的关联查询必须使用文本 SELECT 控件，以保留主键精度。`)
+    if (relationId && (queryName || rawField.allowedValues !== undefined)) throw new Error(`筛选字段 ${code} 的关联查询不能与 Oracle 查询或固定允许值同时配置。`)
+    if (relationKeyColumnId && (!relationId || !/^[1-9]\d*$/.test(relationKeyColumnId))) throw new Error(`筛选字段 ${code} 的关联键字段不合法。`)
     const field = compactInputField({
       type: normalizedType.type,
       displayName,
@@ -69,6 +74,8 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
       ...(Object.prototype.hasOwnProperty.call(rawField, 'default') ? { default: rawField.default } : {}),
       ...(Array.isArray(rawField.allowedValues) ? { allowedValues: [...rawField.allowedValues] } : {}),
 			...(queryName ? { queryName } : {}),
+      ...(relationId ? { relationId } : {}),
+      ...(relationKeyColumnId ? { relationKeyColumnId } : {}),
     })
     validateReportInputFieldMetadata(code, field)
     result[code] = field
@@ -520,6 +527,8 @@ function compactInputField(field: ReportInputField): ReportInputField {
     ...(Object.prototype.hasOwnProperty.call(field, 'default') ? { default: field.default } : {}),
     ...(field.allowedValues ? { allowedValues: [...field.allowedValues] } : {}),
 		...(field.queryName ? { queryName: field.queryName } : {}),
+    ...(field.relationId ? { relationId: field.relationId } : {}),
+    ...(field.relationKeyColumnId ? { relationKeyColumnId: field.relationKeyColumnId } : {}),
   }
 }
 

@@ -29,9 +29,9 @@ export function initialReportParameterValues(parameters: ReportParameter[]) {
   }, {})
 }
 
-export function canStartNewReportRun(runStatus: ReportRunStatus, reportExport: Pick<ReportExport, 'status' | 'purgedAt'> | null, busy: boolean) {
+export function canStartNewReportRun(runStatus: ReportRunStatus, reportExport: Pick<ReportExport, 'status' | 'purgedAt'> | null, busy: boolean, purgeAfterExport = true) {
   const runFinished = terminalReportRunStatuses.has(runStatus)
-  const exportFinished = isReportExportSettled(reportExport)
+  const exportFinished = isReportExportSettled(reportExport, purgeAfterExport)
   return !busy && runFinished && exportFinished
 }
 
@@ -43,10 +43,10 @@ export function canRetryReportExportBinding(run: Pick<ReportRun, 'status' | 'res
   return run !== null && reportExport === null && canBindReportExport(run)
 }
 
-export function isReportExportSettled(reportExport: Pick<ReportExport, 'status' | 'purgedAt'> | null) {
+export function isReportExportSettled(reportExport: Pick<ReportExport, 'status' | 'purgedAt'> | null, purgeAfterExport = true) {
   if (reportExport === null) return true
   if (!terminalReportExportStatuses.has(reportExport.status)) return false
-  return reportExport.status !== 'READY' || reportExport.purgedAt !== null
+  return reportExport.status !== 'READY' || !purgeAfterExport || reportExport.purgedAt !== null
 }
 
 export function buildNewReportRunState(parameters: ReportParameter[]): NewReportRunState {

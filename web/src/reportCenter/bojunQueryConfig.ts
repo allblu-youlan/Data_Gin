@@ -1,4 +1,4 @@
-import type { ReportColumnSource, ReportExecutionPolicy, ReportQueryColumn, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryOperator, ReportQueryOrder, ReportQueryRelation, ReportQuerySpec, ReportQueryValue } from './types'
+import type { BojunColumn, BojunTable, ReportColumnSource, ReportExecutionPolicy, ReportQueryColumn, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryOperator, ReportQueryOrder, ReportQueryRelation, ReportQuerySpec, ReportQueryValue } from './types'
 
 export const reportQueryOperators: ReportQueryOperator[] = ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE', 'BETWEEN', 'IN', 'NOT_IN', 'PREFIX', 'CONTAINS', 'IS_NULL', 'IS_NOT_NULL']
 export const defaultReportExecutionPolicy: ReportExecutionPolicy = { exportPolicy: 'MANUAL', resultRetentionHours: 24, purgeAfterExport: false }
@@ -58,3 +58,9 @@ export function parseReportExecutionPolicy(value: unknown): ReportExecutionPolic
   return { exportPolicy: value.exportPolicy === 'AUTO' ? 'AUTO' : 'MANUAL', resultRetentionHours: typeof value.resultRetentionHours === 'number' ? value.resultRetentionHours : 24, purgeAfterExport: value.purgeAfterExport === true }
 }
 export function queryColumnSourceLabel(source: ReportColumnSource) { return source.kind === 'BASE_COLUMN' ? `主表 · 字段 #${source.columnId}` : source.kind === 'RELATION_DISPLAY' ? `${source.relationId} · 默认显示` : `${source.relationId} · 字段 #${source.columnId}` }
+
+export function isBojunColumnAllowed(table: BojunTable | undefined, column: BojunColumn, detail = false) {
+  if (!table || !column.isPhysical || !column.isSelectable) return false
+  const allowed = detail ? table.config?.detailColumns ?? table.config?.selectableColumns : table.config?.selectableColumns
+  return allowed === null || allowed === undefined || allowed.includes(String(column.id))
+}

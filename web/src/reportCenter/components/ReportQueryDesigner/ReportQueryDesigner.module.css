@@ -24,3 +24,4 @@
 .metadata dt { color: var(--color-text-secondary); }
 .metadata dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 767px) { .form { grid-template-columns: 1fr; } .wide { grid-column: auto; } .condition { grid-template-columns: 1fr 1fr; } .section { padding: var(--space-3); } .metadata { grid-template-columns: 1fr; } }
+.select { width: 100%; min-width: 0; }

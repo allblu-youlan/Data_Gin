@@ -3,6 +3,7 @@ import { ArrowRight, Eye, GitCompareArrows, Rocket } from 'lucide-react'
 import { Button, DataTable, Dialog, Drawer, FeedbackState, StatusTag } from '../../../ui'
 import { activateReportVersion, getReportVersion, getReportVersionDiff, getReportVersions, publishReportDraft, type ReportCenterClient } from '../../api'
 import type { ReportPublication, ReportSummary, ReportVersionDetail, ReportVersionDiff, ReportVersionSummary } from '../../types'
+import { ReportVersionQueryDetail } from './ReportVersionQueryDetail'
 import { createLatestRequestGuard } from './requestGuard'
 import styles from './ReportVersionDrawer.module.css'
 
@@ -111,7 +112,7 @@ export function ReportVersionDrawer({ client, report, onClose, onPublished, onCh
 
   return <>
     <Drawer open={Boolean(report)} title="历史版本与上线" description={report ? `${report.name} · 查看不可变版本配置，并选择需要上线的版本。` : undefined} size="wide" onClose={close}>
-      {report?.lockVersion ? <div className={styles.publishBar}><div><strong>当前草稿 v{report.lockVersion}</strong><span>上线前会重新核验 Oracle 过程、结果表和 Excel 契约。</span></div><Button variant="primary" type="button" disabled={publishState.busy} onClick={() => { setPublishState({ busy: false, error: '' }); setPending({ kind: 'draft' }) }}><Rocket aria-hidden="true" />上线当前草稿</Button></div> : null}
+      {report?.lockVersion ? <div className={styles.publishBar}><div><strong>当前草稿 v{report.lockVersion}</strong><span>上线前会重新核验 Oracle 查询、输入条件、快照与 Excel 契约。</span></div><Button variant="primary" type="button" disabled={publishState.busy} onClick={() => { setPublishState({ busy: false, error: '' }); setPending({ kind: 'draft' }) }}><Rocket aria-hidden="true" />上线当前草稿</Button></div> : null}
       {state.loading && !versions.length ? <FeedbackState kind="loading" title="正在读取版本历史" /> : null}
       {state.error ? <FeedbackState kind="error" title="版本数据不可用" description={state.error} action={!versions.length ? <button type="button" onClick={() => setReloadKey((value) => value + 1)}>重试</button> : undefined} /> : null}
       {!state.loading && !state.error && !versions.length ? <FeedbackState kind="empty" title="暂无已发布版本" description="可以先上线当前草稿形成第一个历史版本。" /> : null}
@@ -125,7 +126,7 @@ export function ReportVersionDrawer({ client, report, onClose, onPublished, onCh
       </> : null}
     </Drawer>
     <Dialog open={Boolean(pending)} role="alertdialog" title="确认上线报表版本" description={pendingLabel ? `即将上线：${pendingLabel}` : undefined} closeDisabled={publishState.busy} onClose={() => { setPending(null); setPublishState({ busy: false, error: '' }) }} footer={<><button type="button" disabled={publishState.busy} onClick={() => { setPending(null); setPublishState({ busy: false, error: '' }) }}>取消</button><Button variant="primary" disabled={publishState.busy} onClick={() => void confirmPublish()}>{publishState.busy ? '核验并上线中…' : '确认上线'}</Button></>}>
-      <p className={styles.confirmNotice}>系统会先连接该版本绑定的数据源，重新核验 Oracle 过程、结果表和 Excel 契约；核验通过后才会切换线上版本，当前草稿不会被覆盖。</p>
+      <p className={styles.confirmNotice}>系统会先连接该版本绑定的数据源，重新核验 Oracle 查询、输入条件、快照与 Excel 契约；核验通过后才会切换线上版本，当前草稿不会被覆盖。</p>
       {publishState.error ? <p className={styles.publishError} role="alert">{publishState.error}</p> : null}
     </Dialog>
   </>
@@ -135,6 +136,7 @@ function VersionSelect({ label, value, versions, disabled, onChange }: { label: 
 
 function VersionDetailView({ detail }: { detail: ReportVersionDetail }) {
   const config = detail.configuration
+  if (config.executionMode === 'SELECT_SNAPSHOT') return <ReportVersionQueryDetail detail={detail} />
   const procedure = [config.procedure.owner, config.procedure.package, config.procedure.name].filter(Boolean).join('.')
   return <section className={styles.detail}><header><h3>v{detail.summary.version} 完整配置</h3><StatusTag tone="info">只读</StatusTag></header><dl className={styles.overview}><Item label="数据源" value={`#${config.datasourceId}`} /><Item label="执行模式" value={config.executionMode} /><Item label="存储过程" value={procedure} mono /><Item label="结果表" value={[config.result.tableOwner, config.result.tableName].filter(Boolean).join('.') || '-'} mono /></dl>{Object.keys(config.inputSchema).length ? <details open><summary>输入条件 Schema</summary><pre>{JSON.stringify(config.inputSchema, null, 2)}</pre></details> : null}{config.callTemplate ? <details><summary>调用模板</summary><pre>{config.callTemplate}</pre></details> : null}<h4>筛选参数（{config.parameters.length}）</h4>{config.parameters.length ? <DataTable density="compact" minWidth={700} scrollLabel="历史版本筛选参数"><thead><tr><th scope="col">顺序</th><th scope="col">编码</th><th scope="col">名称</th><th scope="col">Oracle 参数</th><th scope="col">类型</th></tr></thead><tbody>{config.parameters.map((item) => <tr key={item.code}><td>{item.displayOrder}</td><td><code>{item.code}</code></td><td>{item.label}</td><td><code>{item.procedureArgName}</code></td><td>{item.logicalType} / {item.oracleType}</td></tr>)}</tbody></DataTable> : <p>无筛选参数</p>}<h4>结果与 Excel 字段（{config.columns.length}）</h4><DataTable density="compact" minWidth={800} scrollLabel="历史版本结果字段"><thead><tr><th scope="col">导出顺序</th><th scope="col">Oracle 字段</th><th scope="col">Excel 表头</th><th scope="col">导出类型</th><th scope="col">导出</th></tr></thead><tbody>{config.columns.map((item) => <tr key={item.fieldId}><td>{item.exportOrder}</td><td><code>{item.databaseColumn}</code></td><td>{item.excelHeader}</td><td>{item.valueType}</td><td>{item.exportVisible && item.exportAllowed ? '是' : '否'}</td></tr>)}</tbody></DataTable><h4>授权（{config.grants.length}）</h4>{config.grants.length ? <ul className={styles.grants}>{config.grants.map((item) => <li key={`${item.subjectType}-${item.subjectId}`}><code>{item.subjectType} #{item.subjectId}</code><span>{item.actions.join(' / ')}</span></li>)}</ul> : <p>未配置报表级授权</p>}</section>
 }
