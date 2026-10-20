@@ -246,6 +246,34 @@ func Compile(q QuerySpec, tables map[string]Table, policy Policy) (Compiled, err
 			out.OracleType = "VARCHAR2"
 			out.LogicalType = "string"
 		}
+
+		if col.Source.Kind == "RELATION_DISPLAY" && out.ValueMode == "RAW" && len(c.Relations[col.Source.RelationID].SourceKeys) > 1 {
+			out.OracleType = "VARCHAR2"
+			out.LogicalType = "string"
+			out.Precision = nil
+			out.Scale = nil
+		}
+		if col.ValueType != "" && col.ValueType != out.LogicalType {
+			switch col.ValueType {
+			case "string":
+				out.OracleType = "VARCHAR2"
+				out.LogicalType = "string"
+				out.Precision = nil
+				out.Scale = nil
+			case "decimal":
+				if out.LogicalType != "integer" {
+					return c, queryError("output valueType is incompatible with source")
+				}
+				out.LogicalType = "decimal"
+			case "datetime":
+				if out.LogicalType != "date" {
+					return c, queryError("output valueType is incompatible with source")
+				}
+				out.LogicalType = "datetime"
+			default:
+				return c, queryError("output valueType is incompatible with source")
+			}
+		}
 		if out.Header == "" {
 			out.Header = column.DBName
 			if col.Source.Kind == "RELATION_DISPLAY" {
@@ -296,14 +324,16 @@ func Compile(q QuerySpec, tables map[string]Table, policy Policy) (Compiled, err
 			return c, e
 		}
 		for _, op := range f.Operators {
-			if !contains(Operators(col.LogicalType), op) {
+			if !contains(ColumnOperators(col), op) {
 				return c, queryError("unsupported allowed filter operator")
 			}
 		}
 	}
 	for _, o := range q.AllowedSortFields {
-		if _, e := availableColumn(aliases[o.AliasID], o.ColumnID, false); e != nil {
+		if col, e := availableColumn(aliases[o.AliasID], o.ColumnID, false); e != nil {
 			return c, e
+		} else if !SortableColumn(col) {
+			return c, queryError("LOB columns cannot be sorted")
 		}
 	}
 	// Validate all fixed predicates without requiring runtime parameter values.

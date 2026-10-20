@@ -113,11 +113,10 @@ func (s *ReportDatasetService) RecordDetail(ctx context.Context, actor, runID ui
 			return ReportRecordDetail{}, ErrReportDatasourceOracleUnavailable
 		}
 		defer done()
-		for _, t := range c.Tables {
-			if t.ID == relation.Relation.TargetTableID {
-				if e = a.ValidateBojunMetadata(liveCtx, t); e != nil {
-					return ReportRecordDetail{}, ErrReportRunQueryConflict
-				}
+		dependencies := c.DependencyTables()
+		for _, id := range plan.TableIDs {
+			if e = a.ValidateBojunMetadata(liveCtx, dependencies[id]); e != nil {
+				return ReportRecordDetail{}, ErrReportRunQueryConflict
 			}
 		}
 		_, rows, e := a.QuerySelectSample(liveCtx, plan.Plan, 2)
@@ -126,6 +125,16 @@ func (s *ReportDatasetService) RecordDetail(ctx context.Context, actor, runID ui
 		}
 		if len(rows) != 1 {
 			return ReportRecordDetail{}, ErrReportRunQueryNotFound
+		}
+		for snapshotName, liveName := range plan.SnapshotNames {
+			values[snapshotName] = rows[0][liveName]
+		}
+		for _, p := range c.Projections {
+			if p.AliasID == relationID {
+				if liveName, ok := plan.ColumnNames[p.ColumnID]; ok {
+					values[p.Name] = rows[0][liveName]
+				}
+			}
 		}
 		for id, name := range plan.ColumnNames {
 			if _, ok := relation.DetailNames[id]; ok {
@@ -141,7 +150,11 @@ func (s *ReportDatasetService) RecordDetail(ctx context.Context, actor, runID ui
 	out := ReportRecordDetail{Mode: mode, DetailSource: mode, QueriedAt: *queriedAt, RelationName: relation.Relation.Name, Fields: []ReportRecordDetailField{}}
 	for _, col := range columns {
 		if value, ok := currentValues[col.ID]; ok {
-			out.Fields = append(out.Fields, ReportRecordDetailField{ColumnID: col.ID, Name: col.DBName, Label: col.Description, RawValue: value, DisplayValue: value})
+			display := value
+			if nested, ok := c.RelatedFieldDisplay(relationID, col.ID, values); ok {
+				display = nested
+			}
+			out.Fields = append(out.Fields, ReportRecordDetailField{ColumnID: col.ID, Name: col.DBName, Label: col.Description, RawValue: value, DisplayValue: display})
 		}
 	}
 	if out.RelationName == "" {

@@ -7,6 +7,8 @@ import (
 )
 
 type RelationPlan struct {
+	SnapshotNames  map[string]string
+	TableIDs       []string
 	Plan           Plan
 	ColumnNames    map[string]string
 	KeyColumns     []string
@@ -23,7 +25,7 @@ func (c Compiled) BuildRelationPlan(relationID string, parameters map[string]jso
 	for _, r := range c.Query.Relations {
 		b.aliases[r.ID] = c.Tables[r.TargetTableID]
 	}
-	result := RelationPlan{ColumnNames: map[string]string{}, KeyColumns: target.PrimaryKeys, DisplayColumns: relation.Relation.DisplayColumnIDs}
+	result := RelationPlan{SnapshotNames: map[string]string{}, TableIDs: []string{target.ID}, ColumnNames: map[string]string{}, KeyColumns: target.PrimaryKeys, DisplayColumns: relation.Relation.DisplayColumnIDs}
 	ids := append([]string{}, target.PrimaryKeys...)
 	for _, binding := range relation.Relation.KeyBindings {
 		ids = append(ids, binding.TargetColumnID)
@@ -39,7 +41,7 @@ func (c Compiled) BuildRelationPlan(relationID string, parameters map[string]jso
 		if _, ok := result.ColumnNames[id]; ok {
 			continue
 		}
-		expr, _, e := b.column(relationID, id)
+		expr, _, e := b.projectionColumn(relationID, id)
 		if e != nil {
 			return result, e
 		}
@@ -47,6 +49,14 @@ func (c Compiled) BuildRelationPlan(relationID string, parameters map[string]jso
 		result.ColumnNames[id] = name
 		selects = append(selects, expr+" AS "+name)
 		result.Plan.Columns = append(result.Plan.Columns, name)
+	}
+	joins := ""
+	if detail {
+		var err error
+		joins, err = c.detailJoins(&b, relationID, &selects, &result, actor)
+		if err != nil {
+			return result, err
+		}
 	}
 	where := []string{}
 	scope, e := b.scope(relationID, actor)
@@ -142,7 +152,80 @@ func (c Compiled) BuildRelationPlan(relationID string, parameters map[string]jso
 	if e != nil {
 		return result, e
 	}
-	result.Plan.SQL = "SELECT " + strings.Join(selects, ",") + " FROM " + obj + " T0 WHERE (" + strings.Join(where, ") AND (") + ") ORDER BY " + strings.Join(orders, ",")
+	result.Plan.SQL = "SELECT " + strings.Join(selects, ",") + " FROM " + obj + " T0" + joins + " WHERE (" + strings.Join(where, ") AND (") + ") ORDER BY " + strings.Join(orders, ",")
 	result.Plan.Args = b.args
 	return result, nil
+}
+
+func (c Compiled) detailJoins(b *sqlBuilder, root string, selects *[]string, result *RelationPlan, actor string) (string, error) {
+	joined := map[string]bool{root: true}
+	sql := ""
+	for _, r := range c.Query.Relations {
+		if !joined[r.FromAliasID] || r.ID == root {
+			continue
+		}
+		joined[r.ID] = true
+		b.sqlAliases[r.ID] = fmt.Sprintf("J%d", len(joined))
+		target := c.Tables[r.TargetTableID]
+		result.TableIDs = append(result.TableIDs, target.ID)
+		obj, e := objectName(target)
+		if e != nil {
+			return "", e
+		}
+		on := []string{}
+		for _, key := range r.KeyBindings {
+			source, _, e := b.column(r.FromAliasID, key.SourceColumnID)
+			if e != nil {
+				return "", e
+			}
+			dest, _, e := b.column(r.ID, key.TargetColumnID)
+			if e != nil {
+				return "", e
+			}
+			on = append(on, dest+" = "+source)
+		}
+		scope, e := b.scope(r.ID, actor)
+		if e != nil {
+			return "", e
+		}
+		on = append(on, scope)
+		fixed, e := b.fixed(r.ID)
+		if e != nil {
+			return "", e
+		}
+		if fixed != "" {
+			on = append(on, fixed)
+		}
+		match, e := b.condition(r.MatchConditions, 0, false)
+		if e != nil {
+			return "", e
+		}
+		if match != "" {
+			on = append(on, match)
+		}
+		sql += " LEFT JOIN " + obj + " " + b.sqlAliases[r.ID] + " ON (" + strings.Join(on, " AND ") + ")"
+		ids := append([]string{}, r.DisplayColumnIDs...)
+		for _, key := range r.KeyBindings {
+			ids = append(ids, key.TargetColumnID)
+		}
+		for _, id := range ids {
+			for _, p := range c.Projections {
+				if p.AliasID != r.ID || p.ColumnID != id {
+					continue
+				}
+				if _, ok := result.SnapshotNames[p.Name]; ok {
+					continue
+				}
+				expr, _, e := b.projectionColumn(r.ID, id)
+				if e != nil {
+					return "", e
+				}
+				name := fmt.Sprintf("V%03d", len(*selects)+1)
+				*selects = append(*selects, expr+" AS "+name)
+				result.Plan.Columns = append(result.Plan.Columns, name)
+				result.SnapshotNames[p.Name] = name
+			}
+		}
+	}
+	return sql, nil
 }

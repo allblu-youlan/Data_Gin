@@ -26,10 +26,11 @@ import (
 )
 
 var (
-	ErrReportRunQueryInvalid    = errors.New("report run query service: invalid input")
-	ErrReportRunQueryNotFound   = errors.New("report run query service: not found")
-	ErrReportRunQueryConflict   = errors.New("report run query service: conflict")
-	ErrReportRunResultTemporary = errors.New("report run query service: result temporarily unavailable")
+	ErrReportSelectResultExpired = errors.New("REPORT_RESULT_EXPIRED")
+	ErrReportRunQueryInvalid     = errors.New("report run query service: invalid input")
+	ErrReportRunQueryNotFound    = errors.New("report run query service: not found")
+	ErrReportRunQueryConflict    = errors.New("report run query service: conflict")
+	ErrReportRunResultTemporary  = errors.New("report run query service: result temporarily unavailable")
 )
 
 const maxReportResultCursorLength = 1024
@@ -476,6 +477,12 @@ func (service *ReportRunQueryService) decodeCursor(value string, run model.Repor
 }
 
 func classifyReportRunQueryError(err error) error {
+	if errors.Is(err, reportrepo.ErrReportSelectResultExpired) {
+		return ErrReportSelectResultExpired
+	}
+	if errors.Is(err, reportrepo.ErrReportActionDenied) {
+		return ErrReportRunQueryNotFound
+	}
 	switch {
 	case errors.Is(err, reportrepo.ErrReportRunAccessNotFound):
 		return ErrReportRunQueryNotFound

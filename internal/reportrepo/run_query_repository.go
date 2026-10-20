@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	ErrReportRunAccessNotFound = errors.New("report run query: not found")
-	ErrReportRunStateConflict  = errors.New("report run query: state conflict")
-	ErrReportResultUnavailable = errors.New("report run query: result unavailable")
+	ErrReportRunAccessNotFound   = errors.New("report run query: not found")
+	ErrReportRunStateConflict    = errors.New("report run query: state conflict")
+	ErrReportResultUnavailable   = errors.New("report run query: result unavailable")
+	ErrReportSelectResultExpired = errors.New("REPORT_RESULT_EXPIRED")
 )
 
 type RunResultContract struct {
@@ -39,6 +40,9 @@ func (repository *Repository) AcquireResultReadLease(ctx context.Context, actor,
 			return ErrReportRunAccessNotFound
 		} else if err != nil {
 			return fmt.Errorf("report result read lease: lock run: %w", err)
+		}
+		if run.RetainsQuerySnapshot() && run.ResultExpiresAt != nil && !now.Before(*run.ResultExpiresAt) {
+			return ErrReportSelectResultExpired
 		}
 		if run.Status != model.ReportRunStatusSucceeded || run.ResultPurgedAt != nil || run.ResultExpiresAt == nil || !now.Before(run.ResultExpiresAt.UTC()) {
 			return ErrReportResultUnavailable

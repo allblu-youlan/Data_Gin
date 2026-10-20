@@ -125,6 +125,9 @@ func (controller *ReportExportController) Download(c *gin.Context) {
 }
 
 func writeReportExportError(c *gin.Context, err error) {
+	if writeKnownDatasetError(c, err) {
+		return
+	}
 	code, message := classifyReportExportError(err)
 	if err != nil {
 		_ = c.Error(err).SetType(gin.ErrorTypePrivate)

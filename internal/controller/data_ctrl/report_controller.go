@@ -354,6 +354,9 @@ func parseReportUint(value, field string) (uint, error) {
 }
 
 func writeReportError(c *gin.Context, err error) {
+	if writeKnownDatasetError(c, err) {
+		return
+	}
 	if c != nil && err != nil {
 		_ = c.Error(err).SetType(gin.ErrorTypePrivate)
 	}

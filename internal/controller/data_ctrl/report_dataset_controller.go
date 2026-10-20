@@ -111,6 +111,9 @@ func (h *ReportDatasetController) Options(c *gin.Context) {
 	responses.New(c).ToResponse(v)
 }
 func writeDatasetError(c *gin.Context, e error) {
+	if writeKnownDatasetError(c, e) {
+		return
+	}
 	code, message := classifyDatasetError(e)
 	if code != nil {
 		responses.New(c).ToSafeErrorResponse(code, message)

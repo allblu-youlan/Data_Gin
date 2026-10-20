@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gin-biz-web-api/internal/service/data_svc"
-	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/reportquery"
+	"gin-biz-web-api/internal/requestbody"
+	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/pkg/auth"
 	"gin-biz-web-api/pkg/errcode"
 	"gin-biz-web-api/pkg/responses"
@@ -106,7 +106,9 @@ func (controller *ReportRunController) QueryResults(c *gin.Context) {
 		return
 	}
 	limit := request.Limit
-	if limit == 0 { limit = 100 }
+	if limit == 0 {
+		limit = 100
+	}
 	result, err := controller.service.QueryResults(c.Request.Context(), auth.CurrentUserID(c), runID, reportquery.Input{Filters: request.Filters, Sort: request.Sort}, strings.TrimSpace(request.Cursor), limit)
 	if err != nil {
 		writeReportRunQueryError(c, err)
@@ -116,6 +118,9 @@ func (controller *ReportRunController) QueryResults(c *gin.Context) {
 }
 
 func writeReportRunQueryError(c *gin.Context, err error) {
+	if writeKnownDatasetError(c, err) {
+		return
+	}
 	code, message := classifyReportRunQueryError(err)
 	responses.New(c).ToSafeErrorResponse(code, message)
 }

@@ -196,3 +196,83 @@ func TestLiveRelationPlanReplaysSourceFieldsAndScope(t *testing.T) {
 		t.Fatal(plan.Plan.SQL)
 	}
 }
+func TestCompositeRawOutputPreservesAllOrderedBindings(t *testing.T) {
+	q, tables := testDataset()
+	target := tables["3"]
+	target.PrimaryKeys = []string{"31", "33"}
+	target.UniqueKeys = [][]string{{"31", "33"}}
+	target.Columns[2].OracleType = "NUMBER"
+	target.Columns[2].LogicalType = "integer"
+	tables["3"] = target
+	q.Relations[1].KeyBindings = append(q.Relations[1].KeyBindings, KeyBinding{SourceColumnID: "14", TargetColumnID: "33"})
+	q.Columns[1].ValueMode = "RAW"
+	c, e := Compile(q, tables, DefaultPolicy())
+	if e != nil {
+		t.Fatal(e)
+	}
+	r := c.Relations["product"]
+	values := map[string]any{r.SourceKeys[0]: "2001", r.SourceKeys[1]: "003"}
+	c.Materialize(values)
+	raw, ok := values[c.Outputs[1].Name].(string)
+	if !ok || !strings.Contains(raw, `"31":"2001"`) || !strings.Contains(raw, `"33":"003"`) {
+		t.Fatalf("composite raw lost a component: %#v", values)
+	}
+	if c.Outputs[1].LogicalType != "string" {
+		t.Fatal("composite RAW must export as explicit key JSON")
+	}
+}
+func TestExplicitOutputStringTypeIsAppliedWithoutFloatConversion(t *testing.T) {
+	q, tables := testDataset()
+	q.Columns[2].Source = Source{Kind: "BASE_COLUMN", ColumnID: "11"}
+	q.Columns[2].ValueType = "string"
+	c, e := Compile(q, tables, DefaultPolicy())
+	if e != nil {
+		t.Fatal(e)
+	}
+	out := c.Outputs[2]
+	values := map[string]any{out.ValueName: json.Number("9007199254740993")}
+	c.Materialize(values)
+	if values[out.Name] != "9007199254740993" || out.LogicalType != "string" {
+		t.Fatalf("override lost: %#v %#v", out, values)
+	}
+}
+func TestNestedDetailUsesConfiguredDisplayAndSingleScopedSelect(t *testing.T) {
+	q, tables := testDataset()
+	q.Relations[0].DetailColumnIDs = []string{"21"}
+	q.Relations = append(q.Relations, Relation{ID: "store", Name: "店仓", FromAliasID: "retail", TargetTableID: "3", JoinType: "LEFT", Cardinality: "MANY_TO_ONE", KeyBindings: []KeyBinding{{SourceColumnID: "21", TargetColumnID: "31"}}})
+	c, e := Compile(q, tables, DefaultPolicy())
+	if e != nil {
+		t.Fatal(e)
+	}
+	r := c.Relations["store"]
+	values := map[string]any{r.TargetKeys[0]: "7", r.DisplayNames[0]: "店仓显示"}
+	display, ok := c.RelatedFieldDisplay("retail", "21", values)
+	if !ok || display != "店仓显示" {
+		t.Fatalf("%#v %t", display, ok)
+	}
+	plan, e := c.BuildRelationPlan("retail", nil, nil, map[string]json.RawMessage{"21": json.RawMessage(`"7"`)}, "", nil, "7", true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if strings.Count(plan.Plan.SQL, "LEFT JOIN") != 1 || strings.Contains(plan.Plan.SQL, "M_RETAILITEM") || len(plan.SnapshotNames) == 0 {
+		t.Fatalf("nested detail is not a single bounded relation query: %s", plan.Plan.SQL)
+	}
+}
+func TestDetailOnlyColumnCannotBecomeFilterWithoutSelectApproval(t *testing.T) {
+	q, tables := testDataset()
+	table := tables["3"]
+	allowed := []string{"31", "32"}
+	details := []string{"33"}
+	table.Config.SelectableColumns = &allowed
+	table.Config.DetailColumns = &details
+	tables["3"] = table
+	q.Columns = q.Columns[:2]
+	q.Relations[1].DetailColumnIDs = []string{"33"}
+	if _, e := Compile(q, tables, DefaultPolicy()); e != nil {
+		t.Fatal(e)
+	}
+	q.Where = &Condition{AliasID: "product", ColumnID: "33", Operator: "EQ", Value: &Value{Kind: "CONSTANT", Value: json.RawMessage(`"secret"`)}}
+	if _, e := Compile(q, tables, DefaultPolicy()); e == nil {
+		t.Fatal("detail-only field was accepted as a filter")
+	}
+}

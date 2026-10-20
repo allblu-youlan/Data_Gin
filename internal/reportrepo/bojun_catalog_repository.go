@@ -24,6 +24,15 @@ func (r *Repository) StartBojunSync(ctx context.Context, ds uint, scope string, 
 		if e := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("datasource_id = ?", ds).First(&cat).Error; e != nil {
 			return e
 		}
+
+		stale := time.Now().UTC().Add(-40 * time.Minute)
+		if e := tx.Model(&model.ReportBojunSyncRun{}).Where("datasource_id = ? AND status IN ? AND created_at <= ?", ds, []string{"QUEUED", "RUNNING"}, stale).Updates(map[string]any{"status": "FAILED", "error_safe": "同步任务已超时，请重新同步", "finished_at": time.Now().UTC()}).Error; e != nil {
+			return e
+		}
+		expired := tx.Model(&model.ReportBojunSyncRun{}).Select("id").Where("status IN ? AND finished_at < ?", []string{"FAILED", "SUCCEEDED"}, time.Now().UTC().Add(-24*time.Hour))
+		if e := tx.Where("sync_run_id IN (?)", expired).Delete(&model.ReportBojunSyncStaging{}).Error; e != nil {
+			return e
+		}
 		var pending int64
 		if e := tx.Model(&model.ReportBojunSyncRun{}).Where("datasource_id = ? AND status IN ? AND created_at > ?", ds, []string{"QUEUED", "RUNNING"}, time.Now().Add(-40*time.Minute)).Count(&pending).Error; e != nil {
 			return e
@@ -73,7 +82,11 @@ func (r *Repository) FinishBojunSync(ctx context.Context, run model.ReportBojunS
 			return e
 		}
 		if cat.CurrentGeneration >= run.Generation {
-			return nil
+			status, message := "SUCCEEDED", ""
+			if cat.CurrentGeneration > run.Generation {
+				status, message = "FAILED", "已被更新的完整目录同步替代"
+			}
+			return tx.Model(&model.ReportBojunSyncRun{}).Where("id = ?", run.ID).Updates(map[string]any{"status": status, "error_safe": message, "finished_at": time.Now().UTC()}).Error
 		}
 		var stage []model.ReportBojunSyncStaging
 		if e := tx.Where("sync_run_id = ?", run.ID).Find(&stage).Error; e != nil {
@@ -225,4 +238,7 @@ func (r *Repository) GetBojunSyncByID(ctx context.Context, id uint) (*model.Repo
 	var run model.ReportBojunSyncRun
 	e := r.db.WithContext(ctx).First(&run, id).Error
 	return &run, e
+}
+func (r *Repository) ResetBojunStaging(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Where("sync_run_id = ?", id).Delete(&model.ReportBojunSyncStaging{}).Error
 }

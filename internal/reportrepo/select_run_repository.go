@@ -49,7 +49,7 @@ func (r *Repository) AcquireSelectDatasourceSlot(ctx context.Context, ds uint) (
 		}
 		if locked.Valid && locked.Int64 == 1 {
 			return func() {
-				release, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				release, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 				defer cancel()
 				var unlocked sql.NullInt64
 				_ = conn.QueryRowContext(release, "SELECT RELEASE_LOCK(?)", name).Scan(&unlocked)

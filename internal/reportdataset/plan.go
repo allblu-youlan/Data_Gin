@@ -36,7 +36,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 	selects := []string{}
 	names := []string{}
 	for _, p := range c.Projections {
-		expr, _, e := b.column(p.AliasID, p.ColumnID)
+		expr, _, e := b.projectionColumn(p.AliasID, p.ColumnID)
 		if e != nil {
 			return Plan{}, e
 		}
@@ -161,9 +161,12 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 		if o.Direction != "ASC" && o.Direction != "DESC" {
 			return Plan{}, queryError("sort direction is invalid")
 		}
-		col, _, e := b.column(o.AliasID, o.ColumnID)
+		col, metadata, e := b.column(o.AliasID, o.ColumnID)
 		if e != nil {
 			return Plan{}, e
+		}
+		if !SortableColumn(metadata) {
+			return Plan{}, queryError("LOB columns cannot be sorted")
 		}
 		if used[col] {
 			return Plan{}, queryError("duplicate sort field")
@@ -202,17 +205,26 @@ func objectName(t Table) (string, error) {
 	return owner + "." + table, nil
 }
 func (b *sqlBuilder) column(alias, id string) (string, Column, error) {
+	return b.columnAccess(alias, id, false)
+}
+func (b *sqlBuilder) projectionColumn(alias, id string) (string, Column, error) {
+	return b.columnAccess(alias, id, true)
+}
+func (b *sqlBuilder) columnAccess(alias, id string, detail bool) (string, Column, error) {
 	t, ok := b.aliases[alias]
 	if !ok {
 		return "", Column{}, queryError("unknown table alias")
 	}
 	c, e := availableColumn(t, id, false)
-	if e != nil {
+	if e != nil && detail {
 		// Detail-only fields may be projected after explicit approval during compilation.
 		c, e = availableColumn(t, id, true)
 		if e != nil {
 			return "", c, e
 		}
+	}
+	if e != nil {
+		return "", c, e
 	}
 	if b.sqlAliases[alias] == "" {
 		raw, ok := b.boundColumns[alias][id]
@@ -315,7 +327,7 @@ func (b *sqlBuilder) condition(c *Condition, depth int, runtime bool) (string, e
 	if e != nil {
 		return "", e
 	}
-	if !contains(Operators(col.LogicalType), c.Operator) {
+	if !contains(ColumnOperators(col), c.Operator) {
 		return "", queryError("operator is incompatible with column")
 	}
 	if runtime {
@@ -480,7 +492,7 @@ func TypedValue(raw json.RawMessage, col Column) (any, error) {
 		}
 		return json.Number(text), nil
 	case "date", "datetime":
-		formats := []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02"}
+		formats := []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02", "20060102", "20060102150405"}
 		for _, format := range formats {
 			if t, e := time.ParseInLocation(format, text, time.FixedZone("Asia/Shanghai", 8*3600)); e == nil {
 				return t, nil

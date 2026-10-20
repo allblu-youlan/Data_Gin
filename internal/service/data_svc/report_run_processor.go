@@ -305,6 +305,12 @@ func (processor *ReportRunProcessor) Process(ctx context.Context, runID uint, fa
 		if errors.Is(executeErr, context.Canceled) && control == reportrepo.RunControlLeaseLost {
 			return nil
 		}
+		if errors.Is(executeErr, reportoracle.ErrSelectLimitExceeded) {
+			return processor.finishFailure(ctx, runID, leaseToken, "REPORT_QUERY_LIMIT_EXCEEDED", "结果超过行数或容量限制，请缩小查询范围", executeErr)
+		}
+		if runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot && strings.Contains(executeErr.Error(), "REPORT_METADATA_CHANGED") {
+			return processor.finishFailure(ctx, runID, leaseToken, "REPORT_METADATA_CHANGED", "依赖字段或授权范围已变化，请刷新字典后重新发布", executeErr)
+		}
 		return processor.finishFailure(ctx, runID, leaseToken, "ORACLE_EXECUTION_FAILED", safeReportOracleExecutionMessage(executeErr), executeErr)
 	}
 	finishedAt := processor.now().UTC()

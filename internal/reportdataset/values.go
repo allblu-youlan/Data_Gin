@@ -13,11 +13,23 @@ func (c Compiled) Materialize(values map[string]any) map[string]any {
 			relation := c.Relations[out.RelationID]
 			value = c.DisplayValue(relation, values)
 		}
+		if out.RawName != "" && out.ValueMode == "RAW" && len(c.Relations[out.RelationID].SourceKeys) > 1 {
+			encoded, _ := json.Marshal(c.RawValue(c.Relations[out.RelationID], values))
+			value = string(encoded)
+		}
+		if out.LogicalType == "string" && value != nil {
+			if _, ok := value.(string); !ok {
+				value = fmt.Sprint(value)
+			}
+		}
 		values[out.Name] = value
 	}
 	return values
 }
 func (c Compiled) DisplayValue(r RelationSchema, values map[string]any) any {
+	return c.displayValue(r, values, 4)
+}
+func (c Compiled) displayValue(r RelationSchema, values map[string]any, depth int) any {
 	for _, key := range r.TargetKeys {
 		if values[key] == nil {
 			return nil
@@ -25,8 +37,13 @@ func (c Compiled) DisplayValue(r RelationSchema, values map[string]any) any {
 	}
 	display := make([]any, 0, len(r.DisplayNames))
 	nonempty := false
-	for _, name := range r.DisplayNames {
+	for i, name := range r.DisplayNames {
 		v := values[name]
+		if depth < 3 {
+			if nested, ok := c.relatedField(r.Relation.ID, r.Relation.DisplayColumnIDs[i], values, depth+1); ok {
+				v = nested
+			}
+		}
 		display = append(display, v)
 		if v != nil && fmt.Sprint(v) != "" {
 			nonempty = true
@@ -79,4 +96,28 @@ func (c Compiled) SnapshotFieldValues(values map[string]any) map[string]map[stri
 		out[p.AliasID][p.ColumnID] = b
 	}
 	return out
+}
+
+func (c Compiled) RelatedFieldDisplay(alias, columnID string, values map[string]any) (any, bool) {
+	return c.relatedField(alias, columnID, values, 0)
+}
+func (c Compiled) relatedField(alias, columnID string, values map[string]any, depth int) (any, bool) {
+	if depth > 3 {
+		return nil, false
+	}
+	var match *RelationSchema
+	for _, r := range c.Relations {
+		if r.Relation.FromAliasID != alias || len(r.Relation.KeyBindings) != 1 || r.Relation.KeyBindings[0].SourceColumnID != columnID {
+			continue
+		}
+		if match != nil {
+			return nil, false
+		}
+		copy := r
+		match = &copy
+	}
+	if match == nil {
+		return nil, false
+	}
+	return c.displayValue(*match, values, depth+1), true
 }

@@ -69,6 +69,9 @@ func (repository *Repository) CreateOrGetExport(ctx context.Context, actor, runI
 			return fmt.Errorf("report export: find existing: %w", err)
 		}
 		requestedAt := command.Outbox.AvailableAt.UTC()
+		if run.RetainsQuerySnapshot() && run.ResultExpiresAt != nil && !requestedAt.Before(*run.ResultExpiresAt) {
+			return ErrReportSelectResultExpired
+		}
 		if run.Status != model.ReportRunStatusSucceeded || run.ResultPurgedAt != nil || run.ResultExpiresAt == nil || !requestedAt.Before(run.ResultExpiresAt.UTC()) {
 			return ErrReportExportRunNotReady
 		}

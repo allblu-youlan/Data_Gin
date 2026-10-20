@@ -40,3 +40,26 @@ func TestBojunLogicalFilterIsNeverSilentlyDiscarded(t *testing.T) {
 		t.Fatalf("unsafe logical resolution: %#v %v", meta, e)
 	}
 }
+func TestLogicalTableInheritsVerifiedPhysicalDisplayKey(t *testing.T) {
+	db := sql.OpenDB(bojunQueryTestConnector{query: func(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+		switch {
+		case strings.Contains(query, "ALL_TAB_COLUMNS"):
+			return &bojunQueryTestRows{columns: []string{"COLUMN_NAME", "DATA_TYPE", "DATA_PRECISION", "DATA_SCALE", "NULLABLE"}, values: [][]driver.Value{{"ID", "NUMBER", int64(10), int64(0), "N"}, {"SCUSTOM01", "VARCHAR2", nil, nil, "Y"}}}, nil
+		case strings.Contains(query, "AD_COLUMN"):
+			if len(args) != 2 || args[0].Value != "16940" || args[1].Value != "12888" {
+				t.Fatalf("logical/physical identity lost: %#v", args)
+			}
+			return &bojunQueryTestRows{columns: []string{"ID", "NAME", "DBNAME", "DESCRIPTION", "ORDERNO", "REF_TABLE_ID", "REF_COLUMN_ID"}, values: [][]driver.Value{{"11", "ID", "ID", "主键", int64(1), nil, nil}, {"99", "SCUSTOM01", "SCUSTOM01", "店仓默认显示", int64(2), nil, nil}}}, nil
+		default:
+			return &bojunQueryTestRows{columns: []string{"CONSTRAINT_NAME", "CONSTRAINT_TYPE", "COLUMN_NAME"}, values: [][]driver.Value{{"PK_STORE", "P", "ID"}}}, nil
+		}
+	}})
+	defer db.Close()
+	a := &Adapter{db: db}
+	source := BojunTableMetadata{ID: "16940", Name: "C_V_RESTORE", RealTableID: "12888", PK: "11"}
+	actual := BojunTableMetadata{ID: "12888", Name: "C_STORE", PK: "11", DK: "99"}
+	table, e := a.InspectBojunTable(t.Context(), BojunNamespace{Owner: "BOSNDS3", DBLink: "Link_To_Bojun"}, source, map[string]BojunTableMetadata{"16940": source, "12888": actual})
+	if e != nil || table.LogicalName != "C_V_RESTORE" || table.PhysicalTable != "C_STORE" || len(table.DisplayFields) != 1 || table.DisplayFields[0] != "SCUSTOM01" {
+		t.Fatalf("%#v %v", table, e)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"gin-biz-web-api/model"
 	"github.com/google/uuid"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -76,33 +77,10 @@ func compileSelectDraft(ctx context.Context, draft *reportrepo.Draft) (reportdat
 	if e = json.Unmarshal([]byte(draft.Version.InputSchemaJSON), &schema); e != nil {
 		return compiled, invalidReport("invalid input schema")
 	}
-	known := map[string]bool{}
-	for code := range schema {
-		known[code] = true
+	if err := validateSelectInputBindings(compiled, schema); err != nil {
+		return compiled, err
 	}
-	var check func(*reportdataset.Condition) error
-	check = func(cond *reportdataset.Condition) error {
-		if cond == nil {
-			return nil
-		}
-		if cond.Value != nil && cond.Value.Kind == "PARAMETER" && !known[cond.Value.Code] {
-			return invalidReport("query references an undefined input parameter")
-		}
-		for i := range cond.Items {
-			if e := check(&cond.Items[i]); e != nil {
-				return e
-			}
-		}
-		return nil
-	}
-	if e = check(q.Where); e != nil {
-		return compiled, e
-	}
-	for _, r := range q.Relations {
-		if e = check(r.MatchConditions); e != nil {
-			return compiled, e
-		}
-	}
+
 	return compiled, nil
 }
 func selectReportColumns(c reportdataset.Compiled) []model.ReportColumn {
@@ -115,14 +93,14 @@ func selectReportColumns(c reportdataset.Compiled) []model.ReportColumn {
 }
 func selectCompiledContract(draft *reportrepo.Draft, c reportdataset.Compiled) reportcontract.Compiled {
 	// Include input and report grants in the immutable hash alongside the dataset.
-	payload, _ := json.Marshal(SelectReportContract{Dataset: c, InputSchema: json.RawMessage(draft.Version.InputSchemaJSON), Grants: draft.Grants, DatasourceID: draft.Version.DatasourceID})
-	return reportcontract.Compiled{SpecJSON: payload, Hashes: reportcontract.Hashes{Contract: reportdataset.Hash(json.RawMessage(payload)), ParameterSchema: reportdataset.Hash(json.RawMessage(draft.Version.InputSchemaJSON)), ProcedureSignature: reportdataset.Hash("SELECT_SNAPSHOT"), ResultSchema: c.SchemaHash, Permission: reportdataset.Hash(draft.Grants), ExportSchema: reportdataset.Hash(c.Outputs)}}
+	payload, _ := json.Marshal(SelectReportContract{Dataset: c, InputSchema: json.RawMessage(draft.Version.InputSchemaJSON), Grants: selectGrantContract(draft.Grants), DatasourceID: draft.Version.DatasourceID})
+	return reportcontract.Compiled{SpecJSON: payload, Hashes: reportcontract.Hashes{Contract: reportdataset.Hash(json.RawMessage(payload)), ParameterSchema: reportdataset.Hash(json.RawMessage(draft.Version.InputSchemaJSON)), ProcedureSignature: reportdataset.Hash("SELECT_SNAPSHOT"), ResultSchema: c.SchemaHash, Permission: reportdataset.Hash(selectGrantContract(draft.Grants)), ExportSchema: reportdataset.Hash(c.Outputs)}}
 }
 
 type SelectReportContract struct {
 	Dataset      reportdataset.Compiled `json:"dataset"`
 	InputSchema  json.RawMessage        `json:"inputSchema"`
-	Grants       []model.ReportGrant    `json:"grants"`
+	Grants       []SelectGrantContract  `json:"grants"`
 	DatasourceID uint                   `json:"datasourceId"`
 }
 
@@ -236,4 +214,99 @@ func (service *ReportRunService) createSelectRun(ctx context.Context, actor, def
 		return nil, classifyReportRunStoreError(e)
 	}
 	return &ReportRunDTO{ID: command.Run.ID, RunUUID: command.Run.RunUUID, DefinitionID: definitionID, VersionID: command.Run.VersionID, Status: command.Run.Status, CreatedAt: command.Run.CreatedAt}, nil
+}
+
+type SelectGrantContract struct {
+	SubjectType string   `json:"subjectType"`
+	SubjectID   uint     `json:"subjectId"`
+	Actions     []string `json:"actions"`
+}
+
+func selectGrantContract(grants []model.ReportGrant) []SelectGrantContract {
+	out := make([]SelectGrantContract, 0, len(grants))
+	for _, grant := range grants {
+		actions := []string{}
+		_ = json.Unmarshal([]byte(grant.ActionsJSON), &actions)
+		sort.Strings(actions)
+		out = append(out, SelectGrantContract{SubjectType: grant.SubjectType, SubjectID: grant.SubjectID, Actions: actions})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SubjectType == out[j].SubjectType {
+			return out[i].SubjectID < out[j].SubjectID
+		}
+		return out[i].SubjectType < out[j].SubjectType
+	})
+	return out
+}
+func validateSelectInputBindings(c reportdataset.Compiled, schema map[string]reportRunInputFieldSchema) error {
+	aliases := map[string]reportdataset.Table{"base": c.Tables[c.Query.Base.TableID]}
+	for _, r := range c.Query.Relations {
+		aliases[r.ID] = c.Tables[r.TargetTableID]
+	}
+	for _, field := range schema {
+		if field.QueryName != "" {
+			return invalidReport("SELECT inputs must use relation options or approved constants")
+		}
+		if field.RelationID == "" {
+			continue
+		}
+		r, ok := c.Relations[field.RelationID]
+		if !ok || field.Control != "SELECT" || (field.Type != "str" && field.Type != "list[str]") {
+			return invalidReport("input option relation is invalid")
+		}
+		validKey := field.RelationKeyColumnID == "" && len(r.Relation.KeyBindings) == 1
+		for _, binding := range r.Relation.KeyBindings {
+			if binding.TargetColumnID == field.RelationKeyColumnID {
+				validKey = true
+			}
+		}
+		if !validKey {
+			return invalidReport("input option key is missing or not part of the relation")
+		}
+	}
+	var check func(*reportdataset.Condition) error
+	check = func(condition *reportdataset.Condition) error {
+		if condition == nil {
+			return nil
+		}
+		if condition.Value != nil && condition.Value.Kind == "PARAMETER" {
+			field, ok := schema[condition.Value.Code]
+			if !ok {
+				return invalidReport("query references an undefined input parameter")
+			}
+			list := condition.Operator == "IN" || condition.Operator == "NOT_IN" || condition.Operator == "BETWEEN"
+			if list != conditionTypeIsList(field.Type, false) {
+				return invalidReport("parameter scalar/list shape does not match query operator")
+			}
+			typ := field.Type
+			if list {
+				typ = conditionListItemType(typ)
+			}
+			var col reportdataset.Column
+			for _, candidate := range aliases[condition.AliasID].Columns {
+				if candidate.ID == condition.ColumnID {
+					col = candidate
+					break
+				}
+			}
+			if col.LogicalType == "string" && typ != "str" || col.LogicalType == "integer" && typ != "number" && typ != "str" || col.LogicalType == "decimal" && typ != "number" && typ != "str" || (col.LogicalType == "date" || col.LogicalType == "datetime") && typ != "str" {
+				return invalidReport("parameter type does not match query column")
+			}
+		}
+		for i := range condition.Items {
+			if e := check(&condition.Items[i]); e != nil {
+				return e
+			}
+		}
+		return nil
+	}
+	if e := check(c.Query.Where); e != nil {
+		return e
+	}
+	for _, r := range c.Query.Relations {
+		if e := check(r.MatchConditions); e != nil {
+			return e
+		}
+	}
+	return nil
 }

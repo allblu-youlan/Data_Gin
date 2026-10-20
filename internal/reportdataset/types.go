@@ -99,3 +99,10 @@ func LogicalType(t string, scale *int) string {
 		return "string"
 	}
 }
+func ColumnOperators(c Column) []string {
+	if c.OracleType == "CLOB" || c.OracleType == "NCLOB" {
+		return []string{"PREFIX", "CONTAINS", "IS_NULL", "IS_NOT_NULL"}
+	}
+	return Operators(c.LogicalType)
+}
+func SortableColumn(c Column) bool { return c.OracleType != "CLOB" && c.OracleType != "NCLOB" }

@@ -139,7 +139,7 @@ func (a *Adapter) InspectBojunTable(ctx context.Context, n BojunNamespace, sourc
 		c.IsPhysical = true
 		c.IsSelectable = bojunSelectableType(c.OracleType)
 		c.LogicalType = reportdataset.LogicalType(c.OracleType, c.Scale)
-		c.SupportedOperators = reportdataset.Operators(c.LogicalType)
+		c.SupportedOperators = reportdataset.ColumnOperators(c)
 		actual[c.DBName] = c
 	}
 	e = rows.Err()
@@ -181,15 +181,16 @@ func (a *Adapter) InspectBojunTable(ctx context.Context, n BojunNamespace, sourc
 	}
 	constraints, _ := n.dictionary("ALL_CONSTRAINTS")
 	consCols, _ := n.dictionary("ALL_CONS_COLUMNS")
-	rows, e = a.db.QueryContext(ctx, `SELECT c.CONSTRAINT_NAME, cc.COLUMN_NAME FROM `+constraints+` c JOIN `+consCols+` cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME WHERE c.OWNER = :1 AND c.TABLE_NAME = :2 AND c.CONSTRAINT_TYPE IN ('P','U') AND c.STATUS = 'ENABLED' AND c.VALIDATED = 'VALIDATED' ORDER BY c.CONSTRAINT_NAME, cc.POSITION`, strings.ToUpper(n.Owner), physical)
+	rows, e = a.db.QueryContext(ctx, `SELECT c.CONSTRAINT_NAME, c.CONSTRAINT_TYPE, cc.COLUMN_NAME FROM `+constraints+` c JOIN `+consCols+` cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME WHERE c.OWNER = :1 AND c.TABLE_NAME = :2 AND c.CONSTRAINT_TYPE IN ('P','U') AND c.STATUS = 'ENABLED' AND c.VALIDATED = 'VALIDATED' ORDER BY c.CONSTRAINT_NAME, cc.POSITION`, strings.ToUpper(n.Owner), physical)
 	if e != nil {
 		return t, e
 	}
 	keys := map[string][]string{}
+	kinds := map[string]string{}
 	order := []string{}
 	for rows.Next() {
-		var k, c string
-		if e = rows.Scan(&k, &c); e != nil {
+		var k, kind, c string
+		if e = rows.Scan(&k, &kind, &c); e != nil {
 			rows.Close()
 			return t, e
 		}
@@ -197,6 +198,7 @@ func (a *Adapter) InspectBojunTable(ctx context.Context, n BojunNamespace, sourc
 			order = append(order, k)
 		}
 		keys[k] = append(keys[k], c)
+		kinds[k] = kind
 	}
 	e = rows.Err()
 	rows.Close()
@@ -213,11 +215,14 @@ func (a *Adapter) InspectBojunTable(ctx context.Context, n BojunNamespace, sourc
 		}
 		if valid {
 			t.UniqueKeys = append(t.UniqueKeys, keys[key])
+			if kinds[key] == "P" {
+				t.PrimaryKeys = append([]string{}, keys[key]...)
+			}
 		}
 	}
 	pk := sourceToDB[source.PK]
 	for _, key := range t.UniqueKeys {
-		if len(key) == 1 && key[0] == pk {
+		if len(t.PrimaryKeys) == 0 && len(key) == 1 && key[0] == pk {
 			t.PrimaryKeys = key
 			break
 		}
@@ -263,19 +268,19 @@ func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Tab
 	if e != nil {
 		return e
 	}
-	rows, e := a.db.QueryContext(ctx, `SELECT COLUMN_NAME, DATA_TYPE, DATA_PRECISION, DATA_SCALE FROM `+dict+` WHERE OWNER = :1 AND TABLE_NAME = :2`, t.Owner, t.PhysicalTable)
+	rows, e := a.db.QueryContext(ctx, `SELECT COLUMN_NAME, DATA_TYPE, DATA_PRECISION, DATA_SCALE, NULLABLE FROM `+dict+` WHERE OWNER = :1 AND TABLE_NAME = :2`, t.Owner, t.PhysicalTable)
 	if e != nil {
 		return e
 	}
 	defer rows.Close()
 	actual := map[string]string{}
 	for rows.Next() {
-		var name, typ string
+		var name, typ, nullable string
 		var p, s sql.NullInt64
-		if e = rows.Scan(&name, &typ, &p, &s); e != nil {
+		if e = rows.Scan(&name, &typ, &p, &s, &nullable); e != nil {
 			return e
 		}
-		actual[name] = fmt.Sprintf("%s:%v:%v", typ, p, s)
+		actual[name] = fmt.Sprintf("%s:%v:%v:%t", typ, p, s, nullable == "Y")
 	}
 	if e = rows.Err(); e != nil {
 		return e
@@ -291,7 +296,7 @@ func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Tab
 		if c.Scale != nil {
 			s = sql.NullInt64{Int64: int64(*c.Scale), Valid: true}
 		}
-		if actual[c.DBName] != fmt.Sprintf("%s:%v:%v", c.OracleType, p, s) {
+		if actual[c.DBName] != fmt.Sprintf("%s:%v:%v:%t", c.OracleType, p, s, c.Nullable) {
 			return fmt.Errorf("REPORT_METADATA_CHANGED: source schema changed")
 		}
 	}

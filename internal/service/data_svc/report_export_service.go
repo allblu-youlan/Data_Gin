@@ -60,7 +60,9 @@ func (service *ReportExportService) Create(ctx context.Context, actor, runID uin
 	created, err := service.store.CreateOrGetExport(ctx, actor, runID, query, command)
 	if err != nil {
 		switch {
-		case errors.Is(err, reportrepo.ErrReportRunAccessNotFound):
+		case errors.Is(err, reportrepo.ErrReportSelectResultExpired):
+			return nil, false, ErrReportSelectResultExpired
+		case errors.Is(err, reportrepo.ErrReportActionDenied), errors.Is(err, reportrepo.ErrReportRunAccessNotFound):
 			return nil, false, ErrReportExportNotFound
 		case errors.Is(err, reportrepo.ErrReportExportRunNotReady):
 			return nil, false, ErrReportExportConflict

@@ -368,6 +368,11 @@ func (repository *Repository) LoadExportRuntime(ctx context.Context, exportID ui
 	if err := repository.db.WithContext(ctx).Where("id = ? AND driver = ?", runtime.Version.DatasourceID, model.ReportDatasourceDriverOracle).First(&runtime.Datasource).Error; err != nil {
 		return nil, fmt.Errorf("report export execution: load datasource: %w", err)
 	}
+	if runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		if err := repository.authorizeRunExport(ctx, repository.db, runtime.Run.RequestedBy, &runtime.Run); err != nil {
+			return nil, err
+		}
+	}
 	return runtime, nil
 }
 

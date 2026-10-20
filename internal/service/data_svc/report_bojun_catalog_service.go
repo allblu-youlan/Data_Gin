@@ -31,7 +31,14 @@ func bojunNamespace() reportoracle.BojunNamespace {
 	}
 	return reportoracle.BojunNamespace{Owner: owner, DBLink: link}
 }
-func (s *ReportBojunCatalogService) open(ctx context.Context, ds uint) (*reportoracle.Adapter, error) {
+
+type bojunCatalogOracleLease struct {
+	*reportoracle.Adapter
+	release func()
+}
+
+func (l *bojunCatalogOracleLease) Close() error { l.release(); return nil }
+func (s *ReportBojunCatalogService) open(ctx context.Context, ds uint) (*bojunCatalogOracleLease, error) {
 	d, e := s.repo.GetReportDatasource(ctx, ds)
 	if e != nil || !d.Enabled {
 		return nil, ErrReportDatasourceNotFound
@@ -40,11 +47,11 @@ func (s *ReportBojunCatalogService) open(ctx context.Context, ds uint) (*reporto
 	if e != nil {
 		return nil, ErrReportDatasourceCredentialUnavailable
 	}
-	a, e := reportoracle.Open(ctx, oracleConfigFromDatasource(*d, password))
+	a, release, e := acquireSelectOracle(ctx, *d, password)
 	if e != nil {
 		return nil, ErrReportDatasourceOracleUnavailable
 	}
-	return a, nil
+	return &bojunCatalogOracleLease{Adapter: a, release: release}, nil
 }
 func (s *ReportBojunCatalogService) Start(ctx context.Context, ds uint, scope string, tableID uint) (*model.ReportBojunSyncRun, error) {
 	if _, e := s.repo.GetReportDatasource(ctx, ds); e != nil {
@@ -79,10 +86,11 @@ func (s *ReportBojunCatalogService) ProcessSync(ctx context.Context, id uint) er
 	if e == nil {
 		defer a.Close()
 		if run.Scope == "TABLE" {
-			_, e = s.refresh(ctx, a, run.DatasourceID, run.TableID)
+			_, e = s.refresh(ctx, a.Adapter, run.DatasourceID, run.TableID)
 		} else {
+			e = s.repo.ResetBojunStaging(ctx, id)
 			after := "0"
-			for {
+			for e == nil {
 				var page []reportoracle.BojunTableMetadata
 				page, e = a.ListBojunMetadata(ctx, bojunNamespace(), after, 200)
 				if e != nil {
@@ -241,7 +249,7 @@ func (s *ReportBojunCatalogService) Get(ctx context.Context, ds, id uint, refres
 			return BojunTableDTO{}, e
 		}
 		defer a.Close()
-		return s.refresh(ctx, a, ds, id)
+		return s.refresh(ctx, a.Adapter, ds, id)
 	}
 	return s.dto(ctx, *t)
 }
