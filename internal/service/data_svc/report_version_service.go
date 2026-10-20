@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"gin-biz-web-api/internal/reportdataset"
 	"gin-biz-web-api/internal/reportrepo"
 )
 
@@ -57,15 +58,17 @@ type ReportVersionDiffDTO struct {
 }
 
 type ReportVersionConfigurationDTO struct {
-	DatasourceID  uint                 `json:"datasourceId"`
-	Procedure     ReportProcedureDTO   `json:"procedure"`
-	ExecutionMode string               `json:"executionMode"`
-	InputSchema   json.RawMessage      `json:"inputSchema"`
-	Result        ReportResultDTO      `json:"result"`
-	CallTemplate  string               `json:"callTemplate"`
-	Parameters    []ReportParameterDTO `json:"parameters"`
-	Columns       []ReportColumnDTO    `json:"columns"`
-	Grants        []ReportGrantDTO     `json:"grants"`
+	QuerySpec       json.RawMessage      `json:"querySpec,omitempty"`
+	ExecutionPolicy json.RawMessage      `json:"executionPolicy,omitempty"`
+	DatasourceID    uint                 `json:"datasourceId"`
+	Procedure       ReportProcedureDTO   `json:"procedure"`
+	ExecutionMode   string               `json:"executionMode"`
+	InputSchema     json.RawMessage      `json:"inputSchema"`
+	Result          ReportResultDTO      `json:"result"`
+	CallTemplate    string               `json:"callTemplate"`
+	Parameters      []ReportParameterDTO `json:"parameters"`
+	Columns         []ReportColumnDTO    `json:"columns"`
+	Grants          []ReportGrantDTO     `json:"grants"`
 }
 
 type ReportVersionDetailDTO struct {
@@ -111,6 +114,9 @@ func (service *ReportVersionService) Diff(ctx context.Context, actor, definition
 		diffSection("excel", "Excel 契约", hashChange("exportSchemaHash", "Excel Schema", base.Version.ExportSchemaHash, target.Version.ExportSchemaHash)),
 		diffSection("permissions", "权限", append(countChange("grantCount", "授权数量", base.GrantCount, target.GrantCount), hashChange("permissionHash", "权限契约", base.Version.PermissionHash, target.Version.PermissionHash)...)),
 	}
+	if base.Version.ExecutionMode == "SELECT_SNAPSHOT" || target.Version.ExecutionMode == "SELECT_SNAPSHOT" {
+		sections = append(sections, diffSection("query", "查询定义", hashChange("querySpec", "查询定义", reportdataset.Hash(base.Version.QuerySpecJSON), reportdataset.Hash(target.Version.QuerySpecJSON))), diffSection("policy", "执行策略", hashChange("executionPolicy", "执行策略", reportdataset.Hash(base.Version.ExecutionPolicyJSON), reportdataset.Hash(target.Version.ExecutionPolicyJSON))))
+	}
 	return &ReportVersionDiffDTO{Base: baseDTO, Target: targetDTO, Sections: sections}, nil
 }
 
@@ -127,6 +133,7 @@ func (service *ReportVersionService) Get(ctx context.Context, actor, definitionI
 		Summary: versionSummaryDTO(reportrepo.VersionSummary{Version: draft.Version, ParameterCount: len(draft.Parameters), ColumnCount: len(draft.Columns), GrantCount: len(draft.Grants)}),
 		Configuration: ReportVersionConfigurationDTO{
 			DatasourceID: draft.Version.DatasourceID, Procedure: detail.Procedure, ExecutionMode: detail.ExecutionMode,
+			QuerySpec: detail.QuerySpec, ExecutionPolicy: detail.ExecutionPolicy,
 			InputSchema: detail.InputSchema, Result: detail.Result, CallTemplate: detail.CallTemplate,
 			Parameters: detail.Parameters, Columns: detail.Columns, Grants: detail.Grants,
 		},

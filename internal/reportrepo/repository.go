@@ -67,6 +67,10 @@ type DraftPage struct {
 }
 
 type Publication struct {
+	ExecutionMode        string
+	Columns              []model.ReportColumn
+	MetadataSnapshotJSON model.JSONText
+
 	CallTemplate                  string
 	CompiledSpecJSON              model.JSONText
 	ContractHash                  string
@@ -375,10 +379,19 @@ func (repository *Repository) PublishDraft(ctx context.Context, ownerUserID, def
 		if err := replaceResultTableBinding(ctx, tx, definitionID, current.ID, current.ReportVersion, publication.ConnectionFingerprint, publication.ConnectionIdentitySource); err != nil {
 			return err
 		}
+		if current.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+			published.Columns = publication.Columns
+			current.MetadataSnapshotJSON = publication.MetadataSnapshotJSON
+			published.Version.MetadataSnapshotJSON = publication.MetadataSnapshotJSON
+			if err := replaceCollections(ctx, tx, ownerUserID, definitionID, current.ID, nil, published.Columns, published.Grants); err != nil {
+				return err
+			}
+		}
 		publishedAt = time.Now().UTC()
 		publishedUpdates := map[string]interface{}{
 			"status": model.ReportVersionStatusPublished, "call_template": publication.CallTemplate, "compiled_spec_json": publication.CompiledSpecJSON,
-			"contract_hash": publication.ContractHash, "parameter_schema_hash": publication.ParameterSchemaHash,
+			"metadata_snapshot_json": current.MetadataSnapshotJSON,
+			"contract_hash":          publication.ContractHash, "parameter_schema_hash": publication.ParameterSchemaHash,
 			"procedure_signature_hash": publication.ProcedureSignatureHash, "result_schema_hash": publication.ResultSchemaHash,
 			"permission_hash": publication.PermissionHash, "export_schema_hash": publication.ExportSchemaHash,
 			"schema_probe_token": publication.SchemaProbeToken, "schema_validated_at": publication.SchemaValidatedAt,
@@ -541,7 +554,7 @@ func switchPublishedDefinition(ctx context.Context, tx *gorm.DB, ownerUserID, de
 }
 
 func validPublication(value Publication) bool {
-	return strings.TrimSpace(value.CallTemplate) != "" && json.Valid([]byte(value.CompiledSpecJSON)) && len(value.ContractHash) == 64 && len(value.ParameterSchemaHash) == 64 &&
+	return (strings.TrimSpace(value.CallTemplate) != "" || value.ExecutionMode == model.ReportExecutionModeSelectSnapshot) && json.Valid([]byte(value.CompiledSpecJSON)) && len(value.ContractHash) == 64 && len(value.ParameterSchemaHash) == 64 &&
 		len(value.ProcedureSignatureHash) == 64 && len(value.ResultSchemaHash) == 64 && len(value.PermissionHash) == 64 &&
 		len(value.ExportSchemaHash) == 64 && len(value.SchemaProbeToken) == 36 && !value.SchemaValidatedAt.IsZero() &&
 		len(value.ConnectionFingerprint) == 64 && value.ConnectionIdentitySource == reportidentity.BindingIdentitySourceOracle &&

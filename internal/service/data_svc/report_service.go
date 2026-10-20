@@ -69,24 +69,26 @@ func NewReportDraftServiceWithStore(store reportDraftStore) *ReportDraftService 
 }
 
 type ReportDraftDTO struct {
-	ID            uint                 `json:"id"`
-	Code          string               `json:"code"`
-	Name          string               `json:"name"`
-	Category      string               `json:"category"`
-	Description   string               `json:"description"`
-	DatasourceID  uint                 `json:"datasourceId"`
-	Status        string               `json:"status"`
-	LockVersion   uint64               `json:"lockVersion"`
-	Procedure     ReportProcedureDTO   `json:"procedure"`
-	ExecutionMode string               `json:"executionMode"`
-	InputSchema   json.RawMessage      `json:"inputSchema"`
-	Result        ReportResultDTO      `json:"result"`
-	CallTemplate  string               `json:"callTemplate"`
-	Parameters    []ReportParameterDTO `json:"parameters"`
-	Columns       []ReportColumnDTO    `json:"columns"`
-	Grants        []ReportGrantDTO     `json:"grants"`
-	CreatedAt     time.Time            `json:"createdAt"`
-	UpdatedAt     time.Time            `json:"updatedAt"`
+	QuerySpec       json.RawMessage      `json:"querySpec,omitempty"`
+	ExecutionPolicy json.RawMessage      `json:"executionPolicy,omitempty"`
+	ID              uint                 `json:"id"`
+	Code            string               `json:"code"`
+	Name            string               `json:"name"`
+	Category        string               `json:"category"`
+	Description     string               `json:"description"`
+	DatasourceID    uint                 `json:"datasourceId"`
+	Status          string               `json:"status"`
+	LockVersion     uint64               `json:"lockVersion"`
+	Procedure       ReportProcedureDTO   `json:"procedure"`
+	ExecutionMode   string               `json:"executionMode"`
+	InputSchema     json.RawMessage      `json:"inputSchema"`
+	Result          ReportResultDTO      `json:"result"`
+	CallTemplate    string               `json:"callTemplate"`
+	Parameters      []ReportParameterDTO `json:"parameters"`
+	Columns         []ReportColumnDTO    `json:"columns"`
+	Grants          []ReportGrantDTO     `json:"grants"`
+	CreatedAt       time.Time            `json:"createdAt"`
+	UpdatedAt       time.Time            `json:"updatedAt"`
 }
 
 type ReportDraftSummaryDTO struct {
@@ -295,6 +297,9 @@ func reportDraftFromRequest(actor uint, request requestbody.ReportDraftSaveReque
 	if !reportCodePattern.MatchString(request.Code) || request.Name == "" || utf8.RuneCountInString(request.Name) > 128 || request.Category == "" ||
 		utf8.RuneCountInString(request.Category) > 64 || utf8.RuneCountInString(request.Description) > 500 || request.DatasourceID == 0 {
 		return nil, invalidReport("invalid report identity")
+	}
+	if strings.EqualFold(strings.TrimSpace(request.ExecutionMode), model.ReportExecutionModeSelectSnapshot) {
+		return selectDraftFromRequest(actor, request)
 	}
 	procedure, err := reportoracle.NormalizeProcedureRef(reportoracle.ProcedureRef{
 		Owner: request.Procedure.Owner, Package: request.Procedure.Package,
@@ -741,17 +746,19 @@ func cloneJSON(raw []byte) json.RawMessage {
 }
 
 type reportInputFieldSchema struct {
-	Type          string          `json:"type"`
-	DisplayName   string          `json:"displayName"`
-	DisplayOrder  *int            `json:"displayOrder,omitempty"`
-	Control       string          `json:"control,omitempty"`
-	Format        string          `json:"format,omitempty"`
-	Required      bool            `json:"required,omitempty"`
-	Multiple      bool            `json:"multiple,omitempty"`
-	Example       json.RawMessage `json:"example,omitempty"`
-	DefaultValue  json.RawMessage `json:"default,omitempty"`
-	AllowedValues json.RawMessage `json:"allowedValues,omitempty"`
-	QueryName     string          `json:"queryName,omitempty"`
+	RelationID          string          `json:"relationId,omitempty"`
+	RelationKeyColumnID string          `json:"relationKeyColumnId,omitempty"`
+	Type                string          `json:"type"`
+	DisplayName         string          `json:"displayName"`
+	DisplayOrder        *int            `json:"displayOrder,omitempty"`
+	Control             string          `json:"control,omitempty"`
+	Format              string          `json:"format,omitempty"`
+	Required            bool            `json:"required,omitempty"`
+	Multiple            bool            `json:"multiple,omitempty"`
+	Example             json.RawMessage `json:"example,omitempty"`
+	DefaultValue        json.RawMessage `json:"default,omitempty"`
+	AllowedValues       json.RawMessage `json:"allowedValues,omitempty"`
+	QueryName           string          `json:"queryName,omitempty"`
 }
 
 func canonicalReportInputSchema(raw json.RawMessage) (json.RawMessage, error) {
@@ -942,6 +949,7 @@ func reportDraftDTO(draft *reportrepo.Draft) *ReportDraftDTO {
 	}
 	result := &ReportDraftDTO{
 		ID: draft.Definition.ID, Code: draft.Definition.Code, Name: draft.Definition.Name,
+		QuerySpec: cloneJSON([]byte(draft.Version.QuerySpecJSON)), ExecutionPolicy: cloneJSON([]byte(draft.Version.ExecutionPolicyJSON)),
 		Category: draft.Definition.Category, Description: draft.Definition.Description,
 		DatasourceID: draft.Definition.DatasourceID, Status: draft.Definition.Status, LockVersion: draft.LockVersion,
 		Procedure:     ReportProcedureDTO{Owner: draft.Version.ProcedureOwner, Package: draft.Version.PackageName, Name: draft.Version.ProcedureName, Overload: draft.Version.ProcedureOverload, JSONInputArgName: draft.Version.JSONInputArgName, ResultCursorArgName: draft.Version.ResultCursorArgName},

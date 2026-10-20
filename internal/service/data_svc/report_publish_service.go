@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"encoding/json"
 	"gin-biz-web-api/internal/reportcontract"
+	"gin-biz-web-api/internal/reportdataset"
 	"gin-biz-web-api/internal/reportidentity"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportrepo"
@@ -140,6 +142,7 @@ func (service *ReportPublishService) Publish(ctx context.Context, actor, definit
 	}
 	validatedAt := service.now().UTC()
 	published, err := service.store.PublishDraft(ctx, actor, definitionID, expectedLockVersion, reportrepo.Publication{
+		ExecutionMode: draft.Version.ExecutionMode, Columns: draft.Columns, MetadataSnapshotJSON: draft.Version.MetadataSnapshotJSON,
 		CallTemplate: draft.Version.CallTemplate, CompiledSpecJSON: model.JSONText(inspection.compiled.SpecJSON), ContractHash: inspection.compiled.Hashes.Contract,
 		ParameterSchemaHash: inspection.compiled.Hashes.ParameterSchema, ProcedureSignatureHash: inspection.compiled.Hashes.ProcedureSignature,
 		ResultSchemaHash: inspection.compiled.Hashes.ResultSchema, PermissionHash: inspection.compiled.Hashes.Permission,
@@ -255,6 +258,41 @@ func (service *ReportPublishService) inspectContract(
 		return inspection, fmt.Errorf("%w: Oracle database identity is incomplete", ErrReportPublicationInvalid)
 	}
 
+	if draft.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		if !selectReportsEnabled() {
+			return inspection, invalidReport("自定义查询功能尚未启用")
+		}
+		var dataset reportdataset.Compiled
+		if draft.Version.Status == model.ReportVersionStatusPublished {
+			dataset, err = decodeSelectContract(draft.Version)
+		} else {
+			dataset, err = compileSelectDraft(inspectionCtx, draft)
+		}
+		if err != nil {
+			return inspection, err
+		}
+		source, ok := inspector.(interface {
+			ValidateBojunMetadata(context.Context, reportdataset.Table) error
+		})
+		if !ok {
+			return inspection, ErrReportPublicationInvalid
+		}
+		if err := inspector.ValidateJSONSnapshotStore(inspectionCtx); err != nil {
+			return inspection, classifyOracleInspectionError("JSON snapshot store", err)
+		}
+		for _, table := range dataset.Tables {
+			if err := source.ValidateBojunMetadata(inspectionCtx, table); err != nil {
+				return inspection, invalidReport("REPORT_METADATA_CHANGED: 发布依赖字段已发生变化")
+			}
+		}
+		draft.Columns = selectReportColumns(dataset)
+		metadata, _ := json.Marshal(dataset.Tables)
+		draft.Version.MetadataSnapshotJSON = model.JSONText(metadata)
+		inspection.compiled = selectCompiledContract(draft, dataset)
+		inspection.resultColumnCount = len(dataset.Outputs)
+		inspection.resultTableValidated = true
+		return inspection, nil
+	}
 	procedureRef := reportoracle.ProcedureRef{Owner: draft.Version.ProcedureOwner, Package: draft.Version.PackageName, Name: draft.Version.ProcedureName, Overload: draft.Version.ProcedureOverload}
 	procedure, err := inspector.InspectProcedure(inspectionCtx, procedureRef)
 	if err != nil {

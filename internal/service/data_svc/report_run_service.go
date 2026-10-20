@@ -198,17 +198,19 @@ func (service *ReportRunService) createRunFromPublished(ctx context.Context, act
 }
 
 type reportRunInputFieldSchema struct {
-	Type          string            `json:"type"`
-	DisplayName   string            `json:"displayName"`
-	DisplayOrder  *int              `json:"displayOrder,omitempty"`
-	Control       string            `json:"control,omitempty"`
-	Format        string            `json:"format,omitempty"`
-	Required      bool              `json:"required,omitempty"`
-	Multiple      bool              `json:"multiple,omitempty"`
-	Example       json.RawMessage   `json:"example,omitempty"`
-	DefaultValue  json.RawMessage   `json:"default,omitempty"`
-	AllowedValues []json.RawMessage `json:"allowedValues,omitempty"`
-	QueryName     string            `json:"queryName,omitempty"`
+	RelationID          string            `json:"relationId,omitempty"`
+	RelationKeyColumnID string            `json:"relationKeyColumnId,omitempty"`
+	Type                string            `json:"type"`
+	DisplayName         string            `json:"displayName"`
+	DisplayOrder        *int              `json:"displayOrder,omitempty"`
+	Control             string            `json:"control,omitempty"`
+	Format              string            `json:"format,omitempty"`
+	Required            bool              `json:"required,omitempty"`
+	Multiple            bool              `json:"multiple,omitempty"`
+	Example             json.RawMessage   `json:"example,omitempty"`
+	DefaultValue        json.RawMessage   `json:"default,omitempty"`
+	AllowedValues       []json.RawMessage `json:"allowedValues,omitempty"`
+	QueryName           string            `json:"queryName,omitempty"`
 }
 
 func (service *ReportRunService) createJSONInputRun(
