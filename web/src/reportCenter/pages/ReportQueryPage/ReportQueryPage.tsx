@@ -52,6 +52,14 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
   const [detailColumn, setDetailColumn] = useState<ReportResultColumn | null>(null)
   const pollAbortRef = useRef<AbortController | null>(null)
   const keepRunningRef = useRef<HTMLButtonElement>(null)
+  const relationDependencyValues = useMemo(() => {
+    const conditions: Record<string, unknown> = {}
+    for (const [code, field] of orderedReportInputEntries(contract?.inputSchema ?? {})) {
+      const normalized = buildReportConditions({ [code]: field }, values)
+      if (normalized.ok) Object.assign(conditions, normalized.conditions)
+    }
+    return conditions
+  }, [contract, values])
 
   function replacePollController() {
     pollAbortRef.current?.abort()
@@ -330,7 +338,7 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
         {parametersOpen ? <>
         {contractState.loading ? <FeedbackState kind="loading" title="正在加载下载条件" /> : null}
         {contractState.error ? <FeedbackState kind="error" title="下载条件加载失败" description={contractState.error} /> : null}
-        {contract ? <form className={styles.parameterForm} onSubmit={(event) => void submitRun(event)}>{contract.jsonInput ? orderedReportInputEntries(contract.inputSchema).map(([code, field]) => <ConditionField client={client} reportId={contract.definitionId} versionId={contract.versionId} code={code} disabled={frozen || operation.busy} field={field} key={code} value={values[code]} onChange={(value) => setValues((current) => ({ ...current, [code]: value }))} />) : visibleReportParameters(contract.parameters).map((parameter) => <ParameterField disabled={frozen || operation.busy} key={parameter.code} parameter={parameter} value={values[parameter.code]} onChange={(value) => setValues((current) => ({ ...current, [parameter.code]: value }))} />)}{selectSnapshot ? <ReportRuntimeQueryEditor contract={contract} value={queryInputs} disabled={operation.busy} onChange={setQueryInputs} /> : null}<div className={styles.runActions}><Button variant="primary" type="submit" disabled={frozen || operation.busy || (!selectSnapshot && !canExport)}><Play aria-hidden="true" />{selectSnapshot ? run ? '重新查询' : '查询报表' : '生成下载文件'}</Button></div></form> : null}
+        {contract ? <form className={styles.parameterForm} onSubmit={(event) => void submitRun(event)}>{contract.jsonInput ? orderedReportInputEntries(contract.inputSchema).map(([code, field]) => <ConditionField client={client} reportId={contract.definitionId} versionId={contract.versionId} code={code} disabled={frozen || operation.busy} field={field} dependencyValues={relationDependencyValues} key={code} value={values[code]} onChange={(value) => setValues((current) => ({ ...current, [code]: value }))} />) : visibleReportParameters(contract.parameters).map((parameter) => <ParameterField disabled={frozen || operation.busy} key={parameter.code} parameter={parameter} value={values[parameter.code]} onChange={(value) => setValues((current) => ({ ...current, [parameter.code]: value }))} />)}{selectSnapshot ? <ReportRuntimeQueryEditor contract={contract} value={queryInputs} disabled={operation.busy} onChange={setQueryInputs} /> : null}<div className={styles.runActions}><Button variant="primary" type="submit" disabled={frozen || operation.busy || (!selectSnapshot && !canExport)}><Play aria-hidden="true" />{selectSnapshot ? run ? '重新查询' : '查询报表' : '生成下载文件'}</Button></div></form> : null}
         </> : <div className={styles.collapsedParameters}>{contract ? `${reportConditionCount(contract)} 个筛选条件${frozen ? ' · 本次运行条件已冻结' : ''}` : '筛选区已收起'}</div>}
       </Section> : null}
       {conditionsChanged ? <p className={styles.queryChanged} role="status">条件已修改，请重新查询。下方仍展示上次运行快照。</p> : null}{!selectSnapshot && contract && !canExport ? <p role="status">当前存储过程报表需要导出权限，请联系管理员授权。</p> : null}
@@ -364,12 +372,12 @@ function ParameterField({ parameter, value, disabled, onChange }: { parameter: R
   return <label className={styles.field} htmlFor={id}><span>{parameter.label}{parameter.required ? ' *' : ''}</span>{parameter.controlType === 'TEXTAREA' ? <textarea {...common} rows={3} /> : <input {...common} type={type} inputMode={parameter.controlType === 'NUMBER' ? 'decimal' : undefined} />}<small>{parameter.errorMessage || hint}</small></label>
 }
 
-function ConditionField({ client, reportId, versionId, code, field, value, disabled, onChange }: { client: ReportCenterClient; reportId: number; versionId: number; code: string; field: ReportInputField; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
+function ConditionField({ client, reportId, versionId, code, field, dependencyValues, value, disabled, onChange }: { client: ReportCenterClient; reportId: number; versionId: number; code: string; field: ReportInputField; dependencyValues: Record<string, unknown>; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
   const id = `report-condition-${code}`
   const label = `${field.displayName}${field.required ? ' *' : ''}`
   const list = isReportInputListType(field.type)
   const hint = [code, field.type, field.format, field.required ? '必填' : '选填'].filter(Boolean).join(' · ')
-  if (field.relationId) return <label className={styles.field} htmlFor={id}><span>{label}</span><ReportRelationSelect client={client} reportId={reportId} versionId={versionId} relationId={field.relationId} keyColumnId={field.relationKeyColumnId} inputId={id} value={value} onChange={onChange} disabled={disabled} required={field.required} multiple={list} /><small>{hint}</small></label>
+  if (field.relationId) return <label className={styles.field} htmlFor={id}><span>{label}</span><ReportRelationSelect client={client} reportId={reportId} versionId={versionId} relationId={field.relationId} keyColumnId={field.relationKeyColumnId} dependencyValues={dependencyValues} inputId={id} value={value} onChange={onChange} disabled={disabled} required={field.required} multiple={list} /><small>{hint}</small></label>
 	if (field.queryName) return <label className={styles.field} htmlFor={id}><span>{label}</span><ReportInputQuerySelect client={client} reportId={reportId} conditionCode={code} inputId={id} value={value} required={field.required} disabled={disabled} multiple={list} numeric={field.type === 'number' || field.type === 'list[number]'} onChange={onChange} /><small>{hint} · 显示 name，提交 id{list ? ' 列表' : ''}</small></label>
   if (field.allowedValues?.length) {
     const options = field.allowedValues.map((item, index) => ({ key: String(index), value: editableReportConditionValue(item, { ...field, allowedValues: undefined }), label: displayConditionOption(item) }))

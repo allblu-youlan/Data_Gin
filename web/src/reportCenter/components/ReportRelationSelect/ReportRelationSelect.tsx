@@ -5,7 +5,7 @@ import { getReportRelationOptions } from '../../bojunApi'
 import type { ReportRelationOption } from '../../types'
 import styles from '../ReportQueryDesigner/ReportQueryDesigner.module.css'
 
-export function ReportRelationSelect({ client, reportId, versionId, relationId, keyColumnId, value, onChange, disabled, required, inputId, multiple = false }: { client: ReportCenterClient; reportId: number; versionId: number; relationId: string; keyColumnId?: string; value: unknown; onChange: (value: unknown) => void; disabled: boolean; required: boolean; inputId: string; multiple?: boolean }) {
+export function ReportRelationSelect({ client, reportId, versionId, relationId, keyColumnId, dependencyValues, value, onChange, disabled, required, inputId, multiple = false }: { client: ReportCenterClient; reportId: number; versionId: number; relationId: string; keyColumnId?: string; dependencyValues: Record<string, unknown>; value: unknown; onChange: (value: unknown) => void; disabled: boolean; required: boolean; inputId: string; multiple?: boolean }) {
   const [search, setSearch] = useState('')
   const [options, setOptions] = useState<ReportRelationOption[]>([])
   const [cursor, setCursor] = useState('')
@@ -14,22 +14,23 @@ export function ReportRelationSelect({ client, reportId, versionId, relationId, 
   function optionValue(option: ReportRelationOption) { return keyColumnId ? option.keyValues[keyColumnId] ?? '' : Object.keys(option.keyValues).length === 1 ? Object.values(option.keyValues)[0] : JSON.stringify(option.keyValues) }
   useEffect(() => {
     request.current?.abort(); const controller = new AbortController(); request.current = controller
+    setOptions([])
     setCursor('')
+    setState({ loading: true, error: '' })
     const timer = window.setTimeout(() => {
-      setState({ loading: true, error: '' })
-      void getReportRelationOptions(client, reportId, { versionId, relationId, search, limit: 20 }, controller.signal).then((response) => {
+      void getReportRelationOptions(client, reportId, { versionId, relationId, search, dependencyValues, limit: 20 }, controller.signal).then((response) => {
         if (controller.signal.aborted) return
         if (!response.ok) { setState({ loading: false, error: response.error }); return }
         setOptions(response.data.items); setCursor(response.data.hasMore ? response.data.nextCursor : ''); setState({ loading: false, error: '' })
       })
     }, 250)
-    return () => { window.clearTimeout(timer); controller.abort() }
-  }, [client, reportId, versionId, relationId, search])
+    return () => { window.clearTimeout(timer); controller.abort(); request.current?.abort() }
+  }, [client, reportId, versionId, relationId, search, dependencyValues])
   async function loadMore() {
     if (!cursor || state.loading) return
     request.current?.abort(); const controller = new AbortController(); request.current = controller
     setState({ loading: true, error: '' })
-    const response = await getReportRelationOptions(client, reportId, { versionId, relationId, search, cursor, limit: 20 }, controller.signal)
+    const response = await getReportRelationOptions(client, reportId, { versionId, relationId, search, dependencyValues, cursor, limit: 20 }, controller.signal)
     if (controller.signal.aborted) return
     if (!response.ok) { setState({ loading: false, error: response.error }); return }
     setOptions((current) => [...current, ...response.data.items]); setCursor(response.data.hasMore ? response.data.nextCursor : ''); setState({ loading: false, error: '' })

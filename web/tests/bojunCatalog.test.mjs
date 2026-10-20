@@ -43,3 +43,13 @@ test('relation options preserve raw decimal text and detail requests use only ru
  assert.deepEqual(calls[1].options.body, { rowKey: 'signed-row', relationId: 'store', mode: 'SNAPSHOT' })
  assert.equal(Object.hasOwn(detail.data.fields[0], 'rawValue'), false)
 })
+test('relation option pages carry current dependency values without changing precise text keys', async () => {
+ const calls = []
+ const client = async (_path, options) => { calls.push(options.body); return { ok: true, status: 200, data: { data: { items: [], hasMore: false, nextCursor: '' } } } }
+ const dependencyValues = { date: '20261020', identifiers: ['00012345678901234567890'], region: '华东' }
+ await getReportRelationOptions(client, 9, { versionId: 21, relationId: 'store', search: '店仓', dependencyValues })
+ await getReportRelationOptions(client, 9, { versionId: 21, relationId: 'store', search: '店仓', dependencyValues, cursor: 'signed-page' })
+ assert.deepEqual(calls[0].dependencyValues, dependencyValues)
+ assert.deepEqual(calls[1].dependencyValues, dependencyValues)
+ assert.equal(calls[1].cursor, 'signed-page')
+})
