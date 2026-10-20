@@ -75,5 +75,14 @@ func (repository *Repository) FindExportForActor(ctx context.Context, actor, exp
 	if err != nil {
 		return nil, fmt.Errorf("report export query: find export: %w", err)
 	}
+	var run model.ReportRun
+	if err := repository.db.WithContext(ctx).First(&run, export.RunID).Error; err != nil {
+		return nil, err
+	}
+	if run.RetainsQuerySnapshot() {
+		if err := repository.authorizeRunExport(ctx, repository.db, actor, &run); err != nil {
+			return nil, ErrReportExportNotFound
+		}
+	}
 	return &export, nil
 }

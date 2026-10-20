@@ -281,7 +281,7 @@ func (reconciler *ReportRunReconciler) reconcileOne(ctx context.Context, runID u
 	finishedAt := reconciler.now().UTC()
 	stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reconciler.stateTimeout)
 	defer cancel()
-	return reconciler.store.MarkReconciliationSucceeded(stateCtx, runID, leaseToken, rowCount, finishedAt, finishedAt.Add(reconciler.retention))
+	return reconciler.store.MarkReconciliationSucceeded(stateCtx, runID, leaseToken, rowCount, finishedAt, finishedAt.Add(reportResultRetention(runtime.Run, reconciler.retention)))
 }
 
 func (reconciler *ReportRunReconciler) pending(ctx context.Context, runID uint, leaseToken, code string, cause error) error {
@@ -306,9 +306,12 @@ func (oracleReportResultEvidenceReader) CountCommittedRows(ctx context.Context, 
 		return 0, err
 	}
 	defer func() { _ = adapter.Close() }()
-	if runtime.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
+	if runtime.Version.UsesJSONSnapshot() {
 		if err := adapter.ValidateJSONSnapshotStore(queryCtx); err != nil {
 			return 0, err
+		}
+		if runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+			return adapter.ValidateSelectSnapshot(queryCtx, runtime.Run.RunUUID, runtime.Run.ResultSchemaHash)
 		}
 		return adapter.CountJSONSnapshotRows(queryCtx, runtime.Run.RunUUID)
 	}

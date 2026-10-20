@@ -13,7 +13,6 @@ import (
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportquery"
 	"gin-biz-web-api/internal/reportrepo"
-	"gin-biz-web-api/model"
 )
 
 type reportExportOracleSession interface {
@@ -64,7 +63,7 @@ func (oracleReportExportSessionFactory) Open(ctx context.Context, runtime report
 	if err != nil {
 		return closeOnError(err)
 	}
-	if runtime.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
+	if runtime.Version.UsesJSONSnapshot() {
 		if len(query.Filters) != 0 || len(query.Sort) != 0 {
 			return closeOnError(fmt.Errorf("JSON cursor export filters must be passed to procedure conditions"))
 		}

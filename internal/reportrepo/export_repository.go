@@ -96,6 +96,20 @@ func (repository *Repository) CreateOrGetExport(ctx context.Context, actor, runI
 }
 
 func (repository *Repository) authorizeRunExport(ctx context.Context, tx *gorm.DB, actor uint, run *model.ReportRun) error {
+	if run != nil && run.RetainsQuerySnapshot() {
+		if !frozenRunAllowsAction(run.PermissionSnapshotJSON, actor, ReportActionExport) {
+			return ErrReportExportRunNotReady
+		}
+		if _, err := repository.loadPublished(ctx, tx, actor, run.DefinitionID, ReportActionExport, false); err != nil {
+			return ErrReportActionDenied
+		}
+		var version model.ReportVersion
+		if err := tx.WithContext(ctx).First(&version, run.VersionID).Error; err != nil {
+			return err
+		}
+		return validateSelectAuthorization(ctx, tx, *run, version)
+	}
+
 	if run == nil || frozenRunAllowsAction(run.PermissionSnapshotJSON, actor, ReportActionExport) {
 		if run == nil {
 			return ErrReportExportRunNotReady

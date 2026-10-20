@@ -39,13 +39,14 @@ type Draft struct {
 }
 
 type DraftListQuery struct {
-	AfterID          uint
-	Limit            int
-	Category         string
-	Search           string
-	PublishedOnly    bool
-	Action           string
-	AdditionalAction string
+	AllowQueryOnlySelect bool
+	AfterID              uint
+	Limit                int
+	Category             string
+	Search               string
+	PublishedOnly        bool
+	Action               string
+	AdditionalAction     string
 }
 
 type DraftSummary struct {
@@ -680,7 +681,12 @@ func buildDraftListQuery(db *gorm.DB, actor uint, query DraftListQuery) *gorm.DB
 		action, "USER", actor, "ROLE", model.RoleStatusActive, actor,
 	}
 	if query.PublishedOnly {
-		dbQuery = dbQuery.Where(publishedReportAccessPredicate, publishedArguments...)
+		if query.AllowQueryOnlySelect {
+			args := append([]interface{}{model.ReportExecutionModeSelectSnapshot}, publishedArguments...)
+			dbQuery = dbQuery.Where("(published_versions.execution_mode = ? OR ("+publishedReportAccessPredicate+"))", args...)
+		} else {
+			dbQuery = dbQuery.Where(publishedReportAccessPredicate, publishedArguments...)
+		}
 		if additionalAction := query.AdditionalAction; validReportAction(additionalAction) && additionalAction != action {
 			additionalArguments := []interface{}{
 				model.ReportDefinitionStatusActive,

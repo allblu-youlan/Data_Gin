@@ -929,7 +929,7 @@ func (repository *Repository) markSucceededAndQueueExport(
 		if err := repository.writeSystemAudit(ctx, tx, auditAction, "REPORT_RUN", runID, map[string]interface{}{"rowCount": rowCount}); err != nil {
 			return err
 		}
-		if !frozenRunAllowsAction(run.PermissionSnapshotJSON, run.RequestedBy, ReportActionExport) {
+		if run.RetainsQuerySnapshot() || !frozenRunAllowsAction(run.PermissionSnapshotJSON, run.RequestedBy, ReportActionExport) {
 			return nil
 		}
 		export, outbox, err := buildAutomaticReportExport(run, uuid.NewString(), finishedAt)

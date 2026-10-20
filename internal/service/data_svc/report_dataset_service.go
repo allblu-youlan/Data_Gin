@@ -10,6 +10,7 @@ import (
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/model"
+	"github.com/google/uuid"
 	"os"
 	"strconv"
 	"strings"
@@ -138,43 +139,13 @@ func decodeSelectContract(version model.ReportVersion) (reportdataset.Compiled, 
 
 // selectAuthorization loads only the control database, so existing snapshots remain readable during a source outage.
 func selectAuthorization(ctx context.Context, ds uint, c reportdataset.Compiled, actor uint) (reportdataset.Compiled, string, error) {
-	catalog := NewReportBojunCatalogService()
-	scopes := map[string]any{}
-	actorID := strconv.FormatUint(uint64(actor), 10)
-	for id, frozen := range c.Tables {
-		v, e := strconv.ParseUint(id, 10, 64)
-		if e != nil {
-			return c, "", e
-		}
-		record, e := catalog.repo.GetBojunTable(ctx, ds, uint(v))
-		if e != nil {
-			return c, "", ErrReportRunDenied
-		}
-		current, e := catalog.dto(ctx, *record)
-		if e != nil {
-			return c, "", e
-		}
-		if !current.Enabled {
-			return c, "", ErrReportRunDenied
-		}
-		scope := current.Config.DataScope
-		if scope.Mode != "GLOBAL_APPROVED" && scope.Mode != "SCOPE_COLUMN" {
-			return c, "", ErrReportRunDenied
-		}
-		if scope.Mode != frozen.Config.DataScope.Mode || scope.ColumnID != frozen.Config.DataScope.ColumnID {
-			return c, "", ErrReportRunDenied
-		}
-		scopes[id] = struct {
-			Enabled                bool
-			ScopeMode, ScopeColumn string
-			Values                 []string
-			Selectable, Detail     *[]string
-		}{current.Enabled, scope.Mode, scope.ColumnID, scope.UserValues[actorID], current.Config.SelectableColumns, current.Config.DetailColumns}
-		frozen.Config.DataScope.UserValues = map[string][]string{actorID: scope.UserValues[actorID]}
-		c.Tables[id] = frozen
+	result, hash, err := reportrepo.New().EffectiveSelectAuthorization(ctx, ds, c, actor)
+	if err != nil {
+		return result, hash, fmt.Errorf("%w: 字段或数据范围授权已变化，请重新发布或查询", ErrReportRunDenied)
 	}
-	return c, reportdataset.Hash(scopes), nil
+	return result, hash, nil
 }
+
 func validateSelectRunAuthorization(ctx context.Context, run model.ReportRun, version model.ReportVersion) error {
 	if version.ExecutionMode != model.ReportExecutionModeSelectSnapshot {
 		return nil
@@ -196,7 +167,7 @@ func inspectSelectSource(ctx context.Context, a *reportoracle.Adapter, c reportd
 	if e := a.ValidateJSONSnapshotStore(ctx); e != nil {
 		return e
 	}
-	for _, t := range c.Tables {
+	for _, t := range c.DependencyTables() {
 		if e := a.ValidateBojunMetadata(ctx, t); e != nil {
 			return e
 		}
@@ -208,4 +179,61 @@ func canonicalSelectInputSchema(raw json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}
 	return canonicalReportInputSchema(raw)
+}
+func normalizeSelectConditions(schema model.JSONText, input map[string]json.RawMessage) ([]byte, error) {
+	if strings.TrimSpace(string(schema)) == "{}" {
+		if len(input) > 0 {
+			return nil, ErrReportRunInvalid
+		}
+		return []byte(`{}`), nil
+	}
+	normalized, _, e := normalizeRefCursorConditions([]byte(schema), input)
+	return normalized, e
+}
+func (service *ReportRunService) createSelectRun(ctx context.Context, actor, definitionID uint, req requestbody.ReportRunCreateRequest, published *reportrepo.PublishedReport) (*ReportRunDTO, error) {
+	if !selectReportsEnabled() {
+		return nil, fmt.Errorf("%w: 自定义查询功能尚未启用", ErrReportRunInvalid)
+	}
+	if len(req.Parameters) > 0 && len(req.Conditions) > 0 {
+		return nil, ErrReportRunInvalid
+	}
+	conditions := req.Conditions
+	if conditions == nil {
+		conditions = req.Parameters
+	}
+	parameters, e := normalizeSelectConditions(published.Version.InputSchemaJSON, conditions)
+	if e != nil {
+		return nil, e
+	}
+	decoded, e := decodeSelectContract(published.Version)
+	if e != nil {
+		return nil, ErrReportRunInvalid
+	}
+	dataset, scope, e := selectAuthorization(ctx, published.Version.DatasourceID, decoded, actor)
+	if e != nil {
+		return nil, e
+	}
+	inputs := reportdataset.QueryInputs{}
+	if req.QueryInputs != nil {
+		inputs = *req.QueryInputs
+	}
+	var values map[string]json.RawMessage
+	_ = json.Unmarshal(parameters, &values)
+	if _, e = dataset.Build(values, inputs, strconv.FormatUint(uint64(actor), 10), false); e != nil {
+		return nil, fmt.Errorf("%w: %v", ErrReportRunInvalid, e)
+	}
+	inputJSON, _ := json.Marshal(inputs)
+	now := service.now().UTC()
+	runUUID := uuid.NewString()
+	fingerprint := reportdataset.Hash(struct {
+		Parameters json.RawMessage
+		Inputs     reportdataset.QueryInputs
+		Scope      string
+		Policy     reportdataset.Policy
+	}{parameters, inputs, scope, dataset.Policy})
+	command := &reportrepo.CreateRunCommand{Run: model.ReportRun{RunUUID: runUUID, DefinitionID: definitionID, VersionID: published.Version.ID, RequestedBy: actor, Status: model.ReportRunStatusQueued, ExecutionFingerprint: executionFingerprint(published.Version.ContractHash, fingerprint, req.RefreshNonce), RefreshNonce: req.RefreshNonce, NormalizedParametersJSON: model.JSONText(parameters), QueryInputsJSON: model.JSONText(inputJSON), DataScopeHash: scope, ExecutionPolicyJSON: published.Version.ExecutionPolicyJSON, ContractHash: published.Version.ContractHash, ProcedureSignatureHash: published.Version.ProcedureSignatureHash, ResultSchemaHash: published.Version.ResultSchemaHash}, Outbox: reportrepo.NewReportRunOutbox(runUUID, now)}
+	if e = service.store.CreateRun(ctx, actor, definitionID, command); e != nil {
+		return nil, classifyReportRunStoreError(e)
+	}
+	return &ReportRunDTO{ID: command.Run.ID, RunUUID: command.Run.RunUUID, DefinitionID: definitionID, VersionID: command.Run.VersionID, Status: command.Run.Status, CreatedAt: command.Run.CreatedAt}, nil
 }

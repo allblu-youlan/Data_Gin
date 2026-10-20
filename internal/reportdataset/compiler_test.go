@@ -160,3 +160,39 @@ func TestDuplicateHeadersAndSameSourceHaveIndependentFieldIdentity(t *testing.T)
 		t.Fatal(e)
 	}
 }
+func TestSnapshotDisplayFallsBackToMatchedKeyAndPreservesRaw(t *testing.T) {
+	q, tables := testDataset()
+	c, e := Compile(q, tables, DefaultPolicy())
+	if e != nil {
+		t.Fatal(e)
+	}
+	r := c.Relations["product"]
+	values := map[string]any{r.SourceKeys[0]: "002000", r.TargetKeys[0]: "002000", r.DisplayNames[0]: nil}
+	c.Materialize(values)
+	if values[c.Outputs[1].Name] != "002000" || c.RawValue(r, values) != "002000" {
+		t.Fatal(values)
+	}
+	values[r.TargetKeys[0]] = nil
+	c.Materialize(values)
+	if values[c.Outputs[1].Name] != nil || c.RawValue(r, values) != "002000" {
+		t.Fatal("unmatched target lost source key")
+	}
+}
+func TestLiveRelationPlanReplaysSourceFieldsAndScope(t *testing.T) {
+	q, tables := testDataset()
+	q.Relations[1].MatchConditions = &Condition{AliasID: "product", ColumnID: "31", Operator: "EQ", Value: &Value{Kind: "FIELD", AliasID: "base", ColumnID: "13"}}
+	target := tables["3"]
+	target.Config.DataScope = DataScope{Mode: "SCOPE_COLUMN", ColumnID: "31", UserValues: map[string][]string{"7": {"88"}}}
+	tables["3"] = target
+	c, e := Compile(q, tables, DefaultPolicy())
+	if e != nil {
+		t.Fatal(e)
+	}
+	plan, e := c.BuildRelationPlan("product", nil, map[string]map[string]json.RawMessage{"base": {"13": json.RawMessage(`"88"`)}}, map[string]json.RawMessage{"31": json.RawMessage(`"88"`)}, "", nil, "7", true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(plan.Plan.SQL, "M_RETAILITEM") || !strings.Contains(plan.Plan.SQL, "T0.ID IN (:b1)") || !strings.Contains(plan.Plan.SQL, "T0.ID = :b2") || !strings.Contains(plan.Plan.SQL, "T0.ID = :b3") {
+		t.Fatal(plan.Plan.SQL)
+	}
+}

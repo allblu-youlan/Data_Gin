@@ -326,7 +326,6 @@ func registerReportDownloadCatalogRoutes(api *gin.RouterGroup, controller *data_
 		middleware.AuthJWT(),
 		middleware.RequirePermission(model.PermissionReportRead),
 		middleware.RequirePermission(model.PermissionReportExecute),
-		middleware.RequirePermission(model.PermissionReportExport),
 		controller.List,
 	)
 }
@@ -488,6 +487,12 @@ func registerMallWeatherRefreshRoutes(api *gin.RouterGroup, refreshCtrl *data_ct
 }
 
 func registerReportRoutes(api *gin.RouterGroup, reportCtrl *data_ctrl.ReportController) {
+	dataset := data_ctrl.NewReportDatasetController()
+	api.POST("/v1/reports/:id/query-validations", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage), dataset.Validate)
+	api.POST("/v1/reports/:id/query-previews", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("30-M"), dataset.Preview)
+	api.POST("/v1/reports/:id/relation-options", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportExecute), middleware.LimitRoute("120-M"), dataset.Options)
+	api.POST("/v1/report-runs/:id/record-details", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportRead), middleware.LimitRoute("120-M"), dataset.Detail)
+
 	reportGroup := api.Group("/v1/reports")
 	reportGroup.Use(middleware.AuthJWT())
 	reportGroup.POST("", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Create)

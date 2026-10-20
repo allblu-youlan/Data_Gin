@@ -7,7 +7,6 @@ import (
 
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportrepo"
-	"gin-biz-web-api/model"
 )
 
 type reportResultCleanupOracleFactory interface {
@@ -30,7 +29,7 @@ func (oracleReportResultCleanupFactory) Open(ctx context.Context, runtime report
 	if queryTimeout <= 0 {
 		queryTimeout = defaultReportPublicationInspectionTimeout
 	}
-	if runtime.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
+	if runtime.Version.UsesJSONSnapshot() {
 		configuredColumns := make([]string, 0, len(runtime.Columns))
 		for _, column := range runtime.Columns {
 			configuredColumns = append(configuredColumns, column.DatabaseColumn)

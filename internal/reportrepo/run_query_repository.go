@@ -155,6 +155,14 @@ func (repository *Repository) loadResultContract(ctx context.Context, db *gorm.D
 		contract.Version.ResultSchemaHash != contract.Run.ResultSchemaHash || contract.Version.DatasourceID == 0 {
 		return nil, ErrReportResultUnavailable
 	}
+	if contract.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		if _, err := repository.loadPublished(ctx, db, run.RequestedBy, run.DefinitionID, ReportActionQuery, false); err != nil {
+			return nil, ErrReportActionDenied
+		}
+		if err := validateSelectAuthorization(ctx, db, run, contract.Version); err != nil {
+			return nil, err
+		}
+	}
 	if err := db.Where("id = ? AND driver = ?", contract.Version.DatasourceID, model.ReportDatasourceDriverOracle).First(&contract.Datasource).Error; err != nil {
 		return nil, fmt.Errorf("report result query: load datasource: %w", err)
 	}

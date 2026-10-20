@@ -261,7 +261,8 @@ func Compile(q QuerySpec, tables map[string]Table, policy Policy) (Compiled, err
 		if e != nil {
 			return c, e
 		}
-		out.Name = name
+		out.ValueName = name
+		out.Name = fmt.Sprintf("O%03d", i+1)
 		c.Outputs = append(c.Outputs, out)
 		col.Header = out.Header
 		col.ValueMode = out.ValueMode
@@ -275,6 +276,11 @@ func Compile(q QuerySpec, tables map[string]Table, policy Policy) (Compiled, err
 	// Project values needed to replay row-field predicates for LIVE details.
 	for _, r := range sorted {
 		if e := walkCondition(r.MatchConditions, func(v Condition) error {
+			if v.AliasID != r.ID {
+				if _, e := add(v.AliasID, v.ColumnID, false); e != nil {
+					return e
+				}
+			}
 			if v.Value != nil && v.Value.Kind == "FIELD" {
 				_, e := add(v.Value.AliasID, v.Value.ColumnID, false)
 				return e
@@ -303,6 +309,9 @@ func Compile(q QuerySpec, tables map[string]Table, policy Policy) (Compiled, err
 	// Validate all fixed predicates without requiring runtime parameter values.
 	if _, e := c.Build(nil, QueryInputs{}, "", true); e != nil {
 		return c, e
+	}
+	if len(c.Projections)+len(c.Outputs) > 512 {
+		return c, queryError("internal projection exceeds snapshot column limit")
 	}
 	c.SchemaHash = Hash(struct {
 		Projections []Projection

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"gin-biz-web-api/internal/reportdataset"
+	"sort"
 	"strings"
 )
 
@@ -147,7 +148,7 @@ func (a *Adapter) InspectBojunTable(ctx context.Context, n BojunNamespace, sourc
 		return t, e
 	}
 	columnsObject, _ := n.object("AD_COLUMN")
-	rows, e = a.db.QueryContext(ctx, `SELECT ID, NAME, DBNAME, DESCRIPTION, ORDERNO, REF_TABLE_ID, REF_COLUMN_ID FROM `+columnsObject+` WHERE AD_TABLE_ID = :1 ORDER BY ORDERNO, ID`, source.ID)
+	rows, e = a.db.QueryContext(ctx, `SELECT ID, NAME, DBNAME, DESCRIPTION, ORDERNO, REF_TABLE_ID, REF_COLUMN_ID FROM `+columnsObject+` WHERE AD_TABLE_ID IN (:1, :2) ORDER BY ORDERNO, ID`, source.ID, current.ID)
 	if e != nil {
 		return t, e
 	}
@@ -257,8 +258,6 @@ func bojunSelectableType(t string) bool {
 	}
 }
 func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Table) error {
-	ref := ResultTableRef{Owner: t.Owner, Name: t.PhysicalTable}
-	_ = ref
 	n := BojunNamespace{Owner: t.Owner, DBLink: t.DBLink}
 	dict, e := n.dictionary("ALL_TAB_COLUMNS")
 	if e != nil {
@@ -294,6 +293,48 @@ func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Tab
 		}
 		if actual[c.DBName] != fmt.Sprintf("%s:%v:%v", c.OracleType, p, s) {
 			return fmt.Errorf("REPORT_METADATA_CHANGED: source schema changed")
+		}
+	}
+
+	constraints, _ := n.dictionary("ALL_CONSTRAINTS")
+	constraintColumns, _ := n.dictionary("ALL_CONS_COLUMNS")
+	keyRows, err := a.db.QueryContext(ctx, `SELECT c.CONSTRAINT_NAME, cc.COLUMN_NAME FROM `+constraints+` c JOIN `+constraintColumns+` cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME WHERE c.OWNER = :1 AND c.TABLE_NAME = :2 AND c.CONSTRAINT_TYPE IN ('P','U') AND c.STATUS = 'ENABLED' AND c.VALIDATED = 'VALIDATED' ORDER BY c.CONSTRAINT_NAME, cc.POSITION`, t.Owner, t.PhysicalTable)
+	if err != nil {
+		return err
+	}
+	defer keyRows.Close()
+	liveKeys := map[string][]string{}
+	for keyRows.Next() {
+		var name, column string
+		if err := keyRows.Scan(&name, &column); err != nil {
+			return err
+		}
+		liveKeys[name] = append(liveKeys[name], column)
+	}
+	if err := keyRows.Err(); err != nil {
+		return err
+	}
+	for _, required := range t.UniqueKeys {
+		names := []string{}
+		for _, id := range required {
+			for _, col := range t.Columns {
+				if col.ID == id {
+					names = append(names, col.DBName)
+				}
+			}
+		}
+		valid := false
+		sort.Strings(names)
+		for _, current := range liveKeys {
+			current = append([]string{}, current...)
+			sort.Strings(current)
+			if len(names) > 0 && len(names) == len(required) && strings.Join(names, "\x00") == strings.Join(current, "\x00") {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("REPORT_METADATA_CHANGED: required unique constraint changed")
 		}
 	}
 	return nil

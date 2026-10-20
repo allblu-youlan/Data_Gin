@@ -12,13 +12,14 @@ import (
 )
 
 type sqlBuilder struct {
-	compiled   Compiled
-	aliases    map[string]Table
-	sqlAliases map[string]string
-	parameters map[string]json.RawMessage
-	args       []any
-	validate   bool
-	leaves     int
+	boundColumns map[string]map[string]json.RawMessage
+	compiled     Compiled
+	aliases      map[string]Table
+	sqlAliases   map[string]string
+	parameters   map[string]json.RawMessage
+	args         []any
+	validate     bool
+	leaves       int
 }
 
 func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInputs, actor string, validate bool) (Plan, error) {
@@ -212,6 +213,19 @@ func (b *sqlBuilder) column(alias, id string) (string, Column, error) {
 		if e != nil {
 			return "", c, e
 		}
+	}
+	if b.sqlAliases[alias] == "" {
+		raw, ok := b.boundColumns[alias][id]
+		if !ok {
+			return "", c, queryError("relation dependency value is required")
+		}
+		if string(raw) == "null" {
+			name := "b" + strconv.Itoa(len(b.args)+1)
+			b.args = append(b.args, sql.Named(name, nil))
+			return ":" + name, c, nil
+		}
+		value, err := b.bind(raw, c)
+		return value, c, err
 	}
 	return b.sqlAliases[alias] + "." + c.DBName, c, nil
 }

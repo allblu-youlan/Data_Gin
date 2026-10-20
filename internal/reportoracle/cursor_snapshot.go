@@ -362,16 +362,8 @@ func (adapter *Adapter) readJSONSnapshotSchema(ctx context.Context, runID string
 	).Scan(&encoded); err != nil {
 		return nil, fmt.Errorf("read JSON snapshot schema: %w", err)
 	}
-	var schema []CursorColumn
-	decoder := json.NewDecoder(strings.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&schema); err != nil || len(schema) == 0 || len(schema) > maxResultColumns {
-		return nil, fmt.Errorf("read JSON snapshot schema: invalid schema")
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("read JSON snapshot schema: trailing data")
-	}
-	return schema, nil
+
+	return decodeSnapshotSchema([]byte(encoded))
 }
 
 func cursorColumns(rows *sql.Rows) ([]CursorColumn, error) {
@@ -553,4 +545,36 @@ func snapshotRowKey(value interface{}) (int64, error) {
 	default:
 		return 0, fmt.Errorf("invalid snapshot row key %T", value)
 	}
+}
+
+func decodeSnapshotSchema(encoded []byte) ([]CursorColumn, error) {
+	var schema []CursorColumn
+	if len(bytes.TrimSpace(encoded)) == 0 {
+		return nil, fmt.Errorf("empty snapshot schema")
+	}
+	if bytes.TrimSpace(encoded)[0] == '{' {
+		var v2 selectSnapshotSchema
+		decoder := json.NewDecoder(bytes.NewReader(encoded))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&v2); err != nil || v2.Version != 2 || len(v2.DatasetSchemaHash) != 64 {
+			return nil, fmt.Errorf("invalid v2 snapshot schema")
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("trailing snapshot schema")
+		}
+		schema = v2.Columns
+	} else {
+		decoder := json.NewDecoder(bytes.NewReader(encoded))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&schema); err != nil {
+			return nil, err
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("trailing snapshot schema")
+		}
+	}
+	if len(schema) == 0 || len(schema) > maxResultColumns {
+		return nil, fmt.Errorf("invalid snapshot column count")
+	}
+	return schema, nil
 }

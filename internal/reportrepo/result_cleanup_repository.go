@@ -41,6 +41,7 @@ func (repository *Repository) ListReadyResultCleanupCandidates(ctx context.Conte
 	err := repository.db.WithContext(ctx).Table("report_exports AS exports").
 		Select("exports.run_id AS run_id, exports.id AS export_id").
 		Joins("JOIN report_runs AS runs ON runs.id = exports.run_id").
+		Where("runs.data_scope_hash IS NULL OR runs.data_scope_hash = ? OR runs.result_expires_at <= ?", "", now.UTC().Truncate(time.Millisecond)).
 		Where("exports.id > ? AND exports.status = ? AND exports.purged_at IS NULL", afterExportID, model.ReportExportStatusReady).
 		Where("runs.result_purged_at IS NULL AND runs.status IN ?", []string{model.ReportRunStatusSucceeded, model.ReportRunStatusResultPurging}).
 		Where("exports.lease_token IS NULL OR exports.lease_token = ? OR exports.lease_expires_at IS NULL OR exports.lease_expires_at <= ?", "", now.UTC().Truncate(time.Millisecond)).

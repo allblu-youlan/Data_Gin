@@ -70,11 +70,14 @@ type ReportPublicationDTO struct {
 }
 
 type ReportPublicationValidationDTO struct {
-	ValidatedAt time.Time                     `json:"validatedAt"`
-	Procedure   ReportPublicationProcedureDTO `json:"procedure"`
-	Result      ReportPublicationResultDTO    `json:"result"`
-	Snapshot    ReportPublicationSnapshotDTO  `json:"snapshot"`
-	Export      ReportPublicationExportDTO    `json:"export"`
+	ExecutionMode   string                        `json:"executionMode,omitempty"`
+	Query           map[string]any                `json:"query,omitempty"`
+	ExecutionPolicy json.RawMessage               `json:"executionPolicy,omitempty"`
+	ValidatedAt     time.Time                     `json:"validatedAt"`
+	Procedure       ReportPublicationProcedureDTO `json:"procedure"`
+	Result          ReportPublicationResultDTO    `json:"result"`
+	Snapshot        ReportPublicationSnapshotDTO  `json:"snapshot"`
+	Export          ReportPublicationExportDTO    `json:"export"`
 }
 
 type ReportPublicationProcedureDTO struct {
@@ -215,6 +218,12 @@ func (service *ReportPublishService) Activate(ctx context.Context, actor, defini
 }
 
 func publicationValidationDTO(validatedAt time.Time, draft *reportrepo.Draft, inspection reportPublicationInspection) *ReportPublicationValidationDTO {
+	if draft.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		var query reportdataset.QuerySpec
+		_ = json.Unmarshal([]byte(draft.Version.QuerySpecJSON), &query)
+		return &ReportPublicationValidationDTO{ValidatedAt: validatedAt, ExecutionMode: model.ReportExecutionModeSelectSnapshot, Query: map[string]any{"baseTableId": query.Base.TableID, "relationCount": len(query.Relations), "columnCount": len(draft.Columns), "schemaHash": inspection.compiled.Hashes.ResultSchema}, ExecutionPolicy: json.RawMessage(draft.Version.ExecutionPolicyJSON), Snapshot: ReportPublicationSnapshotDTO{ResultTableValidated: inspection.resultTableValidated}, Export: ReportPublicationExportDTO{ExportableColumnCount: exportableReportColumnCount(draft.Columns), SchemaHash: inspection.compiled.Hashes.ExportSchema}}
+	}
+
 	return &ReportPublicationValidationDTO{
 		ValidatedAt: validatedAt,
 		Procedure:   ReportPublicationProcedureDTO{Owner: draft.Version.ProcedureOwner, Package: draft.Version.PackageName, Name: draft.Version.ProcedureName, Overload: draft.Version.ProcedureOverload, ArgumentCount: inspection.procedureArgumentCount, SignatureHash: inspection.compiled.Hashes.ProcedureSignature},
@@ -280,7 +289,7 @@ func (service *ReportPublishService) inspectContract(
 		if err := inspector.ValidateJSONSnapshotStore(inspectionCtx); err != nil {
 			return inspection, classifyOracleInspectionError("JSON snapshot store", err)
 		}
-		for _, table := range dataset.Tables {
+		for _, table := range dataset.DependencyTables() {
 			if err := source.ValidateBojunMetadata(inspectionCtx, table); err != nil {
 				return inspection, invalidReport("REPORT_METADATA_CHANGED: 发布依赖字段已发生变化")
 			}

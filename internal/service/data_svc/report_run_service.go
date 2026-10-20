@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"gin-biz-web-api/internal/reportdataset"
 	"gin-biz-web-api/internal/reporting"
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/internal/reportsecret"
@@ -66,14 +67,18 @@ type ReportRunDTO struct {
 // query screen. It deliberately omits procedure and result-table metadata so
 // clients can render inputs without learning Oracle implementation details.
 type ReportRunContractDTO struct {
-	DefinitionID  uint                 `json:"definitionId"`
-	VersionID     uint                 `json:"versionId"`
-	Code          string               `json:"code"`
-	Name          string               `json:"name"`
-	Description   string               `json:"description"`
-	ExecutionMode string               `json:"executionMode"`
-	InputSchema   json.RawMessage      `json:"inputSchema,omitempty"`
-	Parameters    []ReportParameterDTO `json:"parameters"`
+	AllowedFilters    []reportdataset.AllowedFilter `json:"allowedFilters,omitempty"`
+	AllowedSortFields []reportdataset.Order         `json:"allowedSortFields,omitempty"`
+	ExecutionPolicy   json.RawMessage               `json:"executionPolicy,omitempty"`
+	Relations         []reportdataset.Relation      `json:"relations,omitempty"`
+	DefinitionID      uint                          `json:"definitionId"`
+	VersionID         uint                          `json:"versionId"`
+	Code              string                        `json:"code"`
+	Name              string                        `json:"name"`
+	Description       string                        `json:"description"`
+	ExecutionMode     string                        `json:"executionMode"`
+	InputSchema       json.RawMessage               `json:"inputSchema,omitempty"`
+	Parameters        []ReportParameterDTO          `json:"parameters"`
 }
 
 func NewReportRunService() *ReportRunService {
@@ -113,11 +118,19 @@ func (service *ReportRunService) Contract(ctx context.Context, actor, definition
 		}
 		parameters = append(parameters, item)
 	}
+	var dataset reportdataset.Compiled
+	if published.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		dataset, err = decodeSelectContract(published.Version)
+		if err != nil {
+			return nil, ErrReportRunInvalid
+		}
+	}
 	return &ReportRunContractDTO{
 		DefinitionID: published.Definition.ID, VersionID: published.Version.ID,
 		Code: published.Definition.Code, Name: published.Definition.Name,
 		Description: published.Definition.Description, ExecutionMode: published.Version.ExecutionMode,
 		InputSchema: cloneJSON([]byte(published.Version.InputSchemaJSON)), Parameters: parameters,
+		AllowedFilters: dataset.Query.AllowedFilters, AllowedSortFields: dataset.Query.AllowedSortFields, Relations: dataset.Query.Relations, ExecutionPolicy: cloneJSON([]byte(published.Version.ExecutionPolicyJSON)),
 	}, nil
 }
 
@@ -150,6 +163,13 @@ func (service *ReportRunService) Create(ctx context.Context, actor, definitionID
 }
 
 func (service *ReportRunService) createRunFromPublished(ctx context.Context, actor, definitionID uint, request requestbody.ReportRunCreateRequest, published *reportrepo.PublishedReport) (*ReportRunDTO, error) {
+	if published.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		return service.createSelectRun(ctx, actor, definitionID, request, published)
+	}
+	if request.QueryInputs != nil {
+		return nil, ErrReportRunInvalid
+	}
+
 	if isJSONInputReport(published.Version) {
 		return service.createJSONInputRun(ctx, actor, definitionID, request, published)
 	}

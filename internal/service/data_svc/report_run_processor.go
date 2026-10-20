@@ -226,10 +226,35 @@ func (processor *ReportRunProcessor) Process(ctx context.Context, runID uint, fa
 		}
 		return processor.finishPreOracleFailure(ctx, runID, leaseToken, retryAllowed, err)
 	}
+
+	if runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		budget, ok := processor.store.(interface {
+			AcquireSelectDatasourceSlot(context.Context, uint) (func(), error)
+			DeferSelectRun(context.Context, uint, string) error
+		})
+		if !ok {
+			return processor.finishFailure(ctx, runID, leaseToken, "SOURCE_BUDGET_UNAVAILABLE", "查询并发控制不可用", nil)
+		}
+		release, budgetErr := budget.AcquireSelectDatasourceSlot(runCtx, runtime.Version.DatasourceID)
+		if errors.Is(budgetErr, reportrepo.ErrReportRunBusy) {
+			stateCtx, done := processor.stateContext(ctx)
+			defer done()
+			if err := budget.DeferSelectRun(stateCtx, runID, leaseToken); err != nil {
+				return errReportRunWorkerTemporary
+			}
+			return reportRunWaitingError{}
+		}
+		if budgetErr != nil {
+			return processor.finishPreOracleFailure(ctx, runID, leaseToken, retryAllowed, budgetErr)
+		}
+		defer release()
+	}
 	definitions := reportParameterDefinitions(runtime.Parameters)
 	values := map[string]interface{}{}
 	jsonPayload := ""
-	if runtime.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
+	if runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		// Parameters and runtime filters are consumed by the SELECT executor.
+	} else if runtime.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
 		jsonPayload, err = buildRefCursorPayload(runtime.Run)
 	} else if isJSONTableSnapshot(runtime.Version) {
 		jsonPayload, err = buildJSONTablePayload(runtime.Run)
@@ -271,7 +296,7 @@ func (processor *ReportRunProcessor) Process(ctx context.Context, runID uint, fa
 	if executeErr != nil {
 		logReportOracleExecutionFailure(executionRequest, executeErr)
 		control, inspectErr := processor.inspect(ctx, runID, leaseToken)
-		if errors.Is(executeErr, errOracleCommitOutcomeUnknown) {
+		if errors.Is(executeErr, errOracleCommitOutcomeUnknown) || strings.Contains(executeErr.Error(), "SELECT_SNAPSHOT_COMMIT_UNKNOWN") {
 			return processor.finishUnknown(ctx, runID, leaseToken, "ORACLE_COMMIT_OUTCOME_UNKNOWN", "Oracle提交结果需要对账", executeErr)
 		}
 		if inspectErr == nil && control == reportrepo.RunControlCancelRequested {
@@ -284,7 +309,7 @@ func (processor *ReportRunProcessor) Process(ctx context.Context, runID uint, fa
 	}
 	finishedAt := processor.now().UTC()
 	stateCtx, stateCancel = processor.stateContext(ctx)
-	err = processor.store.MarkExecutionSucceeded(stateCtx, runID, leaseToken, rowCount, finishedAt, finishedAt.Add(processor.resultRetention))
+	err = processor.store.MarkExecutionSucceeded(stateCtx, runID, leaseToken, rowCount, finishedAt, finishedAt.Add(reportResultRetention(runtime.Run, processor.resultRetention)))
 	stateCancel()
 	if err == nil {
 		return nil
@@ -603,6 +628,9 @@ var errOracleCommitOutcomeUnknown = errors.New("oracle report commit outcome unk
 type oracleReportProcedureExecutor struct{}
 
 func (oracleReportProcedureExecutor) Execute(ctx context.Context, request reportProcedureExecutionRequest, password string) (rowCount int64, resultErr error) {
+	if request.Runtime.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		return executeSelectReport(ctx, request, password)
+	}
 	queryCtx, cancel := reportOracleQueryContext(ctx, request.Runtime.Datasource)
 	defer cancel()
 	adapter, err := reportoracle.Open(queryCtx, oracleConfigFromDatasource(request.Runtime.Datasource, password))

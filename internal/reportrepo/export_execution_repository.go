@@ -24,6 +24,8 @@ var (
 	reportExportChecksumPattern      = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
+var ErrReportResultRetained = errors.New("report result: retained until expiry")
+
 const (
 	maxReportExportCheckpointBytes = 64 * 1024
 	defaultResultPurgeLeaseTTL     = 10 * time.Minute
@@ -120,6 +122,7 @@ func (repository *Repository) ScheduleTerminalExportResultCleanup(ctx context.Co
 func terminalExportSnapshotCleanupQuery(db *gorm.DB, now time.Time, limit int) *gorm.DB {
 	return db.Table("report_runs AS runs").
 		Joins("JOIN report_exports AS exports ON exports.run_id = runs.id").
+		Where("runs.data_scope_hash IS NULL OR runs.data_scope_hash = ?", "").
 		Where("runs.status = ? AND runs.result_purged_at IS NULL", model.ReportRunStatusSucceeded).
 		Where("runs.result_expires_at IS NULL OR runs.result_expires_at > ?", now.UTC().Truncate(time.Millisecond)).
 		Where("exports.status IN ?", []string{model.ReportExportStatusFailed, model.ReportExportStatusCancelled, model.ReportExportStatusExpired}).
@@ -136,7 +139,7 @@ func (repository *Repository) EnsureAutomaticExportQueued(ctx context.Context, r
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&run, runID).Error; err != nil {
 			return fmt.Errorf("report export recovery: lock successful run: %w", err)
 		}
-		if run.Status != model.ReportRunStatusSucceeded || run.ResultPurgedAt != nil {
+		if run.RetainsQuerySnapshot() || run.Status != model.ReportRunStatusSucceeded || run.ResultPurgedAt != nil {
 			return nil
 		}
 		var exportCount int64
@@ -430,6 +433,7 @@ func (repository *Repository) MarkExportFailed(ctx context.Context, exportID uin
 		runID := tx.Model(&model.ReportExport{}).Select("run_id").Where("id = ?", exportID)
 		if err := tx.Model(&model.ReportRun{}).
 			Where("id = (?) AND status = ? AND result_purged_at IS NULL", runID, model.ReportRunStatusSucceeded).
+			Where("data_scope_hash IS NULL OR data_scope_hash = ?", "").
 			Update("result_expires_at", finishedAt).Error; err != nil {
 			return fmt.Errorf("report export execution: schedule failed result cleanup: %w", err)
 		}
@@ -459,6 +463,7 @@ func (repository *Repository) MarkExportCancelled(ctx context.Context, exportID 
 		runID := tx.Model(&model.ReportExport{}).Select("run_id").Where("id = ?", exportID)
 		if err := tx.Model(&model.ReportRun{}).
 			Where("id = (?) AND status = ? AND result_purged_at IS NULL", runID, model.ReportRunStatusSucceeded).
+			Where("data_scope_hash IS NULL OR data_scope_hash = ?", "").
 			Update("result_expires_at", finishedAt).Error; err != nil {
 			return fmt.Errorf("report export execution: schedule cancelled result cleanup: %w", err)
 		}
@@ -482,6 +487,9 @@ func (repository *Repository) ClaimResultPurge(ctx context.Context, exportID uin
 		}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&runtime.Run, runtime.Export.RunID).Error; err != nil {
 			return fmt.Errorf("report result purge: lock run: %w", err)
+		}
+		if runtime.Run.RetainsQuerySnapshot() && runtime.Run.ResultExpiresAt != nil && now.Before(*runtime.Run.ResultExpiresAt) {
+			return ErrReportResultRetained
 		}
 		if runtime.Run.ResultPurgedAt != nil || (runtime.Run.Status != model.ReportRunStatusSucceeded && runtime.Run.Status != model.ReportRunStatusResultPurging) {
 			return ErrReportResultPurgeConflict

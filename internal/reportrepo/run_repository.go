@@ -81,7 +81,12 @@ func (repository *Repository) CreateRun(ctx context.Context, actor, definitionID
 			published.Version.ProcedureSignatureHash != command.Run.ProcedureSignatureHash || published.Version.ResultSchemaHash != command.Run.ResultSchemaHash {
 			return ErrDraftVersionConflict
 		}
-		slot, err := repository.prepareRunSlot(ctx, tx, definitionID, actor, run.ExecutionFingerprint, outbox.AvailableAt)
+		var slot reportRunSlotPreparation
+		if published.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+			slot, err = prepareSelectRunSlot(ctx, tx, definitionID, actor, run.ExecutionFingerprint, outbox.AvailableAt)
+		} else {
+			slot, err = repository.prepareRunSlot(ctx, tx, definitionID, actor, run.ExecutionFingerprint, outbox.AvailableAt)
+		}
 		if err != nil {
 			return err
 		}
@@ -190,6 +195,7 @@ func scheduleReplacedSnapshotsForCleanup(tx *gorm.DB, runIDs []uint, now time.Ti
 		})
 	return tx.Model(&model.ReportRun{}).
 		Where("id IN ? AND status = ? AND result_purged_at IS NULL", runIDs, model.ReportRunStatusSucceeded).
+		Where("data_scope_hash IS NULL OR data_scope_hash = ?", "").
 		Where("NOT EXISTS (?)", activeExport).
 		Updates(map[string]interface{}{"result_expires_at": now, "updated_at": now})
 }

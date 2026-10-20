@@ -271,6 +271,9 @@ func (processor *ReportExportProcessor) purgeReadyExport(ctx context.Context, ex
 		if err == nil {
 			break
 		}
+		if errors.Is(err, reportrepo.ErrReportResultRetained) {
+			return nil
+		}
 		if !errors.Is(err, reportrepo.ErrReportResultPurgeConflict) {
 			return errReportExportWorkerTemporary
 		}

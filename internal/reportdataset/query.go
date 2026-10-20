@@ -97,6 +97,7 @@ type Projection struct {
 	ColumnID string `json:"columnId"`
 }
 type Output struct {
+	ValueName      string   `json:"valueName"`
 	FieldID        string   `json:"fieldId"`
 	Code           string   `json:"code"`
 	Header         string   `json:"header"`

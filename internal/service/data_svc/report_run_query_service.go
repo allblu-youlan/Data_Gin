@@ -66,20 +66,25 @@ type ReportRunViewDTO struct {
 }
 
 type ReportResultColumnDTO struct {
-	FieldID          string   `json:"fieldId"`
-	Code             string   `json:"code"`
-	Header           string   `json:"header"`
-	ValueType        string   `json:"valueType"`
-	Nullable         bool     `json:"nullable"`
-	NullDisplay      string   `json:"nullDisplay,omitempty"`
-	Filterable       bool     `json:"filterable"`
-	Sortable         bool     `json:"sortable"`
-	AllowedOperators []string `json:"allowedOperators"`
+	RelationID       string                    `json:"relationId,omitempty"`
+	ValueMode        string                    `json:"valueMode,omitempty"`
+	Capabilities     *ReportResultCapabilities `json:"capabilities,omitempty"`
+	FieldID          string                    `json:"fieldId"`
+	Code             string                    `json:"code"`
+	Header           string                    `json:"header"`
+	ValueType        string                    `json:"valueType"`
+	Nullable         bool                      `json:"nullable"`
+	NullDisplay      string                    `json:"nullDisplay,omitempty"`
+	Filterable       bool                      `json:"filterable"`
+	Sortable         bool                      `json:"sortable"`
+	AllowedOperators []string                  `json:"allowedOperators"`
 }
 
 type ReportResultRowDTO struct {
-	Key    string                 `json:"key"`
-	Values map[string]interface{} `json:"values"`
+	DisplayValues  map[string]interface{}         `json:"displayValues,omitempty"`
+	RelationStates map[string]ReportRelationState `json:"relationStates,omitempty"`
+	Key            string                         `json:"key"`
+	Values         map[string]interface{}         `json:"values"`
 }
 
 type ReportResultPaginationDTO struct {
@@ -161,6 +166,9 @@ func (service *ReportRunQueryService) QueryResults(ctx context.Context, actor, r
 		defer cancel()
 		_ = service.store.ReleaseResultReadLease(releaseCtx, leaseToken)
 	}()
+	if contract.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+		return service.querySelectResults(ctx, *contract, input, cursor, limit)
+	}
 	allColumns, err := frozenResultColumns(contract.Run.PresentationSnapshotJSON)
 	if err != nil {
 		return nil, ErrReportRunQueryConflict
@@ -488,7 +496,7 @@ func (oracleReportResultPageReader) Read(ctx context.Context, contract reportrep
 		return reportoracle.ResultPage{}, err
 	}
 	defer func() { _ = adapter.Close() }()
-	if contract.Version.ExecutionMode == model.ReportExecutionModeRefCursor {
+	if contract.Version.UsesJSONSnapshot() {
 		if len(query.Filters) != 0 || len(query.Sort) != 0 {
 			return reportoracle.ResultPage{}, fmt.Errorf("JSON cursor report result filtering is not supported; pass filters in conditions")
 		}
@@ -500,6 +508,11 @@ func (oracleReportResultPageReader) Read(ctx context.Context, contract reportrep
 			afterRowID, err = strconv.ParseInt(after.Key, 10, 64)
 			if err != nil || afterRowID < 0 {
 				return reportoracle.ResultPage{}, fmt.Errorf("JSON cursor report result cursor is invalid")
+			}
+		}
+		if contract.Version.ExecutionMode == model.ReportExecutionModeSelectSnapshot {
+			if _, err := adapter.ValidateSelectSnapshot(queryCtx, contract.Run.RunUUID, contract.Run.ResultSchemaHash); err != nil {
+				return reportoracle.ResultPage{}, err
 			}
 		}
 		return adapter.ReadJSONSnapshotPage(queryCtx, contract.Run.RunUUID, columns, afterRowID, limit)
