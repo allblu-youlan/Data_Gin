@@ -1084,3 +1084,39 @@ test('report audit request builds bounded encoded cursor filters', async () => {
   assert.equal(request.path, '/v1/report-audits?action=REPORT_RESULT_QUERY_SUCCESS&targetType=REPORT_RUN&targetId=31&afterId=88&limit=100')
   assert.deepEqual(request.options, { method: 'GET', signal: undefined, showResult: false, silentLoading: true, acceptSafeErrorMessage: true })
 })
+
+test('SELECT snapshot draft keeps source identities and sends one editable column contract', async () => {
+  const fieldId = '11111111-1111-4111-8111-111111111111'
+  const querySpec = { version: 1, base: { tableId: '13019', aliasId: 'base' }, relations: [{ id: 'retail', name: '零售单', fromAliasId: 'base', targetTableId: '12964', keyBindings: [{ sourceColumnId: '31', targetColumnId: '41' }], cardinality: 'MANY_TO_ONE', joinType: 'LEFT', displayColumnIds: ['42'], detailColumnIds: ['42', '43'], matchConditions: { logic: 'AND', items: [] } }], columns: [{ fieldId, code: 'retail_ref', source: { kind: 'RELATION_DISPLAY', relationId: 'retail' }, header: '零售单', valueMode: 'DISPLAY', previewVisible: true, exportVisible: true }], where: { logic: 'OR', items: [{ aliasId: 'retail', columnId: '43', operator: 'GTE', value: { kind: 'PARAMETER', code: 'start' } }] }, orderBy: [{ aliasId: 'base', columnId: '30', direction: 'ASC' }], allowedFilters: [{ aliasId: 'retail', columnId: '43', operators: ['GTE', 'LT'] }], allowedSortFields: [{ aliasId: 'base', columnId: '30' }] }
+  const payload = { data: { id: 9, code: 'query_report', name: '自定义查询', category: '销售', datasourceId: 3, lockVersion: 4, executionMode: 'SELECT_SNAPSHOT', inputSchema: { start: { type: 'str', displayName: '开始日期', control: 'DATE', required: false, format: 'YYYYMMDD' } }, querySpec, executionPolicy: { exportPolicy: 'MANUAL', resultRetentionHours: 24, purgeAfterExport: false }, columns: [{ fieldId, logicalCode: 'retail_ref', source: { kind: 'RELATION_DISPLAY', relationId: 'retail' }, previewHeader: '零售单', excelHeader: '零售单' }] } }
+  const draft = parseReportDraft(payload)
+  assert.equal(draft.executionMode, 'SELECT_SNAPSHOT')
+  assert.deepEqual(draft.querySpec, querySpec)
+  assert.equal(draft.columns[0].databaseColumn, '')
+  assert.equal(draft.inputSchema.start.format, 'YYYYMMDD')
+  let sent
+  const response = await saveReportDraft(async (_path, options) => { sent = options.body; return { ok: true, data: payload } }, draft)
+  assert.equal(response.ok, true)
+  assert.deepEqual(sent.querySpec, querySpec)
+  assert.equal(Object.hasOwn(sent, 'columns'), false)
+  assert.equal(Object.hasOwn(sent, 'procedure'), false)
+  assert.equal(sent.executionPolicy.purgeAfterExport, false)
+  const detail = parseReportVersionDetail({ data: { summary: { id: 21, version: 2, status: 'PUBLISHED', contractFingerprint: 'aaaaaaaaaaaa', parameterCount: 1, columnCount: 1, grantCount: 0 }, configuration: payload.data } })
+  assert.deepEqual(detail.configuration.querySpec, querySpec)
+})
+
+test('SELECT run contract and result preserve display values separately from raw keys', async () => {
+  const contract = parseReportRunContract({ data: { definitionId: 9, versionId: 21, executionMode: 'SELECT_SNAPSHOT', inputSchema: {}, allowedFilters: [{ aliasId: 'retail', columnId: '43', operators: ['GTE'] }], allowedSortFields: [], relations: [], executionPolicy: { exportPolicy: 'MANUAL', resultRetentionHours: 24, purgeAfterExport: false } } })
+  assert.equal(contract.jsonInput, true)
+  assert.equal(contract.allowedFilters[0].columnId, '43')
+  const run = { id: 31, definitionId: 9, versionId: 21, status: 'SUCCEEDED', resultAvailable: true }
+  const result = parseReportResultPage({ data: { run, columns: [{ fieldId: 'uuid', code: 'retail_ref', header: '零售单', relationId: 'retail', valueMode: 'DISPLAY', capabilities: { canReadRaw: false, canViewDetail: true } }], rows: [{ key: 'signed-row', values: {}, displayValues: { retail_ref: '202610200001' }, relationStates: { retail: { status: 'MATCHED', canViewDetail: true } } }], pagination: { pageSize: 100, hasMore: false } } })
+  assert.deepEqual(result.rows[0].values, {})
+  assert.equal(result.rows[0].displayValues.retail_ref, '202610200001')
+  assert.equal(result.columns[0].capabilities.canReadRaw, false)
+  assert.equal(result.rows[0].relationStates.retail.canViewDetail, true)
+  let sent
+  const queryInputs = { where: { logic: 'AND', items: [] }, orderBy: [] }
+  await createReportRun(async (_path, options) => { sent = options.body; return { ok: true, data: { data: run } } }, 9, { id: '000123' }, 'SELECT_SNAPSHOT', true, undefined, queryInputs)
+  assert.deepEqual(sent, { conditions: { id: '000123' }, queryInputs })
+})

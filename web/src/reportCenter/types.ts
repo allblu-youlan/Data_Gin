@@ -149,7 +149,7 @@ export type ReportResultTableSchema = {
   columns: ReportResultTableColumn[]
 }
 
-export type ReportExecutionMode = 'TABLE_SNAPSHOT' | 'REF_CURSOR'
+export type ReportExecutionMode = 'TABLE_SNAPSHOT' | 'REF_CURSOR' | 'SELECT_SNAPSHOT'
 
 export type ReportInputType = 'str' | 'number' | 'bool' | 'list[str]' | 'list[number]' | 'list[bool]' | 'json'
 
@@ -238,6 +238,8 @@ export type ReportParameter = {
 }
 
 export type ReportColumn = {
+  source?: ReportColumnSource
+  valueMode?: 'DISPLAY' | 'RAW'
   fieldId: string
   logicalCode: string
   databaseColumn: string
@@ -275,6 +277,8 @@ export type ReportDraft = {
   status: ReportDefinitionStatus
   lockVersion: number
   executionMode: ReportExecutionMode
+  querySpec?: ReportQuerySpec
+  executionPolicy?: ReportExecutionPolicy
   procedure: ReportProcedureRef & { jsonInputArgName: string; resultCursorArgName: string }
   inputSchema: ReportInputSchema
   result: { tableOwner: string; tableName: string }
@@ -326,10 +330,14 @@ export type ReportVersionPage = { items: ReportVersionSummary[]; hasMore: boolea
 export type ReportVersionChange = { kind: 'CHANGED'; key: string; label: string; before: string | number; after: string | number }
 export type ReportVersionDiffSection = { key: string; label: string; changes: ReportVersionChange[] }
 export type ReportVersionDiff = { base: ReportVersionSummary; target: ReportVersionSummary; sections: ReportVersionDiffSection[] }
-export type ReportVersionConfiguration = Pick<ReportDraft, 'datasourceId' | 'procedure' | 'executionMode' | 'inputSchema' | 'result' | 'callTemplate' | 'parameters' | 'columns' | 'grants'>
+export type ReportVersionConfiguration = Pick<ReportDraft, 'datasourceId' | 'procedure' | 'executionMode' | 'querySpec' | 'executionPolicy' | 'inputSchema' | 'result' | 'callTemplate' | 'parameters' | 'columns' | 'grants'>
 export type ReportVersionDetail = { summary: ReportVersionSummary; configuration: ReportVersionConfiguration }
 
 export type ReportRunContract = {
+  executionPolicy?: ReportExecutionPolicy
+  allowedFilters?: ReportAllowedFilter[]
+  allowedSortFields?: ReportQueryField[]
+  relations?: ReportQueryRelation[]
   definitionId: number
   versionId: number
   code: string
@@ -362,6 +370,9 @@ export type ReportRun = {
 }
 
 export type ReportResultColumn = {
+  relationId?: string
+  valueMode?: 'DISPLAY' | 'RAW'
+  capabilities?: { canReadRaw: boolean; canViewDetail: boolean }
   fieldId: string
   code: string
   header: string
@@ -378,7 +389,7 @@ export type ReportResultFilter = { field: string; operator: ReportFilterOperator
 export type ReportResultSort = { field: string; direction: 'ASC' | 'DESC' }
 export type ReportResultQuery = { filters: ReportResultFilter[]; sort: ReportResultSort[] }
 
-export type ReportResultRow = { key: string; values: Record<string, unknown> }
+export type ReportResultRow = { key: string; values: Record<string, unknown>; displayValues?: Record<string, unknown>; relationStates?: Record<string, { status: string; canViewDetail: boolean }> }
 
 export type ReportResultPage = {
   run: ReportRun
@@ -440,3 +451,97 @@ export type ReportAuditPage = {
   hasMore: boolean
   nextAfterId: number
 }
+
+export type ReportColumnSource =
+  | { kind: 'BASE_COLUMN'; columnId: string }
+  | { kind: 'RELATION_DISPLAY'; relationId: string }
+  | { kind: 'RELATION_COLUMN'; relationId: string; columnId: string }
+
+export type ReportQueryOperator = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'BETWEEN' | 'IN' | 'NOT_IN' | 'PREFIX' | 'CONTAINS' | 'IS_NULL' | 'IS_NOT_NULL'
+export type ReportQueryField = { aliasId: string; columnId: string }
+export type ReportQueryValue = { kind: 'CONSTANT'; value: unknown } | { kind: 'PARAMETER'; code: string } | { kind: 'FIELD'; aliasId: string; columnId: string }
+export type ReportQueryCondition = ReportQueryField & { operator: ReportQueryOperator; value?: ReportQueryValue }
+export type ReportQueryConditionGroup = { logic: 'AND' | 'OR'; items: Array<ReportQueryCondition | ReportQueryConditionGroup> }
+export type ReportQueryOrder = ReportQueryField & { direction: 'ASC' | 'DESC' }
+export type ReportAllowedFilter = ReportQueryField & { operators: ReportQueryOperator[]; label?: string; logicalType?: string }
+export type ReportQueryRelation = {
+  id: string
+  name: string
+  fromAliasId: string
+  targetTableId: string
+  keyBindings: Array<{ sourceColumnId: string; targetColumnId: string }>
+  cardinality: 'MANY_TO_ONE' | 'ONE_TO_ONE'
+  joinType: 'LEFT'
+  displayColumnIds: string[]
+  detailColumnIds: string[]
+  matchConditions: ReportQueryConditionGroup
+}
+export type ReportQueryColumn = {
+  fieldId: string
+  code?: string
+  source: ReportColumnSource
+  header: string
+  valueMode?: 'DISPLAY' | 'RAW'
+  valueType?: string
+  previewVisible?: boolean
+  exportVisible?: boolean
+}
+export type ReportQuerySpec = {
+  version: 1
+  base: { tableId: string; aliasId: string }
+  relations: ReportQueryRelation[]
+  columns: ReportQueryColumn[]
+  where: ReportQueryConditionGroup
+  orderBy: ReportQueryOrder[]
+  allowedFilters?: ReportAllowedFilter[]
+  allowedSortFields?: ReportQueryField[]
+}
+export type ReportExecutionPolicy = { exportPolicy: 'MANUAL' | 'AUTO'; resultRetentionHours: number; purgeAfterExport: boolean }
+export type ReportQueryInputs = { where?: ReportQueryConditionGroup; orderBy?: ReportQueryOrder[] }
+export type BojunDataScope = { mode: 'GLOBAL_APPROVED' | 'SCOPE_COLUMN'; columnId?: string; values?: string[] }
+export type BojunTable = {
+  id: number
+  bojunTableId: string
+  logicalName: string
+  description: string
+  resolvedTable: string
+  primaryKeys: string[]
+  displayFields: string[]
+  searchFields: string[]
+  enabled: boolean
+  validationStatus: string
+  validationReason: string
+  lastSyncedAt: string | null
+  lockVersion: number
+  dataScope?: BojunDataScope
+}
+export type BojunColumn = {
+  id: number
+  bojunColumnId: string
+  name: string
+  dbName: string
+  description: string
+  oracleType: string
+  logicalType: string
+  nullable: boolean
+  isPhysical: boolean
+  isSelectable: boolean
+  refTableId: string
+  refColumnId: string
+  supportedOperators: ReportQueryOperator[]
+  ordinal: number
+}
+export type BojunPage<T> = { items: T[]; hasMore: boolean; nextAfter: string; generation: string }
+export type BojunSyncRun = { id: number; syncRunId: number; status: string; tableCount: number; columnCount: number; error: string; startedAt: string | null; finishedAt: string | null }
+export type ReportQueryIssue = { fieldPath: string; message: string; code: string }
+export type ReportQueryValidation = { valid: boolean; errors: ReportQueryIssue[]; warnings: ReportQueryIssue[] }
+export type ReportQueryPreview = { sampleOnly: boolean; elapsedMs: number; columns: ReportResultColumn[]; rows: ReportResultRow[] }
+export type ReportRecordDetail = {
+  mode: 'SNAPSHOT' | 'LIVE'
+  detailSource: string
+  queriedAt: string | null
+  relationName: string
+  fields: Array<{ columnId: string; name: string; label: string; rawValue?: unknown; displayValue?: unknown }>
+}
+export type ReportRelationOption = { keyValues: Record<string, string>; displayValue: string }
+export type ReportRelationOptions = { items: ReportRelationOption[]; hasMore: boolean; nextCursor: string }

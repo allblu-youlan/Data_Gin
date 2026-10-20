@@ -1,3 +1,5 @@
+import { parseReportColumnSource, parseReportExecutionPolicy, parseReportQueryOperator, parseReportQueryRelation, parseReportQuerySpec } from './bojunQueryConfig.js'
+import type { ReportAllowedFilter, ReportQueryInputs } from './types'
 import type { ClientFailureKind, ClientResponse, HTTPMethod } from '../api/client'
 import { isReportInputQueryName } from './inputQueryName.js'
 import { parseReportInputSchemaDocument, reportInputSchemaDocument } from './refCursorConfig.js'
@@ -404,8 +406,8 @@ export async function getReportVersionDiff(client: ReportCenterClient, reportId:
   return requestAndParse(client, `/v1/reports/${reportId}/version-diff?${search}`, { method: 'GET', signal }, parseReportVersionDiff, '报表版本差异加载失败。')
 }
 
-export async function createReportRun(client: ReportCenterClient, reportId: number, input: Record<string, unknown>, executionMode: ReportDraft['executionMode'], jsonInput = executionMode === 'REF_CURSOR', signal?: AbortSignal): Promise<ReportAPIResult<ReportRun>> {
-  const body = jsonInput ? { conditions: input } : { parameters: input }
+export async function createReportRun(client: ReportCenterClient, reportId: number, input: Record<string, unknown>, executionMode: ReportDraft['executionMode'], jsonInput = executionMode === 'REF_CURSOR' || executionMode === 'SELECT_SNAPSHOT', signal?: AbortSignal, queryInputs?: ReportQueryInputs): Promise<ReportAPIResult<ReportRun>> {
+  const body = { ...(jsonInput ? { conditions: input } : { parameters: input }), ...(executionMode === 'SELECT_SNAPSHOT' && queryInputs ? { queryInputs } : {}) }
   return requestAndParse(client, `/v1/reports/${reportId}/runs`, { method: 'POST', body, signal }, parseReportRun, '报表运行创建失败。')
 }
 
@@ -465,8 +467,8 @@ export function parseReportRunContract(payload: unknown): ReportRunContract {
     return parameter ? [parameter] : []
   })
   if (parameters.length !== rawParameters.length) throw new Error('invalid run contract parameters')
-  const executionMode = data.executionMode === 'REF_CURSOR' ? 'REF_CURSOR' : 'TABLE_SNAPSHOT'
-  const jsonInput = executionMode === 'REF_CURSOR' || data.inputSchema !== undefined
+  const executionMode = data.executionMode === 'SELECT_SNAPSHOT' ? 'SELECT_SNAPSHOT' : data.executionMode === 'REF_CURSOR' ? 'REF_CURSOR' : 'TABLE_SNAPSHOT'
+  const jsonInput = executionMode === 'REF_CURSOR' || executionMode === 'SELECT_SNAPSHOT' || data.inputSchema !== undefined
   const inputSchema = jsonInput ? parseReportInputSchemaDocument(data.inputSchema, true) : {}
   return {
     definitionId,
@@ -475,6 +477,7 @@ export function parseReportRunContract(payload: unknown): ReportRunContract {
     name: publicString(data.name, 128),
     description: publicString(data.description, 500),
     executionMode,
+    ...(executionMode === 'SELECT_SNAPSHOT' ? { executionPolicy: parseReportExecutionPolicy(data.executionPolicy), allowedFilters: parseAllowedQueryFilters(data.allowedFilters), allowedSortFields: firstArray(data.allowedSortFields).map((value) => { const field = isRecord(value) ? value : {}; return { aliasId: publicString(field.aliasId, 64), columnId: String(field.columnId ?? '') } }), relations: firstArray(data.relations).map(parseReportQueryRelation) } : {}),
     jsonInput,
     inputSchema,
     parameters: parameters.sort((left, right) => left.displayOrder - right.displayOrder || left.position - right.position),
@@ -493,15 +496,16 @@ export function parseReportDraft(payload: unknown): ReportDraft {
   const columns = rawColumns.flatMap((value) => { const item = parseReportColumn(value); return item ? [item] : [] })
   const rawGrants = firstArray(data.grants)
   const grants = rawGrants.flatMap((value) => { const item = parseReportGrant(value); return item ? [item] : [] })
-  const executionMode = data.executionMode === 'REF_CURSOR' ? 'REF_CURSOR' : 'TABLE_SNAPSHOT'
+  const executionMode = data.executionMode === 'SELECT_SNAPSHOT' ? 'SELECT_SNAPSHOT' : data.executionMode === 'REF_CURSOR' ? 'REF_CURSOR' : 'TABLE_SNAPSHOT'
   const jsonTableSnapshot = executionMode === 'TABLE_SNAPSHOT' && Boolean(publicString(procedure.jsonInputArgName, 128))
   let inputSchema: ReportDraft['inputSchema'] = {}
-  if (executionMode === 'REF_CURSOR' || jsonTableSnapshot) inputSchema = parseReportInputSchemaDocument(data.inputSchema, true)
+  if (executionMode === 'REF_CURSOR' || executionMode === 'SELECT_SNAPSHOT' || jsonTableSnapshot) inputSchema = parseReportInputSchemaDocument(data.inputSchema, true)
   if (!id || !datasourceId || parameters.length !== rawParameters.length || columns.length !== rawColumns.length || grants.length !== rawGrants.length) throw new Error('invalid report draft')
   return {
     id, datasourceId, code: publicString(data.code, 64), name: publicString(data.name, 128), category: publicString(data.category, 64), description: publicString(data.description, 500),
     status: reportStatus(data.status), lockVersion: positiveInteger(data.lockVersion) ?? 0,
     executionMode,
+    ...(executionMode === 'SELECT_SNAPSHOT' ? { querySpec: parseReportQuerySpec(data.querySpec), executionPolicy: parseReportExecutionPolicy(data.executionPolicy) } : {}),
     procedure: {
       owner: publicString(procedure.owner, 128), package: publicString(procedure.package, 128), name: publicString(procedure.name, 128), overload: publicString(procedure.overload, 32),
       jsonInputArgName: publicString(procedure.jsonInputArgName, 128), resultCursorArgName: publicString(procedure.resultCursorArgName, 128),
@@ -549,13 +553,14 @@ export function parseReportResultPage(payload: unknown): ReportResultPage {
     const code = publicString(value.code, 64)
     if (!fieldId || !code) return []
 		const allowedOperators = firstArray(value.allowedOperators).map(reportFilterOperator)
-		return [{ fieldId, code, header: publicString(value.header, 128) || code, valueType: publicString(value.valueType, 32), nullable: value.nullable === true, nullDisplay: publicString(value.nullDisplay, 32), filterable: value.filterable === true, sortable: value.sortable === true, allowedOperators }]
+		return [{ fieldId, code, ...(typeof value.relationId === 'string' ? { relationId: publicString(value.relationId, 64), valueMode: value.valueMode === 'RAW' ? 'RAW' as const : 'DISPLAY' as const, capabilities: { canReadRaw: isRecord(value.capabilities) && value.capabilities.canReadRaw === true, canViewDetail: isRecord(value.capabilities) && value.capabilities.canViewDetail === true } } : {}), header: publicString(value.header, 128) || code, valueType: publicString(value.valueType, 32), nullable: value.nullable === true, nullDisplay: publicString(value.nullDisplay, 32), filterable: value.filterable === true, sortable: value.sortable === true, allowedOperators }]
   })
   const rawRows = firstArray(data.rows)
   const rows = rawRows.flatMap((value) => {
     if (!isRecord(value) || !isRecord(value.values)) return []
     const key = publicString(value.key, 128)
-    return key ? [{ key, values: value.values }] : []
+    const relationStates = isRecord(value.relationStates) ? Object.fromEntries(Object.entries(value.relationStates).map(([id, state]) => [id, { status: isRecord(state) ? publicString(state.status, 64) : '', canViewDetail: isRecord(state) && state.canViewDetail === true }])) : undefined
+    return key ? [{ key, values: value.values, ...(isRecord(value.displayValues) ? { displayValues: value.displayValues } : {}), ...(relationStates ? { relationStates } : {}) }] : []
   })
   if (columns.length !== rawColumns.length || rows.length !== rawRows.length) throw new Error('invalid report result page')
   const nextCursor = publicString(pagination.nextCursor, 1024)
@@ -641,7 +646,7 @@ export function parseReportAuditPage(payload: unknown): ReportAuditPage {
   return { items, hasMore, nextAfterId }
 }
 
-async function requestAndParse<T>(client: ReportCenterClient, path: string, options: Parameters<ReportCenterClient>[1], parse: (payload: unknown) => T, fallback: string): Promise<ReportAPIResult<T>> {
+export async function requestAndParse<T>(client: ReportCenterClient, path: string, options: Parameters<ReportCenterClient>[1], parse: (payload: unknown) => T, fallback: string): Promise<ReportAPIResult<T>> {
   const response = await client(path, { ...options, showResult: false, silentLoading: true, acceptSafeErrorMessage: true })
   if (!response.ok) {
     const failure: Extract<ReportAPIResult<T>, { ok: false }> = { ok: false, error: response.error?.message ?? fallback }
@@ -764,8 +769,9 @@ function parseReportColumn(value: unknown): ReportColumn | null {
   const fieldId = publicString(value.fieldId, 36)
   const logicalCode = publicString(value.logicalCode, 64)
   const databaseColumn = publicString(value.databaseColumn, 128)
-  if (!fieldId || !logicalCode || !databaseColumn) return null
+  if (!fieldId || !logicalCode || (!databaseColumn && !isRecord(value.source))) return null
   return {
+    ...(value.source ? { source: parseReportColumnSource(value.source), valueMode: value.valueMode === 'RAW' ? 'RAW' as const : 'DISPLAY' as const } : {}),
     fieldId, logicalCode, databaseColumn, sourceOracleType: publicString(value.sourceOracleType, 64), precision: nullableInteger(value.precision), scale: nullableInteger(value.scale), nullable: value.nullable === true,
     valueType: publicString(value.valueType, 32), previewHeader: publicString(value.previewHeader, 255), excelHeader: publicString(value.excelHeader, 255), displayOrder: nonNegativeInteger(value.displayOrder), exportOrder: nonNegativeInteger(value.exportOrder),
     previewVisible: value.previewVisible === true, exportVisible: value.exportVisible === true, filterable: value.filterable === true, sortable: value.sortable === true, exportAllowed: value.exportAllowed === true,
@@ -782,15 +788,16 @@ function parseReportGrant(value: unknown): ReportGrant | null {
 
 function serializeReportDraft(draft: ReportDraft, creating: boolean) {
   const jsonTableSnapshot = draft.executionMode === 'TABLE_SNAPSHOT' && Boolean(draft.procedure.jsonInputArgName)
-  const jsonInput = draft.executionMode === 'REF_CURSOR' || jsonTableSnapshot
+  const jsonInput = draft.executionMode === 'REF_CURSOR' || draft.executionMode === 'SELECT_SNAPSHOT' || jsonTableSnapshot
   return {
     code: draft.code, name: draft.name, category: draft.category, description: draft.description, datasourceId: draft.datasourceId,
-    ...(creating ? {} : { expectedLockVersion: draft.lockVersion }), executionMode: draft.executionMode, procedure: draft.procedure,
+    ...(creating ? {} : { expectedLockVersion: draft.lockVersion }), executionMode: draft.executionMode,
+    ...(draft.executionMode === 'SELECT_SNAPSHOT' ? { querySpec: draft.querySpec, executionPolicy: draft.executionPolicy ?? parseReportExecutionPolicy(undefined) } : { procedure: draft.procedure }),
     inputSchema: jsonInput ? reportInputSchemaDocument(draft.inputSchema) : undefined,
-    result: draft.executionMode === 'REF_CURSOR' ? {} : { tableOwner: draft.result.tableOwner, tableName: draft.result.tableName },
+    result: draft.executionMode === 'REF_CURSOR' || draft.executionMode === 'SELECT_SNAPSHOT' ? {} : { tableOwner: draft.result.tableOwner, tableName: draft.result.tableName },
     callTemplate: jsonTableSnapshot ? draft.callTemplate : jsonInput ? '' : draft.callTemplate,
     parameters: jsonInput ? [] : draft.parameters.map((parameter) => ({ ...parameter, defaultValue: parameter.sensitive ? undefined : parameter.defaultValue, allowedValues: parameter.allowedValues.length ? parameter.allowedValues : undefined, validation: Object.keys(parameter.validation).length ? parameter.validation : undefined, normalizer: Object.keys(parameter.normalizer).length ? parameter.normalizer : undefined, valueSource: Object.keys(parameter.valueSource).length ? parameter.valueSource : undefined, nullPolicy: parameter.nullPolicy || 'TYPED_NULL' })),
-    columns: draft.columns,
+    ...(draft.executionMode === 'SELECT_SNAPSHOT' ? {} : { columns: draft.columns }),
     grants: draft.grants,
   }
 }
@@ -939,7 +946,7 @@ export function parseReportVersionDetail(payload: unknown): ReportVersionDetail 
 	return {
 		summary,
 		configuration: {
-			datasourceId: draft.datasourceId, procedure: draft.procedure, executionMode: draft.executionMode,
+			datasourceId: draft.datasourceId, procedure: draft.procedure, executionMode: draft.executionMode, querySpec: draft.querySpec, executionPolicy: draft.executionPolicy,
 			inputSchema: draft.inputSchema, result: draft.result, callTemplate: draft.callTemplate,
 			parameters: draft.parameters, columns: draft.columns, grants: draft.grants,
 		},
@@ -1067,3 +1074,5 @@ function reportLogicalType(value: unknown): ReportParameter['logicalType'] {
   const allowed: ReportParameter['logicalType'][] = ['string', 'integer', 'decimal', 'boolean', 'date', 'datetime', 'enum', 'multi_enum', 'json']
   return typeof value === 'string' && allowed.includes(value as ReportParameter['logicalType']) ? value as ReportParameter['logicalType'] : 'string'
 }
+
+function parseAllowedQueryFilters(value: unknown): ReportAllowedFilter[] { return firstArray(value).map((value) => { const field = isRecord(value) ? value : {}; return { aliasId: publicString(field.aliasId, 64), columnId: String(field.columnId ?? ''), operators: firstArray(field.operators).map(parseReportQueryOperator), label: publicString(field.label, 128), logicalType: publicString(field.logicalType, 32) } }) }
