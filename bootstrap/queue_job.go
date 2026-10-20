@@ -79,6 +79,14 @@ func setupQueueJob() {
 	}
 	mux.HandleFunc(job.TypeOfficePushSchedule, newOfficePushScheduleHandler(officePushSchedulePlanner))
 	if reportWorkerEnabled {
+		catalogService := data_svc.NewReportBojunCatalogService()
+		mux.HandleFunc(job.TypeReportBojunSync, func(ctx context.Context, task *asynq.Task) error {
+			payload, err := job.DecodeReportRunTaskPayload(task.Payload())
+			if err != nil {
+				return asynq.SkipRetry
+			}
+			return catalogService.ProcessSync(ctx, payload.RunID)
+		})
 		reportProcessor := data_svc.NewReportRunProcessor()
 		mux.HandleFunc(job.TypeReportRun, newReportRunHandler(reportProcessor, client))
 		reportExportProcessor := data_svc.NewReportExportProcessor()

@@ -27,7 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const schemaMigrationVersion = "2026-10-14-feishu-manual-report-v24"
+const schemaMigrationVersion = "2026-10-20-bojun-custom-report-v25"
+const feishuManualReportMigrationVersion = "2026-10-14-feishu-manual-report-v24"
 const feishuMentionMigrationVersion = "2026-10-13-feishu-mention-v23"
 const officeWebDAVMigrationVersion = "2026-09-08-office-webdav-v22"
 const previousSchemaMigrationVersion = "2026-09-04-report-category-access-v21"
@@ -196,6 +197,7 @@ func bojunOracleMigrationModels() []interface{} {
 
 func schemaIncrementalMigrationBaselines() []string {
 	return []string{
+		feishuManualReportMigrationVersion,
 		feishuMentionMigrationVersion,
 		officeWebDAVMigrationVersion,
 		previousSchemaMigrationVersion,
@@ -223,6 +225,7 @@ func feishuMentionMigrationModels() []interface{} {
 
 func incrementalSchemaMigrationModels() []interface{} {
 	models := append([]interface{}{}, officeMessageMigrationModels()...)
+	models = append(models, &model.ReportBojunCatalog{}, &model.ReportBojunTable{}, &model.ReportBojunColumn{}, &model.ReportBojunTableConfig{}, &model.ReportBojunSyncRun{}, &model.ReportBojunSyncStaging{}, &model.ReportVersion{}, &model.ReportColumn{}, &model.ReportRun{})
 	return append(models,
 		&model.ReportCategoryAccess{},
 		&model.ReportCategoryGrant{},
@@ -506,6 +509,12 @@ func autoMigrateTables() error {
 
 func reportCenterMigrationModels() []interface{} {
 	return []interface{}{
+		&model.ReportBojunCatalog{},
+		&model.ReportBojunTable{},
+		&model.ReportBojunColumn{},
+		&model.ReportBojunTableConfig{},
+		&model.ReportBojunSyncRun{},
+		&model.ReportBojunSyncStaging{},
 		&model.ReportDatasource{},
 		&model.ReportInputQueryDefinition{},
 		&model.ReportResultTableBinding{},

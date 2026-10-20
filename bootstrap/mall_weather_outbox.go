@@ -55,6 +55,7 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 	)...)
 	if reportWorkerEnabled {
 		definitions = append(definitions, job.ReportOutboxTaskDefinitions(job.ReportRunMaxRetry)...)
+		definitions = append(definitions, job.ReportBojunSyncOutboxTaskDefinitions()...)
 		definitions = append(definitions, job.ReportExportOutboxTaskDefinitions(job.ReportExportMaxRetry)...)
 	}
 	if global.MallWeatherEnabledAtStartup {

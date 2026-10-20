@@ -25,8 +25,8 @@ func TestMallWeatherMigrationModelsAreUnique(t *testing.T) {
 
 func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 	models := reportCenterMigrationModels()
-	if len(models) != 14 {
-		t.Fatalf("reportCenterMigrationModels() count = %d, want 14", len(models))
+	if len(models) != 20 {
+		t.Fatalf("reportCenterMigrationModels() count = %d, want 20", len(models))
 	}
 
 	seen := make(map[reflect.Type]struct{}, len(models))
@@ -40,7 +40,7 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 }
 
 func TestSchemaMigrationVersionIncludesFeishuMention(t *testing.T) {
-	if schemaMigrationVersion != "2026-10-14-feishu-manual-report-v24" {
+	if schemaMigrationVersion != "2026-10-20-bojun-custom-report-v25" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
 	}
 	if feishuMentionMigrationVersion != "2026-10-13-feishu-mention-v23" {
@@ -186,6 +186,15 @@ func TestIncrementalSchemaMigrationIncludesReportCategoryAccessTables(t *testing
 		reflect.TypeOf(&model.OfficePushSchedule{}),
 		reflect.TypeOf(&model.OfficePushRun{}),
 		reflect.TypeOf(&model.OfficeProcedureExportLock{}),
+		reflect.TypeOf(&model.ReportBojunCatalog{}),
+		reflect.TypeOf(&model.ReportBojunTable{}),
+		reflect.TypeOf(&model.ReportBojunColumn{}),
+		reflect.TypeOf(&model.ReportBojunTableConfig{}),
+		reflect.TypeOf(&model.ReportBojunSyncRun{}),
+		reflect.TypeOf(&model.ReportBojunSyncStaging{}),
+		reflect.TypeOf(&model.ReportVersion{}),
+		reflect.TypeOf(&model.ReportColumn{}),
+		reflect.TypeOf(&model.ReportRun{}),
 		reflect.TypeOf(&model.ReportCategoryAccess{}),
 		reflect.TypeOf(&model.ReportCategoryGrant{}),
 	}

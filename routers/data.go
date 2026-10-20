@@ -346,6 +346,16 @@ func registerReportInputQueryRoutes(api *gin.RouterGroup, controller *data_ctrl.
 }
 
 func registerReportDatasourceRoutes(api *gin.RouterGroup, controller *data_ctrl.ReportDatasourceController) {
+	catalog := data_ctrl.NewReportBojunCatalogController()
+	catalogGroup := api.Group("/v1/report-datasources")
+	catalogGroup.Use(middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage))
+	catalogGroup.POST("/:id/bojun-sync-runs", catalog.Start)
+	catalogGroup.GET("/:id/bojun-sync-runs/:syncId", catalog.Status)
+	catalogGroup.GET("/:id/bojun-tables", catalog.List)
+	catalogGroup.GET("/:id/bojun-tables/:tableId", catalog.Get)
+	catalogGroup.GET("/:id/bojun-tables/:tableId/columns", catalog.Columns)
+	catalogGroup.PUT("/:id/bojun-tables/:tableId/config", catalog.Configure)
+
 	api.POST("/v1/report-datasource-connection-tests", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("30-M"), controller.TestConnection)
 	group := api.Group("/v1/report-datasources")
 	group.Use(middleware.AuthJWT())

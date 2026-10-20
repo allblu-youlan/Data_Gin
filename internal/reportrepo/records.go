@@ -227,6 +227,7 @@ func createColumnRecords(ctx context.Context, tx *gorm.DB, rows []columnRecord) 
 func reportColumnInsertValues(column model.ReportColumn) map[string]interface{} {
 	return map[string]interface{}{
 		"version_id": column.VersionID, "field_id": column.FieldID, "logical_code": column.LogicalCode,
+		"source_spec_json": column.SourceSpecJSON, "value_mode": column.ValueMode, "relation_id": column.RelationID,
 		"database_column": column.DatabaseColumn, "source_oracle_type": column.SourceOracleType,
 		"precision_value": column.PrecisionValue, "scale_value": column.ScaleValue, "nullable": column.Nullable,
 		"value_type": column.ValueType, "preview_header": column.PreviewHeader, "excel_header": column.ExcelHeader,

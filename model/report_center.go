@@ -15,8 +15,9 @@ const (
 	ReportVersionStatusDraft     = "DRAFT"
 	ReportVersionStatusPublished = "PUBLISHED"
 
-	ReportExecutionModeTableSnapshot = "TABLE_SNAPSHOT"
-	ReportExecutionModeRefCursor     = "REF_CURSOR"
+	ReportExecutionModeTableSnapshot  = "TABLE_SNAPSHOT"
+	ReportExecutionModeRefCursor      = "REF_CURSOR"
+	ReportExecutionModeSelectSnapshot = "SELECT_SNAPSHOT"
 
 	ReportRunStatusQueued          = "QUEUED"
 	ReportRunStatusRunning         = "RUNNING"
@@ -130,6 +131,10 @@ func (ReportDefinition) TableName() string { return "report_definitions" }
 // ReportVersion contains the complete MySQL-side contract for an Oracle
 // procedure and result table. Rows with status PUBLISHED are immutable.
 type ReportVersion struct {
+	QuerySpecJSON        JSONText `gorm:"type:json" json:"querySpec,omitempty"`
+	MetadataSnapshotJSON JSONText `gorm:"type:json" json:"metadataSnapshot,omitempty"`
+	ExecutionPolicyJSON  JSONText `gorm:"type:json" json:"executionPolicy,omitempty"`
+
 	BaseModel
 	DefinitionID uint `gorm:"column:definition_id;not null;uniqueIndex:uk_report_version_number,priority:1;index" json:"definitionId"`
 	// DatasourceID stays nullable at the database layer during the rolling
@@ -206,6 +211,10 @@ func (ReportParameter) TableName() string { return "report_parameters" }
 // ReportColumn maps a stable logical column to an Oracle result-table column
 // and to the shared preview/Excel presentation contract.
 type ReportColumn struct {
+	SourceSpecJSON JSONText `gorm:"type:json" json:"source,omitempty"`
+	ValueMode      string   `gorm:"size:16" json:"valueMode,omitempty"`
+	RelationID     string   `gorm:"size:64" json:"relationId,omitempty"`
+
 	BaseModel
 	VersionID             uint     `gorm:"column:version_id;not null;uniqueIndex:uk_report_column_code,priority:1;uniqueIndex:uk_report_column_field,priority:1;index" json:"versionId"`
 	FieldID               string   `gorm:"column:field_id;type:char(36);not null;uniqueIndex:uk_report_column_field,priority:2" json:"fieldId"`
@@ -286,6 +295,10 @@ func (ReportCategoryGrant) TableName() string { return "report_category_grants" 
 // ReportRun is the durable MySQL control record for one Oracle execution and
 // its immutable parameter, permission and presentation snapshots.
 type ReportRun struct {
+	QueryInputsJSON     JSONText `gorm:"type:json" json:"-"`
+	DataScopeHash       string   `gorm:"size:64" json:"-"`
+	ExecutionPolicyJSON JSONText `gorm:"type:json" json:"executionPolicy,omitempty"`
+
 	BaseModel
 	RunUUID                       string     `gorm:"column:run_uuid;type:char(36);not null;uniqueIndex" json:"runUuid"`
 	DefinitionID                  uint       `gorm:"column:definition_id;not null;index" json:"definitionId"`
