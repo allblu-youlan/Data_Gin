@@ -20,7 +20,7 @@ const oracleIdentifierPattern = /^[A-Za-z][A-Za-z0-9_$#]{0,127}$/
 
 export function ReportConfigDrawer({ client, report, datasources, datasourcesLoading = false, datasourcesError = '', onClose, onSaved }: { client: ReportCenterClient; report: ReportSummary | null; datasources: ReportDatasource[]; datasourcesLoading?: boolean; datasourcesError?: string; onClose: () => void; onSaved?: () => void }) {
   const bodyRef = useRef<HTMLDivElement>(null)
-  const [tab, setTab] = useState<Tab>('basic')
+  const [tab, setTab] = useState<Tab>('procedure')
   const [draft, setDraft] = useState<ReportDraft>(() => emptyDraft(datasources))
   const [savedFingerprint, setSavedFingerprint] = useState(() => draftFingerprint(emptyDraft(datasources)))
   const reportId = report?.id ?? 0
@@ -32,7 +32,7 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
   const [excelSchemaState, setExcelSchemaState] = useState<ExcelMappingSchemaState>({ status: 'idle', error: '' })
   const [excelSchema, setExcelSchema] = useState<ReportResultTableColumn[] | null>(null)
   const [excelSchemaReload, setExcelSchemaReload] = useState(0)
-  const editorTabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'basic' as const, label: '基本信息' }, { key: 'procedure' as const, label: '关联表' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
+  const editorTabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'procedure' as const, label: '数据与字段' }, { key: 'basic' as const, label: '报表信息' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
   const tabs = publication ? [...editorTabs, { key: 'publication' as const, label: '发布结果' }] : editorTabs
 
   useEffect(() => {
@@ -185,12 +185,13 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
   const sourceName = datasource?.code === 'system_environment_oracle' ? '系统环境 Oracle' : datasource?.name || '尚未选择连接'
   const stepTitles: Record<Tab, string> = { basic: '报表信息', procedure: draft.executionMode === 'SELECT_SNAPSHOT' ? '表与关系' : '存储过程', conditions: '查询条件', excel: '输出与导出', validation: '核验与试运行', publication: '发布结果' }
   const stepDescriptions: Record<Tab, string> = { basic: '为业务报表命名，并确定数据连接。', procedure: draft.executionMode === 'SELECT_SNAPSHOT' ? '连接业务数据，选择需要呈现的字段。' : '绑定 Oracle 过程和结果表。', conditions: '定义输入参数与筛选规则，让结果符合业务需要。', excel: '调整列名称、顺序，以及预览和 Excel 中的呈现。', validation: '检查配置并查看查询样本，确认后即可发布。', publication: '查看本次核验结果，或继续编辑下一版草稿。' }
+  const workspace = tab === 'procedure' && draft.executionMode === 'SELECT_SNAPSHOT'
   return <Dialog open className={`${reportDesign.surface} ${styles.dialog}`} title={draft.name.trim() || '新建报表'} description={<span className={styles.studioCaption}>报表工作室 <span aria-hidden="true">/</span> {draft.executionMode === 'SELECT_SNAPSHOT' ? '自定义查询' : '存储过程报表'} <span aria-hidden="true">·</span> {draft.id ? `草稿 #${draft.id}` : '未保存'}</span>} closeLabel="关闭报表配置" closeDisabled={state.saving} onClose={requestClose} footer={footer}>
     <div className={styles.studioLayout}>
     <ReportEditorNavigation tabs={tabs} active={tab} datasource={sourceName} onSelect={setTab} />
-    <div id="report-config-panel" role="tabpanel" aria-labelledby={`report-config-tab-${tab}`} tabIndex={0} ref={bodyRef} className={styles.body}>
-      <header className={styles.stepHeading}><div><h3>{stepTitles[tab]}</h3><p>{stepDescriptions[tab]}</p></div><span className={styles.stepProgress}>{String(tabs.findIndex((item) => item.key === tab) + 1).padStart(2, '0')} <span>/ {String(tabs.length).padStart(2, '0')}</span></span></header>
-      {state.loading ? <p>正在读取草稿…</p> : tab === 'publication' && publication ? <ReportValidationResultContent publication={publication} /> : <fieldset className={styles.editorFieldset} disabled={state.saving || draftRefreshFailed} aria-busy={state.saving || undefined}><Editor dirty={dirty} tab={tab} client={client} draft={draft} datasources={datasources} datasourcesLoading={datasourcesLoading} datasourcesError={datasourcesError} onChange={setDraft} excelSchema={excelSchema} excelSchemaState={excelSchemaState} onExcelSchemaRetry={() => setExcelSchemaReload((value) => value + 1)} /></fieldset>}
+    <div id="report-config-panel" role="tabpanel" aria-labelledby={`report-config-tab-${tab}`} tabIndex={0} ref={bodyRef} className={`${styles.body} ${workspace ? styles.workspaceBody : ''}`}>
+      {!workspace ? <header className={styles.stepHeading}><div><h3>{stepTitles[tab]}</h3><p>{stepDescriptions[tab]}</p></div><span className={styles.stepProgress}>{String(tabs.findIndex((item) => item.key === tab) + 1).padStart(2, '0')} <span>/ {String(tabs.length).padStart(2, '0')}</span></span></header> : null}
+      {state.loading ? <p>正在读取草稿…</p> : tab === 'publication' && publication ? <ReportValidationResultContent publication={publication} /> : <fieldset className={`${styles.editorFieldset} ${workspace ? styles.workspaceFieldset : ''}`} disabled={state.saving || draftRefreshFailed} aria-busy={state.saving || undefined}><Editor dirty={dirty} tab={tab} client={client} draft={draft} datasources={datasources} datasourcesLoading={datasourcesLoading} datasourcesError={datasourcesError} onChange={setDraft} excelSchema={excelSchema} excelSchemaState={excelSchemaState} onExcelSchemaRetry={() => setExcelSchemaReload((value) => value + 1)} /></fieldset>}
       {state.error ? <div className={styles.error} role="alert">{state.error}{draftRefreshFailed && publication ? <Button disabled={state.saving} onClick={() => void refreshPublishedDraft(publication.definitionId)}>重新读取后续草稿</Button> : null}</div> : null}
       {state.notice ? <div className={styles.notice} role="status">{state.notice}</div> : null}
     </div>

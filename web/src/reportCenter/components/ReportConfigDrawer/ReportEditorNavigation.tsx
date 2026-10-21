@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { CheckCheck, Columns3, FileText, ListFilter, ShieldCheck, Workflow } from 'lucide-react'
 import styles from './ReportConfigDrawer.module.css'
 
@@ -13,19 +12,12 @@ const steps = {
 }
 
 export function ReportEditorNavigation({ tabs, active, datasource, onSelect }: { tabs: Array<{ key: ReportEditorTab; label: string }>; active: ReportEditorTab; datasource: string; onSelect: (tab: ReportEditorTab) => void }) {
-  const [horizontal, setHorizontal] = useState(() => window.matchMedia('(max-width: 1000px)').matches)
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 1000px)')
-    const update = () => setHorizontal(query.matches)
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
   return <aside className={styles.flowRail}>
     <span className={styles.railCaption}>配置流程</span>
-    <div className={styles.tabs} role="tablist" aria-label="报表配置步骤" aria-orientation={horizontal ? 'horizontal' : 'vertical'} onKeyDown={(event) => {
+    <div className={styles.tabs} role="tablist" aria-label="报表配置步骤" aria-orientation="horizontal" onKeyDown={(event) => {
       const current = tabs.findIndex((item) => item.key === active)
-      const nextKey = horizontal ? 'ArrowRight' : 'ArrowDown'
-      const previousKey = horizontal ? 'ArrowLeft' : 'ArrowUp'
+      const nextKey = 'ArrowRight'
+      const previousKey = 'ArrowLeft'
       const index = event.key === nextKey ? (current + 1) % tabs.length : event.key === previousKey ? (current - 1 + tabs.length) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
       if (index < 0) return
       event.preventDefault()
