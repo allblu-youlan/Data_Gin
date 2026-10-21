@@ -43,18 +43,40 @@ export function oracleExportFilterNeedsValue(op: OracleExportFilterOperator) {
   return op !== 'empty' && op !== 'not_empty'
 }
 
+export function oracleExportFilterInputType(dataType: string): 'datetime-local' | 'number' | 'text' {
+  if (/^(DATE|TIMESTAMP)(?:\b|\()/i.test(dataType.trim())) return 'datetime-local'
+  return /^(NUMBER|FLOAT|BINARY_FLOAT|BINARY_DOUBLE|INTEGER|DECIMAL)(?:\b|\()/i.test(dataType.trim()) ? 'number' : 'text'
+}
+
+export function oracleExportDateInputValue(value: string) {
+  const normalized = value.trim().replace(' ', 'T')
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? `${normalized}T00:00:00` : normalized
+}
+
+export function oracleExportFilterOperatorForType(op: OracleExportFilterOperator, dataType: string) {
+  return op === 'contains' && oracleExportFilterInputType(dataType) !== 'text' ? 'eq' : op
+}
+
+export function normalizeOracleExportFilterValue(value: string, dataType: string) {
+  if (oracleExportFilterInputType(dataType) !== 'datetime-local') return value.trim()
+  const normalized = oracleExportDateInputValue(value)
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(normalized)) throw new Error('日期时间筛选值格式应为 YYYY-MM-DD HH:mm:ss。')
+  return `${normalized.length === 16 ? `${normalized}:00` : normalized}`.replace('T', ' ')
+}
+
 export function buildOracleExportRequest(table: OracleExportTable, columns: OracleExportColumnDraft[], filters: OracleExportFilterDraft[]) {
   const selected = columns.filter((column) => column.selected)
   if (!selected.length) throw new Error('请至少选择一个导出字段。')
   const fieldNames = new Set(columns.map((column) => column.name))
   for (const filter of filters) {
     if (!fieldNames.has(filter.field)) throw new Error('请选择有效的筛选字段。')
+    if (oracleExportFilterOperatorForType(filter.op, columns.find((column) => column.name === filter.field)?.dataType ?? '') !== filter.op) throw new Error('“包含”筛选仅支持文本字段，请调整比较方式。')
     if (oracleExportFilterNeedsValue(filter.op) && !filter.value.trim()) throw new Error('请填写筛选值，空值请使用“为空”或“不为空”。')
   }
   return {
     owner: table.owner,
     tableName: table.name,
     columns: selected.map((column) => ({ field: column.name, title: column.title.trim() || column.name })),
-    filters: filters.map(({ field, op, value }) => ({ field, op, value: oracleExportFilterNeedsValue(op) ? value.trim() : '' })),
+    filters: filters.map(({ field, op, value }) => ({ field, op, value: oracleExportFilterNeedsValue(op) ? normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '' })),
   }
 }

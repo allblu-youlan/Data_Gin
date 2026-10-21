@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildOracleExportRequest, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
+import { buildOracleExportRequest, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
 
 const table = { owner: 'ERP', name: 'ORDERS', columnCount: 2 }
 const rawColumns = [
@@ -48,4 +48,27 @@ test('prevents accidental all-column export after deselecting every field and re
 test('surfaces incomplete Oracle metadata instead of silently exporting an incomplete field list', () => {
   assert.throws(() => parseOracleExportColumns({ columns: [{ name: 'DOCNO' }] }), /字段目录/)
   assert.throws(() => parseOracleExportTables({ data: {} }), /目录响应/)
+})
+
+test('selects datetime controls for Oracle DATE and TIMESTAMP variants while retaining numeric and text controls', () => {
+  assert.equal(oracleExportFilterInputType('DATE'), 'datetime-local')
+  assert.equal(oracleExportFilterInputType('TIMESTAMP(6) WITH TIME ZONE'), 'datetime-local')
+  assert.equal(oracleExportFilterInputType('NUMBER(12,2)'), 'number')
+  assert.equal(oracleExportFilterInputType('VARCHAR2'), 'text')
+})
+
+test('submits DATE and TIMESTAMP range filters as database local time with seconds', () => {
+  const columns = parseOracleExportColumns({ columns: [{ name: 'CREATED_AT', position: 1, dataType: 'DATE', nullable: false }] })
+  const request = buildOracleExportRequest(table, columns, [{ id: 1, field: 'CREATED_AT', op: 'gte', value: '2026-10-01T08:30' }, { id: 2, field: 'CREATED_AT', op: 'lte', value: '2026-10-21T18:45:59' }])
+  assert.deepEqual(request.filters, [{ field: 'CREATED_AT', op: 'gte', value: '2026-10-01 08:30:00' }, { field: 'CREATED_AT', op: 'lte', value: '2026-10-21 18:45:59' }])
+  assert.equal(normalizeOracleExportFilterValue('2026-10-01', 'DATE'), '2026-10-01 00:00:00')
+  assert.equal(normalizeOracleExportFilterValue('00123', 'VARCHAR2'), '00123')
+  assert.throws(() => normalizeOracleExportFilterValue('昨天', 'DATE'), /日期时间筛选值格式/)
+})
+
+test('keeps contains for text and switches it to equality when choosing number or time fields', () => {
+  assert.equal(oracleExportFilterOperatorForType('contains', 'VARCHAR2'), 'contains')
+  assert.equal(oracleExportFilterOperatorForType('contains', 'NUMBER'), 'eq')
+  assert.equal(oracleExportFilterOperatorForType('contains', 'DATE'), 'eq')
+  assert.equal(oracleExportFilterOperatorForType('gte', 'TIMESTAMP(6)'), 'gte')
 })
