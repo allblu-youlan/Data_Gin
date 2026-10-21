@@ -1,0 +1,24 @@
+.surface {
+  --report-paper: var(--color-canvas);
+  --report-muted: var(--color-workspace);
+  --report-line: var(--color-border);
+  --report-accent: var(--color-brand-active);
+  --report-accent-soft: var(--color-brand-soft);
+  --report-radius: 8px;
+  --report-radius-lg: 12px;
+  --radius-control: 6px;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.surface :where(button, a, input, select, textarea) { touch-action: manipulation; }
+.surface :where(h1, h2, h3) { text-wrap: balance; }
+.page.page { display: grid; align-content: start; gap: var(--space-5); background: var(--report-muted); }
+.page > header { padding: var(--space-2) 0 var(--space-1); border: 0; }
+.page > section { padding: var(--space-5); border: 1px solid var(--report-line); border-radius: var(--report-radius-lg); background: var(--report-paper); }
+.page > [role='region'] { border-radius: var(--report-radius); background: var(--report-paper); }
+.caption { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-secondary); font-size: 12px; }
+.caption strong { color: var(--color-text); font-weight: 600; }
+.caption svg { width: 14px; height: 14px; }
+@media (max-width: 767px) { .page.page { gap: var(--space-4); } .page > section { padding: var(--space-4); } }
+
+@media (pointer: coarse) { .surface :where(button, input:not([type='checkbox']):not([type='radio']), select) { min-height: 44px; } }

@@ -1,15 +1,23 @@
-.list { display: grid; }
-.item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); min-height: 52px; border-bottom: 1px solid var(--color-border); }
-.item > button:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2); min-width: 0; border: 0; background: transparent; padding: var(--space-2) 0; text-align: left; }
-.item:hover { background: var(--color-brand-soft); }
-.item svg { width: 19px; color: var(--color-brand-active); }
-.item strong, .item small { display: block; }
-.item small { margin-top: var(--space-1); color: var(--color-text-secondary); font-weight: 500; }
-.pagination { display: flex; justify-content: center; padding-block: var(--space-4); border-top: 1px solid var(--color-border); }
-@media (max-width: 479px) { .item { grid-template-columns: auto minmax(0, 1fr); } .item > :last-child { grid-column: 2; } }
-
-.advanced { min-width: 0; border: 1px solid var(--color-border); background: var(--color-surface); }
-.advanced > summary { min-height: 48px; padding: var(--space-3) var(--space-4); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; }
-.advanced > summary:hover { background: var(--color-workspace); color: var(--color-text); }
-.advanced > summary:focus-visible { outline: 2px solid var(--color-brand-active); outline-offset: -2px; }
-.advanced[open] > summary { border-bottom: 1px solid var(--color-border); }
+.connectionBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); border: 1px solid var(--report-line); border-radius: var(--report-radius-lg); background: var(--report-paper); }
+.connection { display: flex; flex: 1; min-width: 220px; align-items: center; gap: var(--space-3); }
+.connectionIcon { display: grid; flex: 0 0 40px; height: 40px; place-items: center; border-radius: var(--report-radius); color: var(--report-accent); background: var(--report-accent-soft); }
+.connectionIcon svg { width: 20px; height: 20px; }
+.connection strong, .connection span:not(.connectionIcon) { display: block; }
+.connection strong { font-size: 13px; font-weight: 650; }
+.connection div > span { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: 12px; }
+.dictionaryNote { display: flex; align-items: center; gap: var(--space-3); padding-inline-start: var(--space-5); border-inline-start: 1px solid var(--report-line); color: var(--color-text-secondary); font-size: 12px; line-height: 1.7; }
+.dictionaryNote svg { width: 18px; height: 18px; }
+.dictionaryNote strong { color: var(--color-text); font-weight: 500; }
+.advanced { min-width: 0; border: 1px solid var(--report-line); border-radius: var(--report-radius-lg); background: var(--report-paper); }
+.advanced > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: 60px; padding: var(--space-4) var(--space-5); color: var(--color-text-secondary); list-style: none; cursor: pointer; }
+.advanced > summary::-webkit-details-marker { display: none; }
+.advanced > summary > span { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.advanced summary svg { width: 17px; height: 17px; flex-shrink: 0; }
+.advanced summary strong { color: var(--color-text); font-size: 13px; font-weight: 600; }
+.advanced summary small { font-size: 12px; font-weight: 400; }
+.advanced > summary:hover { background: var(--report-muted); border-radius: inherit; }
+.advanced > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.advanced[open] > summary { border-bottom: 1px solid var(--report-line); }
+.advanced[open] > summary > svg { transform: rotate(180deg); }
+.advanced > section { padding: var(--space-5); }
+@media (max-width: 767px) { .dictionaryNote { flex-basis: 100%; padding: var(--space-3) 0 0; border-inline-start: 0; border-top: 1px solid var(--report-line); } .connectionBar, .advanced > summary, .advanced > section { padding: var(--space-4); } .advanced summary small { flex-basis: 100%; padding-inline-start: 29px; } }

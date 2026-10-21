@@ -10,8 +10,8 @@ import { FeedbackState, PageCanvas, PageHeader } from '../ui'
 import styles from './ReportCenter.module.css'
 
 const managementSections: Array<{ key: ReportCenterSection; label: string; description: string; icon: LucideIcon }> = [
-  { key: 'catalog', label: '报表目录', description: '发现与维护', icon: BookOpenText },
-  { key: 'configuration', label: '报表配置', description: '数据源与契约', icon: Settings2 },
+  { key: 'catalog', label: '报表目录', description: '发现与管理', icon: BookOpenText },
+  { key: 'configuration', label: '报表工作室', description: '关联与设计', icon: Settings2 },
 ]
 
 const downloadSections: Array<{ key: ReportCenterSection; label: string; description: string; icon: LucideIcon }> = [
@@ -29,19 +29,18 @@ export function ReportCenter({ client, permissions, section, onNavigate }: {
   const visibleSections = sections.filter((item) => hasSectionPermission(permissions, item.key))
   const allowed = visibleSections.some((item) => item.key === section)
   const navigation = <nav className={styles.tabs} aria-label="报表中心工作流">
-    {visibleSections.map((item, index) => {
+    {visibleSections.map((item) => {
       const Icon = item.icon
       const active = item.key === section
       return <button className={active ? styles.active : ''} type="button" aria-current={active ? 'page' : undefined} onClick={() => onNavigate(item.key)} key={item.key}>
-        <span className={styles.step} aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
         <Icon aria-hidden="true" />
-        <span><strong>{item.label}</strong></span>
+        <span><strong>{item.label}</strong><small>{item.description}</small></span>
       </button>
     })}
   </nav>
   let content: ReactNode
   if (!allowed) content = <PageCanvas density="compact">
-    <PageHeader eyebrow="REPORT CENTER" title="报表中心" description="统一管理 Oracle JSON 游标报表、条件查询和 Excel 导出任务。" />
+    <PageHeader eyebrow="REPORT CENTER" title="报表中心" description="管理业务报表，查询数据并下载文件。" />
     {navigation}
     <FeedbackState kind="error" title="当前账号无权访问此报表模块" description="请从侧栏选择已授权模块，或联系管理员补充报表中心权限。" />
   </PageCanvas>

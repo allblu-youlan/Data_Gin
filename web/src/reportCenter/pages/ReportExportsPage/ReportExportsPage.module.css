@@ -5,3 +5,7 @@
 .table td strong, .table td small { display: block; }
 .table td small { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: 11px; }
 @media (max-width: 479px) { .filters, .filters label { width: 100%; } }
+
+.table.table { border: 1px solid var(--report-line); border-radius: var(--report-radius); }
+.table td { font-variant-numeric: tabular-nums; }
+.filters select { border-radius: var(--radius-control); background: var(--report-paper); }

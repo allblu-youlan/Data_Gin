@@ -14,6 +14,7 @@ import { ReportRuntimeQueryEditor } from '../../components/ReportQueryDesigner/R
 import { ReportFieldDetailDrawer } from '../../components/ReportFieldDetailDrawer/ReportFieldDetailDrawer'
 import { ReportInputQuerySelect } from '../../components/ReportInputQuerySelect/ReportInputQuerySelect'
 import { useReportCatalog } from '../../useReportCatalog'
+import design from '../../reportDesign.module.css'
 import styles from './ReportQueryPage.module.css'
 
 const emptyResultQuery: ReportResultQuery = { filters: [], sort: [] }
@@ -328,13 +329,14 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
   const conditionsChanged = Boolean(selectSnapshot && run && submittedInputFingerprint !== JSON.stringify({ values, queryInputs }))
   const canStartNewRun = run ? canStartNewReportRun(run.status, reportExport, operation.busy, purgeAfterExport) : false
   return (
-    <PageCanvas density="compact">
+    <PageCanvas density="compact" className={`${design.surface} ${design.page}`}>
       {navigation}
-      <PageHeader eyebrow="REPORT CENTER" title="报表查询与下载" actions={run ? <div className={styles.pageActions}>{run.canCancel ? <button type="button" onClick={() => setCancelState({ open: true, busy: false, error: '' })}><Square aria-hidden="true" />取消生成</button> : null}<button type="button" onClick={startNewRun} disabled={!canStartNewRun}><Plus aria-hidden="true" />重新选择</button></div> : undefined} />
-      <FilterToolbar summary={run ? <StatusTag tone={runTone(run)}>{runLabel(run.status)}</StatusTag> : <StatusTag tone="neutral">等待选择报表</StatusTag>}>
+      <PageHeader eyebrow="QUERY WORKSPACE" title="报表查询与下载" description="选择业务报表，按条件查询，再将本次结果保存为 Excel。" actions={run ? <div className={styles.pageActions}>{run.canCancel ? <button type="button" onClick={() => setCancelState({ open: true, busy: false, error: '' })}><Square aria-hidden="true" />取消生成</button> : null}<button type="button" onClick={startNewRun} disabled={!canStartNewRun}><Plus aria-hidden="true" />重新选择</button></div> : undefined} />
+      <ol className={styles.querySteps} aria-label="报表查询流程"><li data-active={!contract}><span>01</span><strong>选择报表</strong><small>使用已发布版本</small></li><li data-active={Boolean(contract && !run)}><span>02</span><strong>填写条件</strong><small>确定本次查询范围</small></li><li data-active={Boolean(run)}><span>03</span><strong>查看与导出</strong><small>保留本次查询结果</small></li></ol>
+      <FilterToolbar className={styles.reportSelector} summary={run ? <StatusTag tone={runTone(run)}>{runLabel(run.status)}</StatusTag> : <StatusTag tone="neutral">{contractState.loading ? '正在读取条件…' : contract ? '准备查询' : '选择已发布报表'}</StatusTag>}>
         <div className={styles.catalogSelector}><label className={styles.selector}>选择报表<select value={selectedId} onChange={(event) => { pollAbortRef.current?.abort(); setSelectedId(event.currentTarget.value) }} disabled={loading || published.length === 0}><option value="">请选择已上线报表</option>{reportsByCategory.map(([category, reports]) => <optgroup label={category} key={category}>{reports.map((report) => <option value={report.id} key={report.id}>{report.name}</option>)}</optgroup>)}</select></label>{hasMore ? <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? '正在加载…' : '加载更多'}</button> : null}</div>
       </FilterToolbar>
-      {selectedId ? <Section title="查询条件" actions={<button type="button" aria-expanded={parametersOpen} onClick={() => setParametersOpen((open) => !open)}><ChevronDown className={parametersOpen ? styles.chevronOpen : undefined} aria-hidden="true" />{parametersOpen ? '收起' : '展开'}</button>}>
+      {selectedId ? <Section className={styles.conditionsPanel} title="查询条件" actions={<button type="button" aria-expanded={parametersOpen} onClick={() => setParametersOpen((open) => !open)}><ChevronDown className={parametersOpen ? styles.chevronOpen : undefined} aria-hidden="true" />{parametersOpen ? '收起' : '展开'}</button>}>
         {parametersOpen ? <>
         {contractState.loading ? <FeedbackState kind="loading" title="正在加载下载条件" /> : null}
         {contractState.error ? <FeedbackState kind="error" title="下载条件加载失败" description={contractState.error} /> : null}
@@ -347,12 +349,13 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
       {run ? <Section title={selectSnapshot ? '查询结果' : '下载文件'} actions={<div className={styles.resultActions}>{reportExport ? <StatusTag tone={exportTone(reportExport)}>{reportExport.status === 'READY' && purgeAfterExport && !reportExport.purgedAt ? '可下载 · 清理中' : exportLabel(reportExport.status)}</StatusTag> : <StatusTag tone={runTone(run)}>{runLabel(run.status)}</StatusTag>}{selectSnapshot && canExport && run.resultAvailable && !reportExport ? <Button variant="primary" disabled={operation.busy} onClick={() => void startExport(run.id)}><Download aria-hidden="true" />导出本次结果</Button> : null}{canExport && reportExport?.canDownload ? <Button variant="primary" onClick={() => void downloadExport()}><Download aria-hidden="true" />下载文件</Button> : null}</div>} flush>
         {operation.busy && !reportExport?.canDownload ? <FeedbackState kind="loading" title={reportExport ? '正在生成 Excel' : '正在生成报表'} description={reportExport ? exportProgress(reportExport) : undefined} /> : null}
         {selectSnapshot ? <p className={styles.resultMeta}>运行 #{run.id} · 版本 #{run.versionId} · {run.rowCount.toLocaleString('zh-CN')} 行 · 生成 {run.finishedAt ? new Date(run.finishedAt).toLocaleString('zh-CN') : '进行中'} · 有效至 {run.resultExpiresAt ? new Date(run.resultExpiresAt).toLocaleString('zh-CN') : '待确认'}{!run.resultAvailable && run.resultExpiresAt && Date.parse(run.resultExpiresAt) <= Date.now() ? ' · 结果已到期，请重新查询' : ''}</p> : null}
-        {result ? <details open={selectSnapshot || undefined} className={styles.optionalPreview}><summary>查看结果预览（可选）</summary><div>
+        {result ? <details open={selectSnapshot || undefined} className={styles.optionalPreview}><summary>{selectSnapshot ? '数据明细' : '查看结果预览（可选）'}</summary><div>
           {contract?.executionMode === 'TABLE_SNAPSHOT' ? <ResultQueryToolbar page={result} query={resultQuery} open={filtersOpen} disabled={operation.busy || Boolean(reportExport)} onToggle={() => setFiltersOpen((value) => !value)} onChange={setResultQuery} onApply={() => void applyResultQuery()} /> : null}
           <ReportResultTable page={result} onInspect={setDetailColumn} onRecord={setRecordSelection} />
           <div className={styles.pagination}><span>第 {cursorIndex + 1} 页 · 每页 {result.pagination.pageSize} 行</span><div><button type="button" onClick={() => void previousPage()} disabled={operation.busy || cursorIndex === 0}><ChevronLeft aria-hidden="true" />上一页</button><button type="button" onClick={() => void nextPage()} disabled={operation.busy || !result.pagination.hasMore}>下一页<ChevronRight aria-hidden="true" /></button></div></div>
         </div></details> : null}
       </Section> : null}
+      {!run && !loading && !error ? <section className={styles.waitingResult} aria-label="结果预览"><FeedbackState kind="empty" title={published.length ? '查询结果将在这里展开' : '暂无可查询的报表'} description={published.length ? '完成上方条件后开始查询，结果、关联详情与导出入口会集中显示在这里。' : '请先在报表工作室完成设计并发布，再回来查询数据。'} /></section> : null}
       <Dialog open={cancelState.open && Boolean(run?.canCancel)} role="alertdialog" title="确认取消报表运行" description={run ? `运行 #${run.id} 的取消请求提交后不能撤回。` : undefined} closeDisabled={cancelState.busy} closeOnBackdrop={!cancelState.busy} initialFocusRef={keepRunningRef} onClose={() => setCancelState({ open: false, busy: false, error: '' })} footer={<><button ref={keepRunningRef} type="button" disabled={cancelState.busy} onClick={() => setCancelState({ open: false, busy: false, error: '' })}>继续运行</button><Button variant="danger" disabled={cancelState.busy} onClick={() => void cancelRun()}>{cancelState.busy ? '正在提交…' : '确认取消运行'}</Button></>}><p className={styles.cancelWarning}>系统会请求 Oracle 侧停止当前执行；已经写入结果表的数据仍按运行清理策略处理。</p>{cancelState.error ? <p className={styles.cancelError} role="alert">{cancelState.error}</p> : null}</Dialog>
       <ReportRecordDetailDrawer client={client} selection={recordSelection} onClose={() => setRecordSelection(null)} />
       <ReportFieldDetailDrawer column={detailColumn} onClose={() => setDetailColumn(null)} />
