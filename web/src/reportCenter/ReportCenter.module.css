@@ -1,10 +1,12 @@
 .tabs { display: flex; align-items: stretch; gap: var(--space-2); min-width: 0; border-bottom: 1px solid var(--report-line, var(--color-border)); padding-bottom: var(--space-3); overflow-x: auto; scrollbar-width: thin; }
-.tabs button { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-3); min-width: 180px; min-height: 52px; padding: var(--space-2) var(--space-4); border: 1px solid transparent; border-radius: var(--report-radius, 8px); background: transparent; color: var(--color-text-secondary); text-align: start; }
-.tabs button:hover { background: var(--color-canvas); color: var(--color-text); }
-.tabs button.active { border-color: var(--report-line, var(--color-border)); background: var(--color-canvas); color: var(--color-text); }
+.tabs a { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-3); min-width: 180px; min-height: 52px; padding: var(--space-2) var(--space-4); border: 1px solid transparent; border-radius: var(--report-radius, 8px); background: transparent; color: var(--color-text-secondary); text-align: start; text-decoration: none; }
+.tabs a:hover { background: var(--color-canvas); color: var(--color-text); }
+.tabs a.active { border-color: var(--report-line, var(--color-border)); background: var(--color-canvas); color: var(--color-text); }
 .tabs svg { width: 19px; height: 19px; color: var(--color-navigation-icon); }
-.tabs button.active svg { color: var(--report-accent, var(--color-brand-active)); }
+.tabs a.active svg { color: var(--report-accent, var(--color-brand-active)); }
 .tabs strong, .tabs small { display: block; }
 .tabs strong { font-size: 13px; font-weight: 650; }
 .tabs small { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: 11px; font-weight: 400; }
-@media (max-width: 767px) { .tabs button { flex: 1; min-width: 132px; padding: var(--space-2) var(--space-3); } }
+@media (max-width: 767px) { .tabs a { flex: 1; min-width: 132px; padding: var(--space-2) var(--space-3); } }
+
+.tabs a:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }

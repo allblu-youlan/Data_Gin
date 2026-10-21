@@ -9,6 +9,8 @@ import type { ReportCenterSection } from './types'
 import { FeedbackState, PageCanvas, PageHeader } from '../ui'
 import styles from './ReportCenter.module.css'
 
+const sectionLinks: Record<ReportCenterSection, string> = { catalog: '#report_catalog', configuration: '#report_configuration', query: '#report_query', exports: '#report_exports' }
+
 const managementSections: Array<{ key: ReportCenterSection; label: string; description: string; icon: LucideIcon }> = [
   { key: 'catalog', label: '报表目录', description: '发现与管理', icon: BookOpenText },
   { key: 'configuration', label: '报表工作室', description: '关联与设计', icon: Settings2 },
@@ -32,10 +34,10 @@ export function ReportCenter({ client, permissions, section, onNavigate }: {
     {visibleSections.map((item) => {
       const Icon = item.icon
       const active = item.key === section
-      return <button className={active ? styles.active : ''} type="button" aria-current={active ? 'page' : undefined} onClick={() => onNavigate(item.key)} key={item.key}>
+      return <a className={active ? styles.active : ''} href={sectionLinks[item.key]} aria-current={active ? 'page' : undefined} onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); onNavigate(item.key) }} key={item.key}>
         <Icon aria-hidden="true" />
         <span><strong>{item.label}</strong><small>{item.description}</small></span>
-      </button>
+      </a>
     })}
   </nav>
   let content: ReactNode
