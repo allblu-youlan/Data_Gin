@@ -1,0 +1,37 @@
+.dialog.dialog { width: min(calc(100vw - 80px), 1440px); height: min(calc(100dvh - 72px), 920px); max-height: calc(100dvh - 72px); overflow: hidden; --button-height: 32px; --report-accent: var(--color-success-text); --report-accent-soft: var(--color-success-soft); }
+.dialog > header { align-items: center; padding: 12px 18px; background: var(--color-text); color: var(--color-on-brand); border-bottom-color: transparent; }
+.dialog > header > div > div { color: var(--color-on-brand); opacity: .8; font-size: 11px; }
+.dialog > header > button { min-height: 30px; width: 30px; }
+.title { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+.title > svg { width: 18px; height: 18px; }
+.title > span { padding: 2px 6px; border: 1px solid currentColor; border-radius: 4px; font-size: 10px; font-weight: 400; opacity: .7; }
+.dialog > div:nth-child(2) { display: flex; min-height: 0; padding: 0; overflow: hidden; }
+.dialog > footer { padding: 10px 18px; font-size: 12px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 318px; flex: 1; min-width: 0; min-height: 0; }
+.diagram { display: flex; min-width: 0; min-height: 0; background: var(--report-muted); }
+.diagram > section { display: flex; flex-direction: column; flex: 1; min-height: 0; border: 0; border-radius: 0; }
+.diagram > section > div:nth-child(2) { display: grid; align-content: safe center; flex: 1; max-height: none; min-height: 0; }
+.detail { display: grid; align-content: start; gap: 18px; min-width: 0; overflow-y: auto; border-left: 1px solid var(--report-line); padding: 18px 16px; background: var(--report-paper); font-size: 12px; }
+.detailHeading { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--report-line); }
+.detailHeading > svg { width: 18px; height: 18px; color: var(--color-text-secondary); }
+.detailHeading h3 { margin: 0 0 4px; font-size: 16px; }
+.detailHeading code { color: var(--color-text-secondary); font-size: 11px; }
+.connections > h3, .outputs > h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 12px; font-weight: 600; }
+.connections h3 > svg { width: 14px; height: 14px; }
+.connections h3 > span, .outputs h3 > span { margin-left: auto; color: var(--color-text-secondary); font-size: 11px; font-weight: 400; }
+.connections article { margin-top: 8px; padding: 10px; border: 1px solid var(--report-line); border-radius: 6px; background: var(--report-muted); }
+.connections article > header { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; }
+.connections article > header > svg { width: 12px; height: 12px; color: var(--color-text-secondary); }
+.connections article strong { font-weight: 550; }
+.connections article > p { display: flex; justify-content: space-between; gap: 5px; margin: 8px 0; color: var(--color-text-secondary); font-size: 11px; }
+.connections article > small { display: block; margin-top: 7px; color: var(--color-text-secondary); font-size: 11px; }
+.bindings { display: grid; gap: 5px; }
+.bindings > div { display: grid; grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr); align-items: center; gap: 4px; }
+.bindings code { padding: 4px; border: 1px solid var(--report-line); border-radius: 3px; background: var(--report-paper); font-size: 11px; overflow-wrap: anywhere; }
+.bindings div > span { text-align: center; color: var(--color-text-secondary); }
+.outputs > div { display: flex; flex-wrap: wrap; gap: 5px; }
+.outputs div > span { padding: 4px 7px; border: 1px solid var(--report-line); border-radius: 4px; font-size: 11px; }
+.hint { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.7; }
+.summary { margin-right: auto; color: var(--color-text-secondary); font-size: 11px; }
+@media (max-width: 900px) { .dialog.dialog { width: calc(100vw - 48px); height: calc(100dvh - 48px); max-height: calc(100dvh - 48px); } .layout { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .diagram { min-height: 320px; } .detail { border-left: 0; border-top: 1px solid var(--report-line); overflow: visible; } }
+@media (max-width: 479px) { .dialog.dialog { align-self: center; width: calc(100vw - 24px); height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); border: 1px solid var(--report-line); } .dialog > header { padding: 10px 12px; } .summary { flex-basis: 100%; } }

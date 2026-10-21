@@ -30,8 +30,8 @@
 .eyebrow { display: block; color: var(--color-text-secondary); font-size: 11px; font-weight: 500; letter-spacing: 1px; line-height: 1.5; }
 .relationshipMap { min-width: 0; overflow: hidden; border: 1px solid var(--report-line); border-radius: var(--report-radius-lg); background: var(--report-paper); }
 .mapToolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); }
-.mapToolbar h4 { margin: var(--space-1) 0 0; font-size: 15px; font-weight: 600; }
-.mapToolbar h4 > span { margin-left: var(--space-2); color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
+.mapToolbar h3 { margin: var(--space-1) 0 0; font-size: 15px; font-weight: 600; }
+.mapToolbar h3 > span { margin-left: var(--space-2); color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
 .mapAdd { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 36px; padding: var(--space-2) var(--space-3); border: 1px solid var(--report-line); border-radius: var(--report-radius); background: var(--report-paper); color: var(--color-text); font-size: 12px; cursor: pointer; }
 .mapAdd svg { width: 14px; height: 14px; }
 .mapAdd:hover:not(:disabled) { border-color: var(--report-accent); background: var(--report-accent-soft); }
@@ -141,7 +141,7 @@
   .fieldSearch { width: 100%; }
 }
 
-@container (max-width: 420px) { .outputQueue ol { grid-template-columns: minmax(0, 1fr); } .mapToolbar { padding: var(--space-3); } .mapToolbar h4 > span { display: block; margin: var(--space-1) 0 0; } .tableSummaryHeader, .tableContext, .fieldWorkbenchMain { padding: var(--space-4); } .mapLegend { padding-inline: var(--space-3); } }
+@container (max-width: 420px) { .outputQueue ol { grid-template-columns: minmax(0, 1fr); } .mapToolbar { padding: var(--space-3); } .mapToolbar h3 > span { display: block; margin: var(--space-1) 0 0; } .tableSummaryHeader, .tableContext, .fieldWorkbenchMain { padding: var(--space-4); } .mapLegend { padding-inline: var(--space-3); } }
 
 .tableContext .defaultFields > .hint { display: none; }
 @media (pointer: coarse) { .outputQueue li > button { width: 44px; min-height: 44px; } }
