@@ -21,8 +21,9 @@ export function parseBojunColumn(value: unknown): BojunColumn {
   if (!number(column.id)) throw new Error('目录字段格式不完整。')
   return { id: number(column.id), bojunColumnId: queryText(column.bojunColumnId), name: queryText(column.name), dbName: queryText(column.dbName), description: queryText(column.description), oracleType: queryText(column.oracleType), logicalType: queryText(column.logicalType), nullable: column.nullable === true, isPhysical: column.isPhysical === true, isSelectable: column.isSelectable === true, refTableId: queryText(column.refTableId), refColumnId: queryText(column.refColumnId), supportedOperators: list(column.supportedOperators).map(parseReportQueryOperator), ordinal: number(column.ordinal) }
 }
-export function getBojunTables(client: ReportCenterClient, datasourceId: number, query: { search?: string; status?: string; after?: string; limit?: number } = {}, signal?: AbortSignal) {
+export function getBojunTables(client: ReportCenterClient, datasourceId: number, query: { search?: string; status?: string; after?: string; limit?: number; availableOnly?: boolean } = {}, signal?: AbortSignal) {
   const search = new URLSearchParams({ limit: String(Math.min(200, Math.max(1, query.limit ?? 50))) }); if (query.search) search.set('search', query.search); if (query.status) search.set('status', query.status); if (query.after) search.set('after', query.after)
+  if (query.availableOnly) search.set('availableOnly', 'true')
   return requestAndParse(client, `/v1/report-datasources/${datasourceId}/bojun-tables?${search}`, { method: 'GET', signal }, (value) => parsePage(value, parseBojunTable), '伯俊表目录读取失败。')
 }
 export function getBojunTable(client: ReportCenterClient, datasourceId: number, tableId: string, signal?: AbortSignal) { return requestAndParse(client, `/v1/report-datasources/${datasourceId}/bojun-tables/${encodeURIComponent(tableId)}`, { method: 'GET', signal }, parseBojunTable, '伯俊表信息读取失败。') }

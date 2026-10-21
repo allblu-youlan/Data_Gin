@@ -115,21 +115,33 @@ func (r *Repository) FinishBojunSync(ctx context.Context, run model.ReportBojunS
 		return tx.Where("sync_run_id = ?", run.ID).Delete(&model.ReportBojunSyncStaging{}).Error
 	})
 }
-func (r *Repository) ListBojunTables(ctx context.Context, ds, after uint, limit int, search, status string) ([]model.ReportBojunTable, uint64, error) {
+func (r *Repository) ListBojunTables(ctx context.Context, ds, after uint, limit int, search, status string, availableOnly bool) ([]model.ReportBojunTable, uint64, error) {
 	var cat model.ReportBojunCatalog
 	if e := r.db.WithContext(ctx).Where("datasource_id = ?", ds).First(&cat).Error; e != nil && e != gorm.ErrRecordNotFound {
 		return nil, 0, e
 	}
-	q := r.db.WithContext(ctx).Where("datasource_id = ? AND source_active = ? AND id > ?", ds, true, after)
+	q := buildBojunTableListQuery(r.db.WithContext(ctx), ds, after, limit, search, status, availableOnly)
+	var list []model.ReportBojunTable
+	e := q.Find(&list).Error
+	return list, cat.CurrentGeneration, e
+}
+
+func buildBojunTableListQuery(db *gorm.DB, ds, after uint, limit int, search, status string, availableOnly bool) *gorm.DB {
+	q := db.Model(&model.ReportBojunTable{}).Where("datasource_id = ? AND source_active = ? AND id > ?", ds, true, after)
 	if search != "" {
 		q = q.Where("(logical_name LIKE ? OR description LIKE ?)", "%"+search+"%", "%"+search+"%")
 	}
 	if status != "" {
 		q = q.Where("validation_status = ?", status)
 	}
-	var list []model.ReportBojunTable
-	e := q.Order("id").Limit(limit + 1).Find(&list).Error
-	return list, cat.CurrentGeneration, e
+	if availableOnly {
+		q = q.Where("validation_status = ?", "VALID").Where(`EXISTS (
+			SELECT 1 FROM report_bojun_table_configs AS approved
+			WHERE approved.table_id = report_bojun_tables.id
+			AND JSON_EXTRACT(approved.config_json, '$.enabled') = true
+		)`)
+	}
+	return q.Order("id").Limit(limit + 1)
 }
 func (r *Repository) BojunSourceTables(ctx context.Context, ds uint) (map[string]reportoracle.BojunTableMetadata, error) {
 	var list []model.ReportBojunTable

@@ -94,7 +94,7 @@ func (h *ReportBojunCatalogController) List(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	v, e := h.service.List(c.Request.Context(), ds, c.Query("search"), c.Query("status"), c.Query("after"), limit)
+	v, e := h.service.List(c.Request.Context(), ds, c.Query("search"), c.Query("status"), c.Query("after"), limit, c.Query("availableOnly") == "true")
 	if e != nil {
 		writeBojunError(c, e)
 		return

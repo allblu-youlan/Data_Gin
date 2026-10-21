@@ -138,7 +138,7 @@ type BojunTablePage struct {
 func catalogCursor(generation uint64, id uint) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%d:%d", generation, id)))
 }
-func (s *ReportBojunCatalogService) List(ctx context.Context, ds uint, search, status, after string, limit int) (BojunTablePage, error) {
+func (s *ReportBojunCatalogService) List(ctx context.Context, ds uint, search, status, after string, limit int, availableOnly bool) (BojunTablePage, error) {
 	if limit < 1 {
 		limit = 50
 	}
@@ -156,7 +156,7 @@ func (s *ReportBojunCatalogService) List(ctx context.Context, ds uint, search, s
 			return BojunTablePage{}, invalidReport("invalid catalog cursor")
 		}
 	}
-	list, g, e := s.repo.ListBojunTables(ctx, ds, afterID, limit, strings.TrimSpace(search), status)
+	list, g, e := s.repo.ListBojunTables(ctx, ds, afterID, limit, strings.TrimSpace(search), status, availableOnly)
 	if e != nil {
 		return BojunTablePage{}, e
 	}
