@@ -759,11 +759,12 @@ func (s *ExcelMatchJobService) Download(ctx context.Context, id uint) (*model.Ex
 	if matchJob.Status != excelMatchStatusSuccess {
 		return nil, "", "", fmt.Errorf("任务状态为 %s，无法下载", matchJob.Status)
 	}
-	if excelJobOperationFromConfigJSON(matchJob.ConfigJSON) != excelOperationExportMatch {
+	operation := excelJobOperationFromConfigJSON(matchJob.ConfigJSON)
+	if operation != excelOperationExportMatch && operation != excelOperationOracleExport {
 		return nil, "", "", errors.New("该任务不是匹配导出任务，不会生成结果文件")
 	}
 	if strings.TrimSpace(matchJob.ResultURL) != "" {
-		return matchJob, "", fmt.Sprintf("excel_match_job_%d.xlsx", matchJob.ID), nil
+		return matchJob, "", excelJobResultFilename(matchJob), nil
 	}
 	if !isPathInside(excelMatchJobDir(matchJob.ID), matchJob.ResultFilePath) {
 		return nil, "", "", errors.New("结果文件路径非法")
@@ -778,6 +779,9 @@ func (s *ExcelMatchJobService) Download(ctx context.Context, id uint) (*model.Ex
 		}
 		return nil, "", "", errors.New("读取结果文件失败，请稍后重试")
 	}
+	if operation == excelOperationOracleExport && !storage.OSSStorageEnabled() {
+		return matchJob, matchJob.ResultFilePath, excelJobResultFilename(matchJob), nil
+	}
 	return nil, "", "", errors.New("结果文件尚未上传到OSS，上传成功后才能下载，请稍后刷新任务状态")
 }
 
@@ -785,6 +789,9 @@ func (s *ExcelMatchJobService) ProcessJob(ctx context.Context, id uint) error {
 	matchJob, err := s.jobDAO.FindByID(ctx, id)
 	if err != nil {
 		return err
+	}
+	if excelJobOperationFromConfigJSON(matchJob.ConfigJSON) == excelOperationOracleExport {
+		return s.processOracleExportJob(ctx, matchJob)
 	}
 
 	var config ExcelMatchConfig
@@ -1753,7 +1760,7 @@ func (s *ExcelMatchJobService) uploadExcelResultToOSS(ctx context.Context, match
 		})
 	})
 	defer progressLogger.Flush()
-	result, err := client.UploadFileWithProgress(uploadCtx, objectKey, matchJob.ResultFilePath, fmt.Sprintf("excel_match_job_%d.xlsx", matchJob.ID), progressLogger.Handle)
+	result, err := client.UploadFileWithProgress(uploadCtx, objectKey, matchJob.ResultFilePath, excelJobResultFilename(matchJob), progressLogger.Handle)
 	if err != nil {
 		return storage.UploadResult{}, err
 	}
@@ -2117,12 +2124,23 @@ func (s *ExcelMatchJobService) refreshDownloadState(ctx context.Context, matchJo
 	if matchJob.Status != excelMatchStatusSuccess {
 		return
 	}
-	if excelJobOperationFromConfigJSON(matchJob.ConfigJSON) != excelOperationExportMatch {
+	operation := excelJobOperationFromConfigJSON(matchJob.ConfigJSON)
+	if operation != excelOperationExportMatch && operation != excelOperationOracleExport {
 		matchJob.DownloadMessage = "该任务不会生成结果文件"
 		return
 	}
 	if strings.TrimSpace(matchJob.ResultURL) != "" {
 		matchJob.CanDownload = true
+		return
+	}
+	if operation == excelOperationOracleExport && !storage.OSSStorageEnabled() {
+		if isPathInside(excelMatchJobDir(matchJob.ID), matchJob.ResultFilePath) {
+			if _, err := os.Stat(matchJob.ResultFilePath); err == nil {
+				matchJob.CanDownload = true
+				return
+			}
+		}
+		matchJob.DownloadMessage = "本机结果文件不可用，请重新创建导出任务；多节点部署请启用 OSS"
 		return
 	}
 	matchJob.DownloadMessage = "结果文件正在上传OSS，上传成功后才能下载，请稍后刷新任务状态"

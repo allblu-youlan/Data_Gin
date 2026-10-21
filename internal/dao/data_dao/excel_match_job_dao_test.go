@@ -117,3 +117,11 @@ func TestExcelMatchJobPageQueryDoesNotInterpolateKeyword(t *testing.T) {
 		t.Fatalf("Excel job keyword query vars = %#v", query.Statement.Vars)
 	}
 }
+
+func TestExcelMatchJobPageQueryFiltersOracleExports(t *testing.T) {
+	dao := &ExcelMatchJobDAO{db: dryRunWeatherDAOTestDB(t)}
+	query := dao.applyListFilters(dao.db.WithContext(t.Context()).Model(&model.ExcelMatchJob{}), ExcelMatchJobListQuery{Operation: "export"}).Find(&[]model.ExcelMatchJob{})
+	if query.Error != nil || !strings.Contains(query.Statement.SQL.String(), "JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.operation')) = ?") || len(query.Statement.Vars) != 1 || query.Statement.Vars[0] != "oracle_export" {
+		t.Fatalf("Oracle export filter SQL=%s vars=%v err=%v", query.Statement.SQL.String(), query.Statement.Vars, query.Error)
+	}
+}

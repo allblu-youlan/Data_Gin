@@ -133,6 +133,8 @@ func (dao *ExcelMatchJobDAO) applyListFilters(query *gorm.DB, params ExcelMatchJ
 			operationSQL+" IN ?",
 			[]string{"import_update", "clear_matched_docno"},
 		)
+	case "export":
+		query = query.Where(operationSQL+" = ?", "oracle_export")
 	}
 	return query
 }

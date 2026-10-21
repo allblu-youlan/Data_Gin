@@ -338,7 +338,7 @@ func validExcelMatchJobStatus(value string) bool {
 
 func validExcelMatchJobOperation(value string) bool {
 	switch value {
-	case "", "all", "match", "write":
+	case "", "all", "match", "write", "export":
 		return true
 	default:
 		return false

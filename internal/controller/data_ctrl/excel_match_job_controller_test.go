@@ -104,7 +104,7 @@ func TestExcelMatchJobQueryStatusValidation(t *testing.T) {
 }
 
 func TestExcelMatchJobQueryOperationValidation(t *testing.T) {
-	for _, operation := range []string{"", "all", "match", "write"} {
+	for _, operation := range []string{"", "all", "match", "write", "export"} {
 		if !validExcelMatchJobOperation(operation) {
 			t.Fatalf("validExcelMatchJobOperation(%q) = false", operation)
 		}

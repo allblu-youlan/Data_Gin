@@ -245,7 +245,7 @@ func validExcelMatchResultObjectKey(value string, expectedJobID uint, expectedPr
 			return false
 		}
 	}
-	if len(parts) != 5 || parts[len(parts)-1] != excelMatchResultFileName {
+	if len(parts) != 5 || (parts[4] != excelMatchResultFileName && parts[4] != "result.zip") {
 		return false
 	}
 	objectDate, err := time.Parse("2006/01/02", strings.Join(parts[:3], "/"))
@@ -254,5 +254,5 @@ func validExcelMatchResultObjectKey(value string, expectedJobID uint, expectedPr
 	}
 	jobID, err := strconv.ParseUint(parts[3], 10, 64)
 	return err == nil && jobID > 0 && jobID == uint64(expectedJobID) &&
-		value == path.Join(expectedPrefix, objectDate.Format("2006/01/02"), parts[3], excelMatchResultFileName)
+		value == path.Join(expectedPrefix, objectDate.Format("2006/01/02"), parts[3], parts[4])
 }

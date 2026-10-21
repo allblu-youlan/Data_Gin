@@ -136,6 +136,7 @@ func TestValidExcelMatchResultObjectKey(t *testing.T) {
 		want  bool
 	}{
 		{name: "without prefix", value: "excel-match-results/2026/07/26/17/result.xlsx", want: true},
+		{name: "Oracle split archive", value: "excel-match-results/2026/07/26/17/result.zip", want: true},
 		{name: "other prefix", value: "warehouse/prod/excel-match-results/2026/07/26/17/result.xlsx"},
 		{name: "wrong namespace", value: "weather/2026/07/26/17/result.xlsx"},
 		{name: "path traversal", value: "excel-match-results/2026/07/26/../result.xlsx"},
@@ -150,6 +151,18 @@ func TestValidExcelMatchResultObjectKey(t *testing.T) {
 				t.Fatalf("validExcelMatchResultObjectKey(%q, 17)=%v want=%v", tt.value, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestExcelMatchJobCleanerDeletesOracleSplitArchive(t *testing.T) {
+	objectKey := "excel-match-results/2026/10/21/17/result.zip"
+	store := &fakeExcelMatchCleanupStore{jobs: []model.ExcelMatchJob{{
+		BaseModel: model.BaseModel{ID: 17}, Status: "success", ResultObjectKey: objectKey,
+	}}}
+	objects := &fakeExcelMatchCleanupObjectStore{}
+	result, err := newTestExcelMatchJobCleaner(store, objects).Cleanup(t.Context())
+	if err != nil || result.Deleted != 1 || len(store.finished) != 1 || len(objects.deleted) != 1 || objects.deleted[0] != objectKey {
+		t.Fatalf("Oracle archive cleanup result=%+v err=%v objects=%v finished=%v", result, err, objects.deleted, store.finished)
 	}
 }
 
