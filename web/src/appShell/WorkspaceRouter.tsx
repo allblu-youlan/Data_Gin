@@ -15,6 +15,7 @@ import type { DestinationDefinition, SourceDefinition } from '../configurationPa
 import { ProcessedRecordsPage } from '../dataPages/ProcessedRecordsPage'
 import { RawRecordsPage } from '../dataPages/RawRecordsPage'
 import { ExcelMatchPage } from '../excelPages/ExcelMatchPage'
+import { OracleExportPage } from '../excelPages/OracleExportPage'
 import { MallWeatherPage, StoreInfoPage } from '../MallWeatherPage'
 import type { DataStatisticsSummary, HealthSummary, MallWeatherMetricsSummary } from '../monitoring'
 import { DeliveryLogsPage } from '../monitoringPages/DeliveryLogsPage/DeliveryLogsPage'
@@ -119,6 +120,7 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   if (activeNav === 'destinations') return <DestinationsPage client={client} refreshVersion={refreshVersion} />
   if (activeNav === 'tasks') return <DeliveryTasksPage client={client} canManage={canManageDelivery} sources={sources} destinations={destinations} onRefresh={onRefresh} refreshVersion={refreshVersion} />
   if (activeNav === 'push_policy') return <PushPolicyPage client={client} canManage={canManageDelivery} refreshVersion={refreshVersion} />
+  if (activeNav === 'excel_export') return <OracleExportPage client={client} token={token} loading={loading} refreshVersion={refreshVersion} canExecute={permissions.includes('excel.execute')} setLoading={setLoading} setResult={setResult} onNavigateToJobs={() => navigate('excel_jobs')} />
   if (activeNav === 'excel_jobs' || activeNav === 'excel_schemes' || activeNav === 'excel_write') {
     return <ExcelMatchPage section={activeNav === 'excel_jobs' ? 'jobs' : activeNav === 'excel_schemes' ? 'schemes' : 'write'} client={client} token={token} loading={loading} refreshVersion={refreshVersion} setLoading={setLoading} setResult={setResult} onNavigateToJobs={() => navigate('excel_jobs')} />
   }

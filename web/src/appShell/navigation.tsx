@@ -47,6 +47,7 @@ export type NavKey =
   | 'excel_jobs'
   | 'excel_schemes'
   | 'excel_write'
+  | 'excel_export'
   | 'report_catalog'
   | 'report_configuration'
   | 'report_query'
@@ -142,6 +143,7 @@ export const navGroups: NavGroup[] = [
     label: '数据工具',
     items: [
       { key: 'excel_jobs', label: 'Excel 任务', description: '状态与结果下载', icon: <ScrollText aria-hidden="true" /> },
+      { key: 'excel_export', label: 'Excel 导出', description: 'Oracle 表数据导出', icon: <Download aria-hidden="true" /> },
       { key: 'excel_schemes', label: 'Excel 匹配', description: '自定义多步骤方案', icon: <Upload aria-hidden="true" /> },
       { key: 'excel_write', label: 'Excel 写入', description: '导入与退回未匹配', icon: <Database aria-hidden="true" /> },
     ],
@@ -154,7 +156,7 @@ const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
   'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'store_info',
   'mall_weather', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
-  'excel_schemes', 'excel_write',
+  'excel_schemes', 'excel_write', 'excel_export',
   'office_messages', 'office_push',
   'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',
 ])

@@ -75,6 +75,8 @@ test('only applies manage-to-read inference supported by the backend authorizer'
   assert.equal(canViewNavigationItem('delivery_logs', ['delivery.manage']), true)
   assert.equal(canViewNavigationItem('receive', ['data.manage']), false)
   assert.equal(canViewNavigationItem('excel_jobs', ['excel.manage']), false)
+  assert.equal(canViewNavigationItem('excel_export', []), false)
+  assert.equal(canViewNavigationItem('excel_export', ['excel.read']), true)
   assert.equal(canViewNavigationItem('office_messages', ['office_message.manage']), false)
 })
 

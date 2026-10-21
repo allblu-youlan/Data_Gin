@@ -133,7 +133,7 @@ export function buildExcelMatchJobListQuery(query: ExcelMatchJobListQuery) {
   appendText(params, 'keyword', query.keyword, 255)
   if (['pending', 'running', 'success', 'failed', 'expired'].includes(query.status ?? '')) params.set('status', query.status!)
   const operation = query.operation?.trim() ?? ''
-  if (operation === 'match' || operation === 'write') params.set('operation', operation)
+  if (operation === 'match' || operation === 'write' || operation === 'export') params.set('operation', operation)
   return params.toString()
 }
 

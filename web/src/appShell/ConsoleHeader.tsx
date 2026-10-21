@@ -49,6 +49,7 @@ const titles: Record<NavKey, { title: string; subtitle: string }> = {
   tasks: { title: '推送任务', subtitle: '查询交付任务、触发方式和目标关系。' },
   push_policy: { title: '推送策略', subtitle: '配置各具体推送目标的订单跳过周期。' },
   excel_jobs: { title: 'Excel 任务', subtitle: '查询任务状态、进度、日志和下载结果。' },
+  excel_export: { title: 'Excel 导出', subtitle: '选择 Oracle 数据表、字段和条件生成 Excel。' },
   excel_schemes: { title: 'Excel 多步骤匹配', subtitle: '配置数据库表、字段和顺序匹配步骤。' },
   excel_write: { title: 'Excel 写入', subtitle: '执行导入更新与退回未匹配操作。' },
 }

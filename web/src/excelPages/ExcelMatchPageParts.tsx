@@ -42,13 +42,13 @@ export function ExcelJobHistoryTable({ jobs, loading, downloadingJobID, selected
   if (jobs.length === 0) return <EmptyState text="暂无 Excel 任务历史。" />
   return (
     <DataTable className={styles.historyTable} density="compact" minWidth={900} scrollLabel="Excel 任务列表">
-      <thead><tr><th scope="col">ID</th><th scope="col">文件</th><th scope="col">类型</th><th scope="col">状态</th><th scope="col">处理行</th><th scope="col">匹配/未匹配</th><th scope="col">创建时间</th><th scope="col">操作</th></tr></thead>
+      <thead><tr><th scope="col">ID</th><th scope="col">文件 / 数据表</th><th scope="col">类型</th><th scope="col">状态</th><th scope="col">处理行</th><th scope="col">匹配/未匹配</th><th scope="col">创建时间</th><th scope="col">操作</th></tr></thead>
       <tbody>{jobs.map((item) => (
         <tr className={item.id === selectedJobID ? styles.historyRowSelected : undefined} key={item.id}>
           <td>#{item.id}</td><td>{item.source_file_name || '-'}</td><td>{excelJobOperationLabel(excelJobOperation(item))}</td>
           <td><StatusTag tone={excelJobStatusTone(item.status)}>{excelJobStatusLabel(item.status)}</StatusTag></td>
-          <td><div className={styles.jobRowProgress}><span>{item.processed_rows.toLocaleString('en-US')} / {item.total_rows.toLocaleString('en-US')}</span><span>{excelJobProgressPercent(item)}%</span><progress value={excelJobProgressPercent(item)} max="100" aria-label={`任务 #${item.id} 处理进度`} /></div></td>
-          <td><span className={styles.jobMatchCount}>{item.matched_rows.toLocaleString('en-US')}</span> / <span className={styles.jobUnmatchedCount}>{item.unmatched_rows.toLocaleString('en-US')}</span></td>
+          <td><div className={styles.jobRowProgress}><span>{isOracleExportStreaming(item) ? `已导出 ${item.processed_rows.toLocaleString('en-US')} 行，正在读取…` : `${item.processed_rows.toLocaleString('en-US')} / ${item.total_rows.toLocaleString('en-US')}`}</span>{!isOracleExportStreaming(item) && <span>{excelJobProgressPercent(item)}%</span>}<progress value={isOracleExportStreaming(item) ? undefined : excelJobProgressPercent(item)} max="100" aria-label={`任务 #${item.id} 处理进度`} /></div></td>
+          <td>{excelJobOperation(item) === 'oracle_export' ? '—' : <><span className={styles.jobMatchCount}>{item.matched_rows.toLocaleString('en-US')}</span> / <span className={styles.jobUnmatchedCount}>{item.unmatched_rows.toLocaleString('en-US')}</span></>}</td>
           <td>{formatUnixTime(item.created_at)}</td>
           <td><div className={styles.tableActions}><button type="button" onClick={(event) => onView(item.id, event.currentTarget)} disabled={loading}>查看</button><button type="button" onClick={() => onDownload(item.id)} disabled={loading || downloadingJobID === item.id || !canDownloadExcelJob(item)} title={item.download_message || undefined}>{downloadingJobID === item.id ? '下载中' : '下载'}</button></div></td>
         </tr>
@@ -58,12 +58,15 @@ export function ExcelJobHistoryTable({ jobs, loading, downloadingJobID, selected
 }
 
 export function ExcelJobDetailContent({ job, logs, progress, autoRefreshText, loading, downloading, onRefresh, onDownload }: { job: ExcelMatchJob; logs: ExcelMatchJobLog[]; progress: number; autoRefreshText: string; loading: boolean; downloading: boolean; onRefresh: () => void; onDownload: () => void }) {
+  const oracleExport = excelJobOperation(job) === 'oracle_export'
+  const streaming = isOracleExportStreaming(job)
   return (
     <section className={styles.jobDetailPanel} aria-label={`Excel 任务 ${job.id} 执行详情`}>
       {autoRefreshText && <p className={styles.modeNote} role="status">{autoRefreshText}</p>}
-      <dl className={styles.jobDetailMeta}><div><dt>源文件</dt><dd>{job.source_file_name || '-'}</dd></div><div><dt>类型</dt><dd>{excelJobOperationLabel(excelJobOperation(job))}</dd></div></dl>
-      <div className={styles.jobDetailCounts}><Metric label="匹配行" value={job.matched_rows.toLocaleString('en-US')} /><Metric label="未匹配行" value={job.unmatched_rows.toLocaleString('en-US')} /></div>
-      <div className={styles.jobProgress}><strong>处理进度</strong><span>{job.processed_rows.toLocaleString('en-US')} / {job.total_rows.toLocaleString('en-US')}（{progress}%）</span><progress value={progress} max="100" aria-label={`Excel 任务 #${job.id} 处理进度`} /></div>
+      <dl className={styles.jobDetailMeta}><div><dt>{oracleExport ? 'Oracle 数据表' : '源文件'}</dt><dd>{job.source_file_name || '-'}</dd></div><div><dt>类型</dt><dd>{excelJobOperationLabel(excelJobOperation(job))}</dd></div></dl>
+      <div className={styles.jobDetailCounts}>{oracleExport ? <Metric label="已导出行" value={job.processed_rows.toLocaleString('en-US')} /> : <><Metric label="匹配行" value={job.matched_rows.toLocaleString('en-US')} /><Metric label="未匹配行" value={job.unmatched_rows.toLocaleString('en-US')} /></>}</div>
+      {oracleExport && <p className={styles.modeNote}>每份 Excel 最多 100 万行，超出后拆分为多个 Excel 并打包 ZIP 下载。</p>}
+      <div className={styles.jobProgress}><strong>处理进度</strong><span>{streaming ? `已导出 ${job.processed_rows.toLocaleString('en-US')} 行，正在读取…` : `${job.processed_rows.toLocaleString('en-US')} / ${job.total_rows.toLocaleString('en-US')}（${progress}%）`}</span><progress value={streaming ? undefined : progress} max="100" aria-label={`Excel 任务 #${job.id} 处理进度`} /></div>
       <dl className={styles.jobExpiry}><dt>过期时间</dt><dd>{formatDate(job.expires_at)}</dd></dl>
       <div className={styles.jobLogHeading}>实时日志</div><ExcelJobLogList logs={logs} />
       <div className={styles.jobActionHeading}>操作</div>
@@ -101,6 +104,7 @@ function ExcelJobLogList({ logs }: { logs: ExcelMatchJobLog[] }) {
 export function Panel({ title, icon, meta, children }: { title: string; icon: ReactNode; meta: string; children: ReactNode }) { return <section className={styles.panel}><div className={styles.panelTitle}>{icon}<div><h3>{title}</h3><span>{meta}</span></div></div>{children}</section> }
 export function SelectFilter({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) { return <label>{label}<select name={`filter-${label}`} value={value} onChange={(event) => onChange(event.currentTarget.value)}><option value="all">全部</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label> }
 function excelJobStatusTone(status: string): 'neutral' | 'success' | 'warning' | 'danger' { if (status === 'success') return 'success'; if (status === 'failed' || status === 'expired') return 'danger'; if (status === 'pending' || status === 'running') return 'warning'; return 'neutral' }
+function isOracleExportStreaming(job: ExcelMatchJob) { return excelJobOperation(job) === 'oracle_export' && job.status === 'running' && job.total_rows === 0 }
 export function Metric({ label, value }: { label: string; value: ReactNode }) { return <div className={styles.metric}><span>{label}</span><strong>{value}</strong></div> }
 export function EmptyState({ text }: { text: string }) { return <div className={styles.emptyState}>{text}</div> }
 export function Field({ label, name, defaultValue = '', type = 'text', value, onChange, required = false, pattern }: { label: string; name: string; defaultValue?: string; type?: string; value?: string; onChange?: (value: string) => void; required?: boolean; pattern?: string }) { return <label>{label}<input name={name} defaultValue={value === undefined ? defaultValue : undefined} value={value} type={type} required={required} pattern={pattern} onChange={onChange ? (event) => onChange(event.currentTarget.value) : undefined} /></label> }

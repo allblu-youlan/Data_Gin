@@ -1,0 +1,18 @@
+.page { --button-height: 34px; --control-height: 34px; }
+.stack { display: grid; gap: var(--space-3); }
+.catalog { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) auto; align-items: end; gap: var(--space-3); }
+.tablePicker { display: grid; gap: var(--space-2); }
+.page label { display: grid; gap: var(--space-1); min-width: 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 650; }
+.page input:not([type='checkbox']), .page select { width: 100%; min-width: 0; min-height: var(--control-height); border: 1px solid var(--color-border-strong); background: var(--color-canvas); padding: var(--space-1) var(--space-3); }
+.page input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--color-brand-active); }
+.titleInput { min-width: 220px; }
+.toolbar, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.toolbar { justify-content: space-between; }
+.toolbar p, .hint { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.filterRow { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, .6fr) minmax(180px, 1.5fr) auto; align-items: end; gap: var(--space-2); }
+.submit { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3); border-top: 1px solid var(--color-border); padding-top: var(--space-4); }
+.submit p { margin: 0; color: var(--color-text-secondary); font-size: 12px; }
+@media (max-width: 767px) {
+  .catalog, .filterRow { grid-template-columns: minmax(0, 1fr); }
+  .catalog > button, .filterRow > button { justify-self: start; }
+}
