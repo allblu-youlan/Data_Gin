@@ -14,3 +14,7 @@ func (dao *ExcelMatchJobDAO) UpdateOracleExportResultPath(ctx context.Context, i
 		Where("id = ? AND status = ?", id, "running").
 		Updates(map[string]interface{}{"work_dir": workDir, "result_file_path": resultPath, "updated_at": time.Now().Unix()}).Error
 }
+
+func (dao *ExcelMatchJobDAO) DeleteOracleExportScheme(ctx context.Context, id uint) error {
+	return dao.db.WithContext(ctx).Where("id = ? AND operation = ?", id, "oracle_export").Delete(&model.ExcelMatchScheme{}).Error
+}

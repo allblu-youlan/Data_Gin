@@ -25,15 +25,7 @@ func (s *ExcelMatchJobService) CreateOracleExportJob(ctx context.Context, input 
 	if global.QueueJobClient == nil {
 		return nil, errors.New("异步任务客户端未初始化")
 	}
-	var normalized OracleExcelExportConfig
-	err := withOracleExcelConnection(ctx, 30*time.Second, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
-		schema, err := connection.InspectResultTable(queryCtx, reportoracle.ResultTableRef{Owner: input.Owner, Name: input.TableName})
-		if err != nil {
-			return err
-		}
-		normalized, _, _, err = buildOracleExcelExportQuery(input, schema)
-		return err
-	})
+	normalized, err := normalizeOracleExcelExportConfig(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +53,19 @@ func (s *ExcelMatchJobService) CreateOracleExportJob(ctx context.Context, input 
 	}
 	s.logJob(ctx, export.ID, "info", "Oracle Excel 导出任务已创建，每个文件最多 100 万条数据", nil)
 	return export, nil
+}
+
+func normalizeOracleExcelExportConfig(ctx context.Context, input OracleExcelExportConfig) (OracleExcelExportConfig, error) {
+	var normalized OracleExcelExportConfig
+	err := withOracleExcelConnection(ctx, 30*time.Second, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
+		schema, err := connection.InspectResultTable(queryCtx, reportoracle.ResultTableRef{Owner: input.Owner, Name: input.TableName})
+		if err != nil {
+			return err
+		}
+		normalized, _, _, err = buildOracleExcelExportQuery(input, schema)
+		return err
+	})
+	return normalized, err
 }
 
 func withOracleExcelConnection(ctx context.Context, timeout time.Duration, action func(context.Context, *reportoracle.Adapter) error) error {

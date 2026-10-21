@@ -164,6 +164,9 @@ func (dao *ExcelMatchJobDAO) ListSchemes(ctx context.Context, operation string) 
 	query := dao.db.WithContext(ctx).Model(&model.ExcelMatchScheme{})
 	if operation != "" {
 		query = query.Where("operation = ?", operation)
+	} else {
+		// The legacy matching DTO does not contain Oracle export fields.
+		query = query.Where("operation IN ?", []string{"export_match", "import_update"})
 	}
 	err := query.Order("updated_at DESC, id DESC").Find(&schemes).Error
 	return schemes, err
@@ -176,6 +179,7 @@ func (dao *ExcelMatchJobDAO) SaveScheme(ctx context.Context, scheme *model.Excel
 		Where("operation = ? AND name = ?", scheme.Operation, scheme.Name).
 		First(&existing).Error
 	if err == nil {
+		scheme.ID = existing.ID
 		return dao.db.WithContext(ctx).
 			Model(&model.ExcelMatchScheme{}).
 			Where("id = ?", existing.ID).

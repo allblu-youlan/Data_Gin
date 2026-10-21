@@ -36,6 +36,9 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		return input, "", nil, fmt.Errorf("Oracle 表名无效: %w", err)
 	}
 	input.Operation, input.Owner, input.TableName = excelOperationOracleExport, table.Owner, table.Name
+	if input.Filters == nil {
+		input.Filters = make([]OracleExcelExportFilter, 0)
+	}
 	if len(schema) == 0 || len(schema) > 512 || len(input.Columns) > 512 || len(input.Filters) > 50 {
 		return input, "", nil, fmt.Errorf("导出字段须为 1–512 个，筛选条件不得超过 50 个")
 	}
@@ -88,6 +91,7 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		field := `"` + filter.Field + `"`
 		filter.Op = strings.TrimSpace(filter.Op)
 		if filter.Op == "empty" || filter.Op == "not_empty" {
+			filter.Value = ""
 			condition := field + " IS NULL"
 			if filter.Op == "not_empty" {
 				condition = field + " IS NOT NULL"
@@ -108,6 +112,10 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		case "number":
 			parameter.ValueType = "decimal"
 		case "datetime":
+			filter.Value = strings.Replace(strings.TrimSpace(filter.Value), "T", " ", 1)
+			if len(filter.Value) == 16 {
+				filter.Value += ":00"
+			}
 			parameter.ValueType, parameter.Format = "date", "yyyy-MM-dd HH:mm:ss"
 			if len(filter.Value) == 10 {
 				parameter.Format = "yyyy-MM-dd"
@@ -116,10 +124,11 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		if filter.Op == "contains" && parameter.ValueType != "string" {
 			return input, "", nil, fmt.Errorf("包含筛选只支持文本字段")
 		}
-		value, _, err := officeParameterValue(parameter, filter.Value)
+		value, normalizedValue, err := officeParameterValue(parameter, filter.Value)
 		if err != nil {
 			return input, "", nil, fmt.Errorf("字段 %s 的筛选值无效: %w", filter.Field, err)
 		}
+		filter.Value = normalizedValue
 		bindName := fmt.Sprintf("filter_%d", index)
 		if filter.Op == "contains" {
 			conditions = append(conditions, "INSTR("+field+", :"+bindName+") > 0")

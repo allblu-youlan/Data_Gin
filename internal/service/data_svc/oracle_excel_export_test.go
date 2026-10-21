@@ -191,6 +191,40 @@ func TestOracleExcelExportQueueRecoveryClaimsRunningImmediately(t *testing.T) {
 	}
 }
 
+func TestOracleExcelExportDateTimeRangeBindsAndNormalizes(t *testing.T) {
+	tests := []struct {
+		name     string
+		dataType string
+		value    string
+		want     string
+	}{
+		{"date seconds", "DATE", "2026-10-21 10:30:15", "2026-10-21 10:30:15"},
+		{"date input minutes", "DATE", "2026-10-21T10:30", "2026-10-21 10:30:00"},
+		{"timestamp input seconds", "TIMESTAMP(6)", "2026-10-21T10:30:15", "2026-10-21 10:30:15"},
+		{"date only", "DATE", "2026-10-21", "2026-10-21"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			schema := []reportoracle.ResultColumn{{Name: "CREATED_AT", DataType: test.dataType}}
+			config, statement, args, err := buildOracleExcelExportQuery(OracleExcelExportConfig{
+				Owner: "DEMO", TableName: "ORDERS",
+				Filters: []OracleExcelExportFilter{{Field: "CREATED_AT", Op: "gte", Value: test.value}, {Field: "CREATED_AT", Op: "lt", Value: "2026-10-22T00:00"}},
+			}, schema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Filters[0].Value != test.want || config.Filters[1].Value != "2026-10-22 00:00:00" || !strings.Contains(statement, `"CREATED_AT" >= :filter_0 AND "CREATED_AT" < :filter_1`) {
+				t.Fatalf("config=%+v SQL=%s", config, statement)
+			}
+			for _, arg := range args {
+				if _, ok := arg.(sql.NamedArg).Value.(time.Time); !ok {
+					t.Fatalf("date filter was not bound as time: %+v", arg)
+				}
+			}
+		})
+	}
+}
+
 type fakeOracleExcelRows struct {
 	remaining int
 	err       error
