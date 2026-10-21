@@ -9,6 +9,7 @@ import { ReportDefaultFields } from './ReportDefaultFields'
 import { ReportRelationEditor } from './ReportRelationEditor'
 import { ReportTableFields } from './ReportTableFields'
 import { useBojunMetadata } from './useBojunMetadata'
+import reportDesign from '../../reportDesign.module.css'
 import styles from './ReportQueryDesigner.module.css'
 
 export function ReportTableConfigDialog({ client, datasourceId, initialSpec, aliasId, adding, initialMetadata, parameters, onClose, onSave }: { client: ReportCenterClient; datasourceId: number; initialSpec: ReportQuerySpec; aliasId: string; adding: boolean; initialMetadata: BojunMetadata; parameters: string[]; onClose: () => void; onSave: (spec: ReportQuerySpec) => void }) {
@@ -33,7 +34,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
     const next = relation ? { ...spec, columns: spec.columns.map((column) => column.source.kind === 'RELATION_DISPLAY' && column.source.relationId === aliasId && adding ? { ...column, header: label } : column) } : spec
     onSave(next)
   }
-  return <Dialog open className={styles.tableDialog} title={adding ? '加入关联表' : `配置表 · ${label}`} description="选择字段并配置连线，确认后应用到报表。取消将放弃本次修改。" closeLabel="关闭表配置" onClose={onClose} footer={<><span className={styles.dialogCount}>{outputs.length} 个报表列</span><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={lookup.loading || Boolean(lookup.error)} onClick={save}>{adding ? '确认加入' : '应用配置'}</Button></>}>
+  return <Dialog open className={`${reportDesign.surface} ${styles.tableDialog}`} title={adding ? '加入关联表' : `配置表 · ${label}`} description="选择字段并配置连线，确认后应用到报表。取消将放弃本次修改。" closeLabel="关闭表配置" onClose={onClose} footer={<><span className={styles.dialogCount}>{outputs.length} 个报表列</span><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={lookup.loading || Boolean(lookup.error)} onClick={save}>{adding ? '确认加入' : '应用配置'}</Button></>}>
     <div className={styles.editor}>
       {lookup.loading ? <FeedbackState kind="loading" title="正在读取表字段" /> : null}{lookup.error ? <FeedbackState kind="error" title="字段读取失败" description={lookup.error} /> : null}
       {relation ? <ReportRelationEditor client={client} datasourceId={datasourceId} relation={relation} spec={spec} metadata={metadata} fields={fields} parameters={parameters} tableLocked={!adding} onChange={(next) => setSpec((current) => ({ ...current, relations: current.relations.map((item) => item.id === aliasId ? next : item), columns: next.targetTableId === relation.targetTableId ? current.columns : current.columns.filter((column) => column.source.kind !== 'RELATION_COLUMN' || column.source.relationId !== aliasId) }))} onAppend={append} /> : <>
