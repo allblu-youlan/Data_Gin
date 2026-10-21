@@ -8,7 +8,7 @@ function ids(value: unknown) { return list(value).map(queryText) }
 function number(value: unknown) { return typeof value === 'number' && Number.isSafeInteger(value) ? value : Number(queryText(value)) || 0 }
 function selection(value: unknown): string[] | null | undefined { return value === null ? null : Array.isArray(value) ? ids(value) : undefined }
 function date(value: unknown) { return typeof value === 'string' && value ? value : null }
-function parsePage<T>(value: unknown, parse: (value: unknown) => T): BojunPage<T> { const page = data(value); if (!Array.isArray(page.items) || typeof page.hasMore !== 'boolean') throw new Error('目录分页格式不完整。'); return { items: page.items.map(parse), hasMore: page.hasMore, nextAfter: queryText(page.nextAfter), generation: queryText(page.generation) } }
+function parsePage<T>(value: unknown, parse: (value: unknown) => T): BojunPage<T> { const page = data(value); if (!Array.isArray(page.items) || typeof page.hasMore !== 'boolean') throw new Error('目录分页格式不完整。'); return { syncing: page.syncing === true, items: page.items.map(parse), hasMore: page.hasMore, nextAfter: queryText(page.nextAfter), generation: queryText(page.generation) } }
 export function parseBojunTable(value: unknown): BojunTable {
   const table = data(value)
   if (!number(table.id) || !queryText(table.logicalName)) throw new Error('目录表格式不完整。')

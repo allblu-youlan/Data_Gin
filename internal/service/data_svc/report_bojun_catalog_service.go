@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"gin-biz-web-api/internal/reportdataset"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/internal/reportsecret"
 	"gin-biz-web-api/model"
+	"gorm.io/gorm"
 	"os"
 	"strconv"
 	"strings"
@@ -129,6 +131,7 @@ type BojunTableDTO struct {
 	LastSyncedAt  *time.Time `json:"lastSyncedAt"`
 }
 type BojunTablePage struct {
+	Syncing    bool            `json:"syncing"`
 	Items      []BojunTableDTO `json:"items"`
 	HasMore    bool            `json:"hasMore"`
 	NextAfter  string          `json:"nextAfter"`
@@ -164,6 +167,24 @@ func (s *ReportBojunCatalogService) List(ctx context.Context, ds uint, search, s
 		return BojunTablePage{}, reportrepo.ErrDraftVersionConflict
 	}
 	out := BojunTablePage{Items: []BojunTableDTO{}, Generation: g, HasMore: len(list) > limit}
+	if g == 0 {
+		run, syncErr := s.repo.LatestBojunSync(ctx, ds)
+		if errors.Is(syncErr, gorm.ErrRecordNotFound) {
+			run, syncErr = s.Start(ctx, ds, "ALL", 0)
+		}
+		if errors.Is(syncErr, reportrepo.ErrDraftVersionConflict) {
+			out.Syncing = true
+			return out, nil
+		}
+		if syncErr != nil {
+			return out, syncErr
+		}
+		if run.Status == "FAILED" {
+			return out, ErrReportDatasourceOracleUnavailable
+		}
+		out.Syncing = run.Status == "QUEUED" || run.Status == "RUNNING"
+		return out, nil
+	}
 	if out.HasMore {
 		list = list[:limit]
 	}
@@ -192,10 +213,9 @@ func (s *ReportBojunCatalogService) dto(ctx context.Context, t model.ReportBojun
 	if e != nil {
 		return BojunTableDTO{}, e
 	}
-	if len(config.ConfigJSON) > 0 {
-		if e = json.Unmarshal([]byte(config.ConfigJSON), &meta.Config); e != nil {
-			return BojunTableDTO{}, e
-		}
+	meta.Config, e = reportdataset.CatalogConfig([]byte(config.ConfigJSON))
+	if e != nil {
+		return BojunTableDTO{}, e
 	}
 	if meta.Config.PrimaryKeys != nil {
 		meta.PrimaryKeys = *meta.Config.PrimaryKeys

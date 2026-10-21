@@ -553,7 +553,7 @@ export type BojunColumn = {
   supportedOperators: ReportQueryOperator[]
   ordinal: number
 }
-export type BojunPage<T> = { items: T[]; hasMore: boolean; nextAfter: string; generation: string }
+export type BojunPage<T> = { syncing?: boolean; items: T[]; hasMore: boolean; nextAfter: string; generation: string }
 export type BojunSyncRun = { id: number; syncRunId: number; status: string; tableCount: number; columnCount: number; error: string; startedAt: string | null; finishedAt: string | null }
 export type ReportQueryIssue = { fieldPath: string; message: string; code: string }
 export type ReportQueryValidation = { valid: boolean; errors: ReportQueryIssue[]; warnings: ReportQueryIssue[] }

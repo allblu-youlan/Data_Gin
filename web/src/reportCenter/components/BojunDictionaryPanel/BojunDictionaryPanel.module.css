@@ -2,7 +2,7 @@
 .toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
 .toolbar .field { flex: 1; max-width: 460px; min-width: min(100%, 240px); }
 .field { display: grid; gap: var(--space-2); min-width: 0; color: var(--color-text-secondary); font-size: 13px; }
-.field input, .field select, .scopeRow input, .picker input[type="search"] { min-width: 0; width: 100%; min-height: var(--control-height); padding: var(--space-2) var(--space-3); color: var(--color-text); background: var(--color-surface-subtle); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); font: inherit; }
+.field input, .field select { min-width: 0; width: 100%; min-height: var(--control-height); padding: var(--space-2) var(--space-3); color: var(--color-text); background: var(--color-surface-subtle); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); font: inherit; }
 .catalog { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border); background: var(--color-workspace); }
 .catalogHeading { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: 14px; }
 .catalogHeading span, .hint, .fieldToolbar > span { color: var(--color-text-secondary); font-size: 12px; line-height: 1.7; }
@@ -11,7 +11,7 @@
 .heading, .actions, .fieldToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .actions { justify-content: flex-start; }
 .heading h3 { margin: var(--space-1) 0; font-size: 20px; font-weight: 650; }
-.heading code, .summary code, .picker code { color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.heading code, .summary code { color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
 .eyebrow { margin: 0; color: var(--color-text-secondary); font-size: 12px; }
 .summary { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(100px, 1fr)); border-block: 1px solid var(--color-border); padding-block: var(--space-4); gap: var(--space-4); }
 .summary > div { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
@@ -24,27 +24,5 @@
 .notice { margin: 0; padding: var(--space-3); color: var(--color-success-text); background: var(--color-success-soft); font-size: 13px; }
 .error { margin: 0; color: var(--color-danger); font-size: 13px; line-height: 1.6; }
 .hint { margin: 0; }
-.dialog { width: min(100%, 880px); max-height: 88vh; }
-.dialog :global(.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn) { color: var(--color-brand-active); }
-.dialogContent { display: grid; gap: var(--space-4); min-width: 0; }
-.formFields { display: grid; gap: var(--space-4); min-width: 0; border: 0; padding: 0; margin: 0; }
-.dialogContent fieldset:disabled { opacity: .7; }
-.enable { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; align-items: center; padding: var(--space-3) var(--space-4); background: var(--color-workspace); }
-.check { display: flex; gap: var(--space-2); align-items: center; min-height: 40px; font-size: 13px; }
-.check input, .picker input[type="checkbox"] { accent-color: var(--color-brand-active); width: 16px; height: 16px; }
-.picker { display: grid; min-width: 0; gap: var(--space-3); margin: 0; padding: var(--space-4); border: 1px solid var(--color-border); }
-.picker legend { padding: 0 var(--space-2); font-size: 14px; font-weight: 600; }
-.pickerHead { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; }
-.pickerList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 260px; overflow-y: auto; border-top: 1px solid var(--color-border); }
-.pickerOption { display: flex; gap: var(--space-3); align-items: center; min-height: 52px; padding: var(--space-2); border-bottom: 1px solid var(--color-border); cursor: pointer; }
-.pickerOption:hover { background: var(--color-workspace); }
-.pickerOption > span { display: grid; min-width: 0; gap: var(--space-1); color: var(--color-text); font-size: 13px; }
-.pickerOption small { color: var(--color-text-secondary); overflow-wrap: anywhere; }
-.scopeRows { display: grid; gap: var(--space-3); }
-.scopeRow { display: grid; grid-template-columns: minmax(100px, .6fr) minmax(160px, 1.4fr) auto; align-items: end; gap: var(--space-3); }
-.scopeRow button { min-height: 40px; }
-.scopeRow button svg { width: 16px; height: 16px; }
-.scopeRow input { font-family: var(--font-mono); font-size: 13px; }
-.scopeIntro { margin: 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.7; }
-@media (max-width: 767px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary .displaySummary { grid-column: 1 / -1; } .pickerList { grid-template-columns: 1fr; } .scopeRow { grid-template-columns: minmax(0, 1fr) auto; } .scopeRow .field:nth-child(2) { grid-column: 1; } .scopeRow button { grid-column: 2; grid-row: 1 / 3; } }
-@media (max-width: 479px) { .heading { align-items: start; } .toolbar > button, .actions > button { flex: 1; } .picker { padding: var(--space-3); } .fieldToolbar .field { max-width: none; width: 100%; } }
+@media (max-width: 767px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary .displaySummary { grid-column: 1 / -1; } }
+@media (max-width: 479px) { .heading { align-items: start; } .toolbar > button, .actions > button { flex: 1; } .fieldToolbar .field { max-width: none; width: 100%; } }

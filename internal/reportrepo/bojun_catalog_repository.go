@@ -135,10 +135,10 @@ func buildBojunTableListQuery(db *gorm.DB, ds, after uint, limit int, search, st
 		q = q.Where("validation_status = ?", status)
 	}
 	if availableOnly {
-		q = q.Where("validation_status = ?", "VALID").Where(`EXISTS (
-			SELECT 1 FROM report_bojun_table_configs AS approved
-			WHERE approved.table_id = report_bojun_tables.id
-			AND JSON_EXTRACT(approved.config_json, '$.enabled') = true
+		q = q.Where("validation_status IN ?", []string{"VALID", "PENDING"}).Where(`NOT EXISTS (
+			SELECT 1 FROM report_bojun_table_configs AS blocked
+			WHERE blocked.table_id = report_bojun_tables.id
+			AND JSON_EXTRACT(blocked.config_json, '$.enabled') = false
 		)`)
 	}
 	return q.Order("id").Limit(limit + 1)
@@ -253,4 +253,10 @@ func (r *Repository) GetBojunSyncByID(ctx context.Context, id uint) (*model.Repo
 }
 func (r *Repository) ResetBojunStaging(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Where("sync_run_id = ?", id).Delete(&model.ReportBojunSyncStaging{}).Error
+}
+
+func (r *Repository) LatestBojunSync(ctx context.Context, datasourceID uint) (*model.ReportBojunSyncRun, error) {
+	var run model.ReportBojunSyncRun
+	err := r.db.WithContext(ctx).Where("datasource_id = ? AND scope = ?", datasourceID, "ALL").Order("id DESC").First(&run).Error
+	return &run, err
 }

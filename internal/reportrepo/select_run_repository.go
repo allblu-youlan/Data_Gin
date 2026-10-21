@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"gin-biz-web-api/internal/reportdataset"
 	"gin-biz-web-api/model"
@@ -89,11 +90,11 @@ func effectiveSelectAuthorization(ctx context.Context, db *gorm.DB, ds uint, c r
 			return c, "", ErrReportActionDenied
 		}
 		var row model.ReportBojunTableConfig
-		if e = db.WithContext(ctx).Where("table_id = ?", table.ID).First(&row).Error; e != nil {
+		if e = db.WithContext(ctx).Where("table_id = ?", table.ID).First(&row).Error; e != nil && !errors.Is(e, gorm.ErrRecordNotFound) {
 			return c, "", ErrReportActionDenied
 		}
-		var config reportdataset.TableConfig
-		if json.Unmarshal([]byte(row.ConfigJSON), &config) != nil || !config.Enabled {
+		config, e := reportdataset.CatalogConfig([]byte(row.ConfigJSON))
+		if e != nil || !config.Enabled {
 			return c, "", ErrReportActionDenied
 		}
 		scope := config.DataScope

@@ -10,12 +10,12 @@ import (
 func TestAvailableBojunTablesAreFilteredBeforePagination(t *testing.T) {
 	statement := buildBojunTableListQuery(newDryRunDB(t), 3, 100, 50, "店仓", "", true).Find(&[]model.ReportBojunTable{}).Statement
 	sqlText := statement.SQL.String()
-	for _, required := range []string{"source_active = ?", "id > ?", "validation_status = ?", "EXISTS", "approved.table_id = report_bojun_tables.id", "JSON_EXTRACT(approved.config_json, '$.enabled') = true", "ORDER BY id LIMIT 51"} {
+	for _, required := range []string{"source_active = ?", "id > ?", "validation_status IN", "NOT EXISTS", "blocked.table_id = report_bojun_tables.id", "JSON_EXTRACT(blocked.config_json, '$.enabled') = false", "ORDER BY id LIMIT 51"} {
 		if !strings.Contains(sqlText, required) {
 			t.Fatalf("available catalog SQL lacks %q: %s", required, sqlText)
 		}
 	}
-	if !containsSQLVariable(statement.Vars, "VALID") || !containsSQLVariable(statement.Vars, "%店仓%") {
+	if !containsSQLVariable(statement.Vars, "VALID") || !containsSQLVariable(statement.Vars, "PENDING") || !containsSQLVariable(statement.Vars, "%店仓%") {
 		t.Fatalf("query lost status or search: %#v", statement.Vars)
 	}
 }
