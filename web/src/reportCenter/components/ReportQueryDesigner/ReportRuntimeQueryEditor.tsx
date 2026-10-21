@@ -3,7 +3,7 @@ import { ReportConditionEditor } from './ReportConditionEditor'
 import styles from './ReportQueryDesigner.module.css'
 
 export function ReportRuntimeQueryEditor({ contract, value, disabled, onChange }: { contract: ReportRunContract; value: ReportQueryInputs; disabled: boolean; onChange: (value: ReportQueryInputs) => void }) {
-  const fields = (contract.allowedFilters ?? []).map((field) => ({ ...field, label: field.label || `${contract.relations?.find((relation) => relation.id === field.aliasId)?.name || (field.aliasId === 'base' ? '主表' : field.aliasId)} → 字段 #${field.columnId}` }))
+  const fields = (contract.allowedFilters ?? []).map((field) => ({ ...field, label: field.label || `${contract.relations?.find((relation) => relation.id === field.aliasId)?.name || (field.aliasId === 'base' ? '表 1' : field.aliasId)} → 字段 #${field.columnId}` }))
   const sortable = contract.allowedSortFields ?? []
   const orders = value.orderBy ?? []
   if (!fields.length && !sortable.length) return null

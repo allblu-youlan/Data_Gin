@@ -25,3 +25,70 @@
 .metadata dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 767px) { .form { grid-template-columns: 1fr; } .wide { grid-column: auto; } .condition { grid-template-columns: 1fr 1fr; } .section { padding: var(--space-3); } .metadata { grid-template-columns: 1fr; } }
 .select { width: 100%; min-width: 0; }
+.tableWorkspace { min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-canvas); font-size: 14px; }
+.workspaceHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.workspaceHeader h3 { margin: 0; font-size: 18px; font-weight: 650; }
+.workspaceHeader p { margin: var(--space-1) 0 0; color: var(--color-text-secondary); font-size: 13px; }
+.tableWorkspaceBody { display: grid; grid-template-columns: minmax(224px, .7fr) minmax(0, 2fr); min-width: 0; }
+.tableNavigation { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border-right: 1px solid var(--color-border); }
+.tableNavHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2) var(--space-2); color: var(--color-text-secondary); font-size: 12px; }
+.tableNavHeading strong { color: var(--color-text); font-variant-numeric: tabular-nums; }
+.tableNavItem { display: flex; align-items: center; gap: var(--space-1); min-width: 0; border: 1px solid transparent; border-radius: var(--radius-control); padding: var(--space-1); }
+.tableNavItem[data-active="true"] { border-color: var(--color-brand); background: var(--color-brand-soft); }
+.tableNavButton { display: flex; flex: 1; align-items: flex-start; justify-content: flex-start; gap: var(--space-2); min-width: 0; border: 0; padding: var(--space-2) var(--space-1); background: transparent; text-align: left; }
+.tableNavButton > span:nth-child(2) { display: grid; gap: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.tableNavButton strong { font-size: 14px; font-weight: 600; }
+.tableNavButton code { color: var(--color-text-secondary); font-size: 11px; }
+.tableNavButton > span:last-child { margin-left: auto; }
+.tableOrdinal { color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 11px; padding-top: var(--space-1); }
+.tableSummary { display: grid; align-content: start; gap: var(--space-4); min-width: 0; padding: var(--space-5); }
+.tableSummaryHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.tableTitle { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.tableTitle > svg { width: 36px; height: 36px; padding: var(--space-2); border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-text-secondary); }
+.tableTitle h4 { margin: 0; font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+.tableTitle code { color: var(--color-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.defaultFields { display: grid; gap: var(--space-2); min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: var(--space-3) var(--space-4); background: var(--color-workspace); }
+.metaLabel { color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
+.badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.badges code { display: inline; margin-inline-start: var(--space-2); font-family: var(--font-mono); font-size: 11px; }
+.connectionSummary, .columnSummary { display: grid; gap: var(--space-3); min-width: 0; }
+.connectionTitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: 13px; }
+.connectionTitle svg { width: 16px; height: 16px; color: var(--color-text-secondary); }
+.connectionSummary > p { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; font-weight: 600; }
+.connectionSummary > p svg { width: 16px; height: 16px; color: var(--color-text-secondary); }
+.connectionSummary ul { display: grid; gap: var(--space-2); list-style: none; padding: var(--space-3); margin: 0; background: var(--color-workspace); border-radius: var(--radius-control); }
+.connectionSummary li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: 13px; }
+.connectionSummary li code { color: var(--color-text-secondary); }
+.columnSummary h4 { margin: 0; font-size: 14px; }
+.tableSummaryFooter { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); border-top: 1px solid var(--color-border); padding-top: var(--space-4); color: var(--color-text-secondary); font-size: 12px; }
+.tableSummaryFooter > span { max-width: 36ch; }
+.tableDialog { width: min(100%, 960px); max-height: min(88vh, 960px); }
+.dialogCount { margin-right: auto; color: var(--color-text-secondary); font-size: 12px; }
+.fieldPicker { display: grid; gap: var(--space-3); min-width: 0; }
+.fieldPicker h3 { margin: 0 0 var(--space-1); font-size: 14px; }
+.fieldSearch { display: flex; align-items: center; gap: var(--space-2); min-width: 0; width: min(100%, 256px); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); padding: 0 var(--space-2); background: var(--color-canvas); }
+.fieldSearch svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--color-text-secondary); }
+.fieldSearch input { min-width: 0; min-height: var(--control-height); border: 0; background: transparent; color: var(--color-text); padding: var(--space-2) 0; }
+.fieldIdentity { display: grid; gap: var(--space-1); min-width: 0; }
+.fieldIdentity strong { font-size: 13px; font-weight: 600; }
+.fieldIdentity > code { color: var(--color-text-secondary); font-size: 11px; }
+.keyFieldset { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.keyFieldset legend { color: var(--color-text-secondary); padding-inline: var(--space-1); font-size: 12px; }
+.keyBinding { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); min-width: 0; }
+.bindingEquals { align-self: end; padding-bottom: var(--space-3); color: var(--color-text-secondary); }
+.advanced { border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: var(--space-3); }
+.advanced summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.advanced[open] { display: grid; gap: var(--space-3); }
+.removalNotice { margin: 0; color: var(--color-text-secondary); line-height: 1.8; }
+@media (max-width: 767px) {
+  .tableWorkspaceBody { grid-template-columns: minmax(0, 1fr); }
+  .tableNavigation { border-right: 0; border-bottom: 1px solid var(--color-border); }
+  .tableSummary { padding: var(--space-4); }
+  .tableSummaryHeader, .tableSummaryHeader .actions { align-items: stretch; }
+  .tableSummaryHeader .actions { width: 100%; }
+  .tableSummaryHeader .actions > button { flex: 1; }
+  .keyBinding { grid-template-columns: minmax(0, 1fr) auto; }
+  .keyBinding > label:first-child { grid-column: 1 / -1; }
+  .bindingEquals { display: none; }
+  .fieldSearch { width: 100%; }
+}
