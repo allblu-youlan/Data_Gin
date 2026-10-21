@@ -62,7 +62,9 @@
 .columnSummary h4 { margin: 0; font-size: 14px; }
 .tableSummaryFooter { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); border-top: 1px solid var(--color-border); padding-top: var(--space-4); color: var(--color-text-secondary); font-size: 12px; }
 .tableSummaryFooter > span { max-width: 36ch; }
-.tableDialog { width: min(100%, 960px); max-height: min(88vh, 960px); }
+.tableDialog.tableDialog { width: min(calc(100vw - 348px), 1100px); max-height: min(82dvh, 880px); margin-inline-start: 252px; }
+@media (max-width: 840px) { .tableDialog.tableDialog { width: calc(100vw - 80px); margin-inline-start: 0; } }
+@media (max-width: 479px) { .tableDialog.tableDialog { align-self: center; width: calc(100vw - 32px); max-height: 84dvh; border: 1px solid var(--color-border-strong); } }
 .dialogCount { margin-right: auto; color: var(--color-text-secondary); font-size: 12px; }
 .fieldPicker { display: grid; gap: var(--space-3); min-width: 0; }
 .fieldPicker h3 { margin: 0 0 var(--space-1); font-size: 14px; }

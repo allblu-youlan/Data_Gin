@@ -1,18 +1,32 @@
-.tabs { display: flex; min-width: 0; overflow-x: auto; border-bottom: 1px solid var(--color-border); padding-inline: var(--space-6); }
+.dialog.dialog { width: min(calc(100vw - 300px), 1240px); height: min(88dvh, 960px); max-height: min(88dvh, 960px); margin-inline-start: 252px; }
+.dialog > div:nth-child(2) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; }
+.dialog > header, .dialog > footer { padding-inline: var(--space-4); }
+.tabs { flex: 0 0 auto; display: flex; min-width: 0; overflow-x: auto; border-bottom: 1px solid var(--color-border); padding-inline: var(--space-6); }
 .tabs button { display: inline-flex; flex: 0 0 auto; gap: var(--space-2); align-items: center; min-height: 48px; padding-inline: var(--space-3); border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--color-text-secondary); }
 .tabs button > span { color: var(--color-text-disabled); font-family: var(--font-mono); font-size: 10px; }
 .tabs button.active > span { color: var(--color-brand-active); }
 .tabs .active { border-bottom-color: var(--color-brand); color: var(--color-text); }
-.body { min-width: 0; padding: var(--space-4); }
+.body { flex: 1 1 auto; min-height: 0; overflow-y: auto; min-width: 0; padding: var(--space-4); }
 .editorFieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
 .editorFieldset:disabled { opacity: .72; }
 .form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: var(--space-3); }
-.form label { display: grid; gap: var(--space-1); color: var(--color-text-secondary); font-size: 12px; font-weight: 650; }
+.form label, .datasourceField { display: grid; gap: var(--space-1); color: var(--color-text-secondary); font-size: 12px; font-weight: 650; }
 .form input, .form select, .form textarea { width: 100%; min-width: 0; min-height: var(--control-height); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-canvas); color: var(--color-text); padding: var(--space-2) var(--space-3); }
 .wide { grid-column: 1 / -1; }
 .notice, .error { margin-block-start: var(--space-4); border-left: 3px solid var(--color-brand); background: var(--color-brand-soft); padding: var(--space-3); color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
 .error { border-left-color: var(--color-danger); background: var(--color-danger-soft); color: var(--color-danger); }
 .version { margin-inline-end: auto; color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 12px; }
 .fieldError { color: var(--color-danger); font-size: 12px; font-weight: 500; }
-.closeWarning { margin: 0; border-left: 3px solid var(--color-warning); background: var(--color-warning-soft); padding: var(--space-3); color: var(--color-warning-text); line-height: 1.6; }
+.datasourceSummary { display: grid; gap: var(--space-1); border-left: 2px solid var(--color-brand); background: var(--color-workspace); padding: var(--space-2) var(--space-3); }
+.datasourceSummary strong { color: var(--color-text); font-size: 13px; }
+.datasourceSummary small { font-weight: 400; }
+.datasourceField details { min-width: 0; }
+.datasourceField summary { cursor: pointer; color: var(--color-text-secondary); font-size: 12px; font-weight: 500; }
+.datasourceField select { margin-top: var(--space-2); }
+.closeConfirmation { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%; gap: var(--space-3); border-left: 3px solid var(--color-warning); background: var(--color-warning-soft); padding: var(--space-3); }
+.closeConfirmation strong, .closeConfirmation span { display: block; font-size: 13px; }
+.closeConfirmation span { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: 12px; }
+.closeActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+@media (max-width: 840px) { .dialog.dialog { width: calc(100vw - 48px); margin-inline-start: 0; } }
+@media (max-width: 479px) { .dialog.dialog { align-self: center; width: calc(100vw - 24px); height: 90dvh; max-height: 90dvh; border: 1px solid var(--color-border-strong); } .dialog > header { padding: var(--space-3); } .dialog > footer { padding: var(--space-3); } .closeActions { display: grid; grid-template-columns: 1fr; width: 100%; } }
 @media (max-width: 767px) { .body { padding: var(--space-3); } .tabs { padding-inline: var(--space-3); } .form { grid-template-columns: 1fr; } .wide { grid-column: auto; } .version { flex-basis: 100%; } }

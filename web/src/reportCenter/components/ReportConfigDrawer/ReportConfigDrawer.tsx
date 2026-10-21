@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import { defaultReportExecutionPolicy, emptyReportQuerySpec } from '../../bojunQueryConfig'
 import { ReportQueryDesigner } from '../ReportQueryDesigner/ReportQueryDesigner'
 import { ReportQueryValidationPanel } from '../ReportQueryDesigner/ReportQueryValidationPanel'
-import { Button, Dialog, Drawer } from '../../../ui'
+import { Button, Dialog } from '../../../ui'
+import { ReportValidationResultContent } from '../ReportValidationResultDrawer/ReportValidationResultContent'
 import { getReportDraft, getReportResultTableSchema, publishReportDraft, saveAndPublishReportDraft, saveReportDraft, type ReportCenterClient } from '../../api'
 import { countReportColumnsMissingFromResultSchema, newReportInputField, parseExcelMappingDocument, parseReportInputSchemaDocument, excelMappingFromColumns, refreshReportColumnMetadataPreservingUnknown } from '../../refCursorConfig'
 import type { ReportDatasource, ReportDraft, ReportPublication, ReportResultTableColumn, ReportSummary } from '../../types'
@@ -11,26 +12,31 @@ import { ReportInputSchemaEditor } from './ReportInputSchemaEditor'
 import { ReportProcedureEditor } from './ReportProcedureEditor'
 import styles from './ReportConfigDrawer.module.css'
 
-type Tab = 'basic' | 'procedure' | 'conditions' | 'excel' | 'validation'
+type Tab = 'basic' | 'procedure' | 'conditions' | 'excel' | 'validation' | 'publication'
 const legacyTabs: Array<{ key: Tab; label: string }> = [{ key: 'basic', label: '基本信息' }, { key: 'procedure', label: '存储过程' }, { key: 'conditions', label: '筛选条件' }, { key: 'excel', label: 'Excel 映射' }]
 const oracleIdentifierPattern = /^[A-Za-z][A-Za-z0-9_$#]{0,127}$/
 
-export function ReportConfigDrawer({ client, report, datasources, datasourcesLoading = false, datasourcesError = '', onClose, onPublished, onSaved }: { client: ReportCenterClient; report: ReportSummary | null; datasources: ReportDatasource[]; datasourcesLoading?: boolean; datasourcesError?: string; onClose: () => void; onPublished?: (publication: ReportPublication) => void; onSaved?: () => void }) {
+export function ReportConfigDrawer({ client, report, datasources, datasourcesLoading = false, datasourcesError = '', onClose, onSaved }: { client: ReportCenterClient; report: ReportSummary | null; datasources: ReportDatasource[]; datasourcesLoading?: boolean; datasourcesError?: string; onClose: () => void; onSaved?: () => void }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const [tab, setTab] = useState<Tab>('basic')
-  const [draft, setDraft] = useState<ReportDraft>(() => emptyDraft())
-  const [savedFingerprint, setSavedFingerprint] = useState('')
+  const [draft, setDraft] = useState<ReportDraft>(() => emptyDraft(datasources))
+  const [savedFingerprint, setSavedFingerprint] = useState(() => draftFingerprint(emptyDraft(datasources)))
+  const reportId = report?.id ?? 0
+  const [publication, setPublication] = useState<ReportPublication | null>(null)
+  const [draftRefreshFailed, setDraftRefreshFailed] = useState(false)
+  const continueEditingRef = useRef<HTMLButtonElement>(null)
   const [state, setState] = useState({ loading: Boolean(report), saving: false, error: '', notice: '' })
   const [closeConfirmationOpen, setCloseConfirmationOpen] = useState(false)
   const [excelSchemaState, setExcelSchemaState] = useState<ExcelMappingSchemaState>({ status: 'idle', error: '' })
   const [excelSchema, setExcelSchema] = useState<ReportResultTableColumn[] | null>(null)
   const [excelSchemaReload, setExcelSchemaReload] = useState(0)
-  const tabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'basic' as const, label: '基本信息' }, { key: 'procedure' as const, label: '关联表' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
+  const editorTabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'basic' as const, label: '基本信息' }, { key: 'procedure' as const, label: '关联表' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
+  const tabs = publication ? [...editorTabs, { key: 'publication' as const, label: '发布结果' }] : editorTabs
 
   useEffect(() => {
-    if (!report) return
+    if (!reportId) return
     const controller = new AbortController()
-    void getReportDraft(client, report.id, controller.signal).then((response) => {
+    void getReportDraft(client, reportId, controller.signal).then((response) => {
       if (controller.signal.aborted) return
       if (!response.ok) setState((current) => ({ ...current, loading: false, error: response.error }))
       else {
@@ -40,7 +46,22 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
       }
     })
     return () => controller.abort()
-  }, [client, report])
+  }, [client, reportId])
+
+  useEffect(() => {
+    const systemDatasource = datasources.find((item) => item.code === 'system_environment_oracle' && item.enabled)
+    if (!reportId && systemDatasource) {
+      setDraft((current) => current.id === 0 && current.datasourceId === 0 ? { ...current, datasourceId: systemDatasource.id } : current)
+      setSavedFingerprint((current) => {
+        const initial = emptyDraft()
+        return current === draftFingerprint(initial) ? draftFingerprint({ ...initial, datasourceId: systemDatasource.id }) : current
+      })
+    }
+  }, [datasources, reportId])
+
+  useEffect(() => {
+    if (closeConfirmationOpen) continueEditingRef.current?.focus()
+  }, [closeConfirmationOpen])
 
   useEffect(() => {
     if (draft.executionMode === 'SELECT_SNAPSHOT' || !draft.datasourceId || !draft.result.tableOwner || !draft.result.tableName) {
@@ -98,7 +119,7 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
     return ''
   }
 
-  async function save() {
+  async function save(closeAfterSaving = false) {
     const error = validationError()
     if (error) { setState((current) => ({ ...current, error })); return }
     setState((current) => ({ ...current, saving: true, error: '', notice: '' }))
@@ -107,14 +128,16 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
     setDraft(response.data)
     setSavedFingerprint(draftFingerprint(response.data))
     setState((current) => ({ ...current, saving: false, notice: '草稿已保存到 MySQL。' }))
+    setCloseConfirmationOpen(false)
     onSaved?.()
+    if (closeAfterSaving) onClose()
   }
 
   async function publish() {
     const error = validationError(true)
     if (error) { setState((current) => ({ ...current, error })); return }
     setState((current) => ({ ...current, saving: true, error: '', notice: '' }))
-    let publication: ReportPublication
+    let published: ReportPublication
     if (dirty || !draft.id || !draft.lockVersion) {
       const response = await saveAndPublishReportDraft(client, draft)
       if (!response.ok) {
@@ -127,32 +150,43 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
       }
       setDraft(response.draft)
       setSavedFingerprint(draftFingerprint(response.draft))
-      publication = response.publication
+      published = response.publication
     } else {
       const response = await publishReportDraft(client, draft.id, draft.lockVersion)
       if (!response.ok) { setState((current) => ({ ...current, saving: false, error: response.error })); return }
-      publication = response.data
+      published = response.data
     }
-    setState((current) => ({ ...current, saving: false, notice: `Oracle 契约核验通过，已发布版本 #${publication.versionId}。` }))
+    setPublication(published)
+    setTab('publication')
+    setCloseConfirmationOpen(false)
     onSaved?.()
-    onClose()
-    onPublished?.(publication)
+    await refreshPublishedDraft(published.definitionId)
+  }
+
+  async function refreshPublishedDraft(definitionId: number) {
+    setState((current) => ({ ...current, saving: true, error: '' }))
+    const response = await getReportDraft(client, definitionId)
+    setDraftRefreshFailed(!response.ok)
+    if (!response.ok) {
+      setState((current) => ({ ...current, saving: false, error: `版本已发布，后续草稿读取失败：${response.error}` }))
+      return
+    }
+    setDraft(response.data)
+    setSavedFingerprint(draftFingerprint(response.data))
+    setState((current) => ({ ...current, saving: false, notice: '版本已发布，后续草稿已就绪，可继续编辑。' }))
   }
 
   const dirty = draftFingerprint(draft) !== savedFingerprint
-  const requestClose = () => dirty ? setCloseConfirmationOpen(true) : onClose()
-  const footer = <><span className={styles.version}>版本锁 {draft.lockVersion || '新建'} · {dirty ? '有未保存修改' : '草稿已保存'}</span><button type="button" onClick={requestClose}>关闭</button><button type="button" onClick={() => void save()} disabled={state.loading || state.saving || !dirty}>{state.saving ? '处理中…' : '仅保存草稿'}</button><Button variant="primary" onClick={() => void publish()} disabled={state.loading || state.saving}>{state.saving ? '处理中…' : dirty || !draft.id ? '保存并核验发布' : '核验并发布'}</Button></>
-  return <>
-    <Drawer open title={report ? '编辑报表配置' : '创建报表配置'} description={draft.executionMode === 'SELECT_SNAPSHOT' ? '通过伯俊目录配置表、关联、字段与条件；源表只读，结果按运行隔离保留。' : '配置保存于 MySQL；Oracle 过程仅接收一份 JSON，系统整表读取运行结果并在导出成功后清理。'} size="wide" closeDisabled={state.saving} onClose={requestClose} footer={footer}>
-      <div className={styles.tabs} role="tablist" aria-label="报表配置步骤" onKeyDown={(event) => { const current = tabs.findIndex((item) => item.key === tab); const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0; if (!delta) return; event.preventDefault(); const next = tabs[(current + delta + tabs.length) % tabs.length]; setTab(next.key); document.getElementById(`report-config-tab-${next.key}`)?.focus() }}>{tabs.map((item, index) => <button id={`report-config-tab-${item.key}`} type="button" role="tab" aria-selected={tab === item.key} aria-controls="report-config-panel" tabIndex={tab === item.key ? 0 : -1} className={tab === item.key ? styles.active : ''} onClick={() => setTab(item.key)} key={item.key}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{item.label}</button>)}</div>
-      <div id="report-config-panel" role="tabpanel" aria-labelledby={`report-config-tab-${tab}`} tabIndex={0} ref={bodyRef} className={styles.body}>
-        {state.loading ? <p>正在读取草稿…</p> : <fieldset className={styles.editorFieldset} disabled={state.saving} aria-busy={state.saving || undefined}><Editor dirty={dirty} tab={tab} client={client} draft={draft} datasources={datasources} datasourcesLoading={datasourcesLoading} datasourcesError={datasourcesError} onChange={setDraft} excelSchema={excelSchema} excelSchemaState={excelSchemaState} onExcelSchemaRetry={() => setExcelSchemaReload((value) => value + 1)} /></fieldset>}
-        {state.error ? <div className={styles.error} role="alert">{state.error}</div> : null}
-        {state.notice ? <div className={styles.notice} role="status">{state.notice}</div> : null}
-      </div>
-    </Drawer>
-    <Dialog open={closeConfirmationOpen} role="alertdialog" title="放弃未保存修改？" description="当前报表配置仍有未保存修改，关闭后无法恢复。" onClose={() => setCloseConfirmationOpen(false)} footer={<><button type="button" onClick={() => setCloseConfirmationOpen(false)}>继续编辑</button><Button variant="danger" onClick={onClose}>放弃修改并关闭</Button></>}><p className={styles.closeWarning}>若需要保留当前内容，请返回配置并点击“仅保存草稿”。</p></Dialog>
-  </>
+  const requestClose = () => { if (state.saving) return; if (dirty) setCloseConfirmationOpen(true); else onClose() }
+  const footer = closeConfirmationOpen ? <div className={styles.closeConfirmation} role="alert"><div><strong>当前配置有未保存修改</strong><span>保存后关闭，或放弃本次修改。</span></div><div className={styles.closeActions}><button type="button" ref={continueEditingRef} disabled={state.saving} onClick={() => { setCloseConfirmationOpen(false); document.getElementById(`report-config-tab-${tab}`)?.focus() }}>继续编辑</button><Button variant="danger" disabled={state.saving} onClick={onClose}>不保存并关闭</Button><Button variant="primary" disabled={state.loading || state.saving || draftRefreshFailed} onClick={() => void save(true)}>保存并关闭</Button></div></div> : <><span className={styles.version}>版本锁 {draft.lockVersion || '新建'} · {dirty ? '有未保存修改' : draft.id ? '草稿已保存' : '新建配置'}</span><button type="button" disabled={state.saving} onClick={requestClose}>关闭</button><button type="button" onClick={() => void save()} disabled={state.loading || state.saving || draftRefreshFailed || !dirty}>{state.saving ? '处理中…' : '仅保存草稿'}</button><Button variant="primary" onClick={() => void publish()} disabled={state.loading || state.saving || draftRefreshFailed}>{state.saving ? '处理中…' : dirty || !draft.id ? '保存并核验发布' : '核验并发布'}</Button></>
+  return <Dialog open className={styles.dialog} title={draft.id || reportId ? '编辑报表配置' : '创建报表配置'} description={draft.executionMode === 'SELECT_SNAPSHOT' ? '通过伯俊目录配置表、关联、字段与条件；源表只读，结果按运行隔离保留。' : '配置保存于 MySQL；Oracle 过程仅接收一份 JSON，系统整表读取运行结果并在导出成功后清理。'} closeLabel="关闭报表配置" closeDisabled={state.saving} onClose={requestClose} footer={footer}>
+    <div className={styles.tabs} role="tablist" aria-label="报表配置步骤" onKeyDown={(event) => { const current = tabs.findIndex((item) => item.key === tab); const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0; if (!delta) return; event.preventDefault(); const next = tabs[(current + delta + tabs.length) % tabs.length]; setTab(next.key); document.getElementById(`report-config-tab-${next.key}`)?.focus() }}>{tabs.map((item, index) => <button id={`report-config-tab-${item.key}`} type="button" role="tab" aria-selected={tab === item.key} aria-controls="report-config-panel" tabIndex={tab === item.key ? 0 : -1} className={tab === item.key ? styles.active : ''} onClick={() => setTab(item.key)} key={item.key}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{item.label}</button>)}</div>
+    <div id="report-config-panel" role="tabpanel" aria-labelledby={`report-config-tab-${tab}`} tabIndex={0} ref={bodyRef} className={styles.body}>
+      {state.loading ? <p>正在读取草稿…</p> : tab === 'publication' && publication ? <ReportValidationResultContent publication={publication} /> : <fieldset className={styles.editorFieldset} disabled={state.saving || draftRefreshFailed} aria-busy={state.saving || undefined}><Editor dirty={dirty} tab={tab} client={client} draft={draft} datasources={datasources} datasourcesLoading={datasourcesLoading} datasourcesError={datasourcesError} onChange={setDraft} excelSchema={excelSchema} excelSchemaState={excelSchemaState} onExcelSchemaRetry={() => setExcelSchemaReload((value) => value + 1)} /></fieldset>}
+      {state.error ? <div className={styles.error} role="alert">{state.error}{draftRefreshFailed && publication ? <Button disabled={state.saving} onClick={() => void refreshPublishedDraft(publication.definitionId)}>重新读取后续草稿</Button> : null}</div> : null}
+      {state.notice ? <div className={styles.notice} role="status">{state.notice}</div> : null}
+    </div>
+  </Dialog>
 }
 
 function Editor({ dirty, tab, client, draft, datasources, datasourcesLoading, datasourcesError, onChange, excelSchema, excelSchemaState, onExcelSchemaRetry }: { dirty: boolean; tab: Tab; client: ReportCenterClient; draft: ReportDraft; datasources: ReportDatasource[]; datasourcesLoading: boolean; datasourcesError: string; onChange: Dispatch<SetStateAction<ReportDraft>>; excelSchema: ReportResultTableColumn[] | null; excelSchemaState: ExcelMappingSchemaState; onExcelSchemaRetry: () => void }) {
@@ -165,10 +199,10 @@ function Editor({ dirty, tab, client, draft, datasources, datasourcesLoading, da
       <Field label="报表名称"><input value={draft.name} onChange={(event) => set('name', event.currentTarget.value)} /></Field>
       <Field label="报表编码"><input value={draft.code} onChange={(event) => set('code', event.currentTarget.value)} /></Field>
       <Field label="分类"><input required disabled={draft.status === 'ACTIVE' && Boolean(draft.category.trim())} value={draft.category} onChange={(event) => set('category', event.currentTarget.value)} />{draft.status === 'ACTIVE' ? <small>{draft.category.trim() ? '已上线报表不能直接更换分类，避免权限边界变化。' : '历史未分类报表可补录一次分类，保存后不能直接更换。'}</small> : null}</Field>
-      <Field label="Oracle 数据源"><select value={draft.datasourceId || ''} disabled={datasourcesLoading} onChange={(event) => {
+      <div className={styles.datasourceField}><span>Oracle 数据源</span><div className={styles.datasourceSummary}><strong>{selected?.code === 'system_environment_oracle' ? '系统环境 Oracle' : selected?.name || (datasourcesLoading ? '正在加载数据源…' : '请选择已登记的数据源')}</strong><small>{selected?.code === 'system_environment_oracle' ? '使用系统环境连接，无需重复录入账号。' : '连接由服务端统一管理。'}</small></div><details open={unavailable || (!selected && !datasourcesLoading)}><summary>高级：更换已登记数据源</summary><select aria-label="选择已登记 Oracle 数据源" value={draft.datasourceId || ''} disabled={datasourcesLoading} onChange={(event) => {
         const datasourceId = Number(event.currentTarget.value)
         onChange(datasourceId === draft.datasourceId ? draft : { ...draft, datasourceId, procedure: emptyProcedure(), executionMode: draft.executionMode, result: emptyResult(), ...(draft.executionMode === 'SELECT_SNAPSHOT' ? { querySpec: emptyReportQuerySpec(), columns: [] } : {}) })
-      }}><option value="">{datasourcesLoading ? '正在加载数据源…' : '请选择数据源'}</option>{unavailable ? <option value={draft.datasourceId}>#{draft.datasourceId}（当前不可读取，请勿误切换）</option> : null}{datasources.map((item) => <option value={item.id} disabled={!item.enabled} key={item.id}>{item.name} · {item.code}{item.enabled ? '' : '（已停用）'}</option>)}</select>{datasourcesError ? <small className={styles.fieldError}>{datasourcesError}</small> : null}{selected && !selected.enabled ? <small className={styles.fieldError}>当前绑定数据源已停用，不能发布或创建新运行。</small> : null}</Field>
+      }}><option value="">{datasourcesLoading ? '正在加载数据源…' : '请选择数据源'}</option>{unavailable ? <option value={draft.datasourceId}>#{draft.datasourceId}（当前不可读取，请勿误切换）</option> : null}{datasources.map((item) => <option value={item.id} disabled={!item.enabled} key={item.id}>{item.name} · {item.code}{item.enabled ? '' : '（已停用）'}</option>)}</select></details>{datasourcesError ? <small className={styles.fieldError}>{datasourcesError}</small> : null}{selected && !selected.enabled ? <small className={styles.fieldError}>当前绑定数据源已停用，不能发布或创建新运行。</small> : null}</div>
       <Field label="说明" wide><textarea rows={4} value={draft.description} onChange={(event) => set('description', event.currentTarget.value)} /></Field>
     </div>
   }
@@ -185,5 +219,5 @@ function Editor({ dirty, tab, client, draft, datasources, datasourcesLoading, da
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) { return <label className={wide ? styles.wide : ''}>{label}{children}</label> }
 function emptyProcedure(): ReportDraft['procedure'] { return { owner: '', package: '', name: '', overload: '', jsonInputArgName: '', resultCursorArgName: '' } }
 function emptyResult(): ReportDraft['result'] { return { tableOwner: '', tableName: '' } }
-function emptyDraft(): ReportDraft { const [code, field] = newReportInputField(0); return { id: 0, code: '', name: '', category: '', description: '', datasourceId: 0, status: 'DRAFT', lockVersion: 0, executionMode: 'TABLE_SNAPSHOT', procedure: emptyProcedure(), inputSchema: { [code]: field }, result: emptyResult(), callTemplate: '', parameters: [], columns: [], grants: [], createdAt: null, updatedAt: null } }
+function emptyDraft(datasources: ReportDatasource[] = []): ReportDraft { const [code, field] = newReportInputField(0); return { id: 0, code: '', name: '', category: '', description: '', datasourceId: datasources.find((item) => item.code === 'system_environment_oracle' && item.enabled)?.id ?? 0, status: 'DRAFT', lockVersion: 0, executionMode: 'TABLE_SNAPSHOT', procedure: emptyProcedure(), inputSchema: { [code]: field }, result: emptyResult(), callTemplate: '', parameters: [], columns: [], grants: [], createdAt: null, updatedAt: null } }
 function draftFingerprint(draft: ReportDraft) { return JSON.stringify(draft) }

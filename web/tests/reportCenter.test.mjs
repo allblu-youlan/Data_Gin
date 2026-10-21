@@ -65,7 +65,7 @@ test('condition editor keeps date format out of a narrow action column', () => {
 
 test('report configuration locks its editor while save and publication are in flight', () => {
   const source = readFileSync(new URL('../src/reportCenter/components/ReportConfigDrawer/ReportConfigDrawer.tsx', import.meta.url), 'utf8')
-  assert.match(source, /<fieldset[^>]*disabled=\{state\.saving\}[^>]*aria-busy=\{state\.saving \|\| undefined\}/)
+  assert.match(source, /<fieldset[^>]*disabled=\{state\.saving \|\| draftRefreshFailed\}[^>]*aria-busy=\{state\.saving \|\| undefined\}/)
 })
 
 test('Oracle object editor searches on demand and cancels superseded catalog requests', () => {

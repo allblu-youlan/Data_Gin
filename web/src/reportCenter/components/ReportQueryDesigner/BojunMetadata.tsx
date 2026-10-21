@@ -15,21 +15,25 @@ export function BojunTableSelect({ client, datasourceId, value, selected, onChan
   const [state, setState] = useState({ loading: false, error: '' })
   const [refresh, setRefresh] = useState(0)
   const request = useRef<AbortController | null>(null)
+  const syncTimer = useRef<number | undefined>(undefined)
   useEffect(() => {
     request.current?.abort()
+    window.clearTimeout(syncTimer.current)
     const controller = new AbortController()
     request.current = controller
     setItems([]); setCursor('')
     if (!datasourceId) { setState({ loading: false, error: '' }); return }
     setState({ loading: true, error: '' })
-    const timer = window.setTimeout(() => {
-      void getBojunTables(client, datasourceId, { search, availableOnly, limit: 50 }, controller.signal).then((response) => {
-        if (controller.signal.aborted) return
-        if (!response.ok) { setState({ loading: false, error: response.error }); return }
-        setItems(response.data.items); setCursor(response.data.hasMore ? response.data.nextAfter : ''); setState({ loading: false, error: '' })
-      })
-    }, 250)
-    return () => { window.clearTimeout(timer); controller.abort(); request.current?.abort() }
+    async function loadFirst() {
+      const response = await getBojunTables(client, datasourceId, { search, availableOnly, limit: 50 }, controller.signal)
+      if (controller.signal.aborted) return
+      if (!response.ok) { setState({ loading: false, error: response.error }); return }
+      setItems(response.data.items); setCursor(response.data.hasMore ? response.data.nextAfter : '')
+      setState({ loading: response.data.syncing === true, error: '' })
+      if (response.data.syncing) syncTimer.current = window.setTimeout(() => void loadFirst(), 1500)
+    }
+    const timer = window.setTimeout(() => void loadFirst(), 250)
+    return () => { window.clearTimeout(timer); window.clearTimeout(syncTimer.current); controller.abort(); request.current?.abort() }
   }, [client, datasourceId, search, availableOnly, refresh])
   async function more() {
     if (!cursor || state.loading) return
@@ -38,12 +42,13 @@ export function BojunTableSelect({ client, datasourceId, value, selected, onChan
     const response = await getBojunTables(client, datasourceId, { search, availableOnly, after: cursor, limit: 50 }, controller.signal)
     if (controller.signal.aborted) return
     if (!response.ok) { setState({ loading: false, error: response.error }); return }
-    setItems((current) => [...current, ...response.data.items]); setCursor(response.data.hasMore ? response.data.nextAfter : ''); setState({ loading: false, error: '' })
+    setItems((current) => [...current, ...response.data.items]); setCursor(response.data.hasMore ? response.data.nextAfter : ''); setState({ loading: response.data.syncing === true, error: '' })
+    if (response.data.syncing) syncTimer.current = window.setTimeout(() => setRefresh((current) => current + 1), 1500)
   }
-  const available = (table: BojunTable) => table.enabled && table.validationStatus === 'VALID'
+  const available = (table: BojunTable) => table.enabled && ['VALID', 'PENDING'].includes(table.validationStatus)
   const listed = availableOnly ? items.filter(available) : items
   const options = selected && !listed.some((item) => item.id === selected.id) ? [selected, ...listed] : listed
   const unavailableSelection = availableOnly && selected && !available(selected)
-  const empty = search ? '没有匹配的表，请调整搜索关键词。' : availableOnly ? '暂无可用表，请先在伯俊字典中同步、核验并启用表。' : '暂无已同步的表，请先同步伯俊字典。'
-  return <div className={styles.editor}><Select aria-label={label} value={value || undefined} disabled={disabled || !datasourceId} showSearch searchValue={search} filterOption={false} onSearch={setSearch} onOpenChange={(open) => { if (open) { setSearch(''); setRefresh((current) => current + 1) } }} getPopupContainer={(trigger) => trigger.parentElement ?? trigger} loading={state.loading} placeholder="按表名或业务名称搜索" className={styles.select} options={options.map((table) => ({ value: String(table.id), disabled: availableOnly && !available(table), label: `${table.logicalName} · ${table.description || '无说明'}${availableOnly && !available(table) ? '（当前不可用）' : !table.enabled ? '（未启用）' : ''}` }))} onChange={(id) => { const table = options.find((item) => String(item.id) === id); if (table && (!availableOnly || available(table))) onChange(table) }} onPopupScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight >= element.scrollHeight - 24) void more() }} notFoundContent={state.loading ? '正在读取可用表…' : state.error || empty} />{unavailableSelection ? <small className={styles.error} role="status">已选表当前不可用，请在字典中核验后启用，或更换表。</small> : null}{state.error ? <div className={styles.actions}><small className={styles.error} role="alert">{state.error}</small><Button disabled={state.loading} onClick={() => setRefresh((current) => current + 1)}>重新读取</Button></div> : null}{cursor ? <Button onClick={() => void more()} disabled={state.loading}>加载更多表</Button> : null}</div>
+  const empty = search ? '无匹配可用表，请调整搜索关键词。' : '暂无匹配可用表，伯俊字典读取完成后会自动显示。'
+  return <div className={styles.editor}><Select aria-label={label} value={value || undefined} disabled={disabled || !datasourceId} showSearch searchValue={search} filterOption={false} onSearch={setSearch} onOpenChange={(open) => { if (open) { setSearch(''); setRefresh((current) => current + 1) } }} getPopupContainer={(trigger) => trigger.parentElement ?? trigger} loading={state.loading} placeholder="按表名或业务名称搜索" className={styles.select} options={options.map((table) => ({ value: String(table.id), disabled: availableOnly && !available(table), label: `${table.logicalName} · ${table.description || '无说明'}${availableOnly && !available(table) ? '（当前不可用）' : !table.enabled ? '（未启用）' : ''}` }))} onChange={(id) => { const table = options.find((item) => String(item.id) === id); if (table && (!availableOnly || available(table))) onChange(table) }} onPopupScroll={(event) => { const element = event.currentTarget; if (element.scrollTop + element.clientHeight >= element.scrollHeight - 24) void more() }} notFoundContent={state.loading ? '正在读取伯俊字典…' : state.error || empty} />{unavailableSelection ? <small className={styles.error} role="status">已选表当前不可用，请更换表或重新读取伯俊字典。</small> : null}{state.error ? <div className={styles.actions}><small className={styles.error} role="alert">{state.error}</small><Button disabled={state.loading} onClick={() => setRefresh((current) => current + 1)}>重新读取</Button></div> : null}{cursor ? <Button onClick={() => void more()} disabled={state.loading}>加载更多表</Button> : null}</div>
 }

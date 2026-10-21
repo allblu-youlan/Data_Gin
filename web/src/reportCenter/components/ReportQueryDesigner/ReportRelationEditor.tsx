@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, StatusTag } from '../../../ui'
 import { isBojunColumnAllowed } from '../../bojunQueryConfig'
@@ -7,7 +8,7 @@ import { BojunTableSelect, type BojunMetadata } from './BojunMetadata'
 import { ReportConditionEditor, type QueryFieldOption } from './ReportConditionEditor'
 import { ReportDefaultFields } from './ReportDefaultFields'
 import { ReportTableFields } from './ReportTableFields'
-import { relationSourceAliases } from './tableWorkspace'
+import { inheritDictionaryRelationKeys, relationSourceAliases } from './tableWorkspace'
 import styles from './ReportQueryDesigner.module.css'
 
 export function ReportRelationEditor({ client, datasourceId, relation, spec, metadata, fields, parameters, tableLocked = false, onChange, onAppend }: { client: ReportCenterClient; datasourceId: number; relation: ReportQueryRelation; spec: ReportQuerySpec; metadata: BojunMetadata; fields: QueryFieldOption[]; parameters: string[]; tableLocked?: boolean; onChange: (relation: ReportQueryRelation) => void; onAppend: (columnId: string, header: string) => void }) {
@@ -16,6 +17,10 @@ export function ReportRelationEditor({ client, datasourceId, relation, spec, met
   const source = metadata[tableId(relation.fromAliasId)]
   const sourceColumns = source?.columns.filter((column) => isBojunColumnAllowed(source.table, column)) ?? []
   const target = metadata[relation.targetTableId]
+  useEffect(() => {
+    const inherited = inheritDictionaryRelationKeys(relation, source, target)
+    if (inherited !== relation) onChange(inherited)
+  }, [onChange, relation, source, target])
   const selectedDisplay = relation.displayColumnIds.length ? relation.displayColumnIds : target?.table.displayFields.length ? target.table.displayFields : target?.table.primaryKeys ?? []
   const allowedAliases = relationSourceAliases(spec, relation.id)
   return <div className={styles.editor}>
@@ -26,7 +31,7 @@ export function ReportRelationEditor({ client, datasourceId, relation, spec, met
         <label className={styles.field}>显示名称<input value={relation.name} placeholder={target?.table.description || '用于识别这张表'} onChange={(event) => onChange({ ...relation, name: event.currentTarget.value })} /></label>
         <label className={styles.field}>从哪张表连接<select value={relation.fromAliasId} onChange={(event) => onChange({ ...relation, fromAliasId: event.currentTarget.value, keyBindings: relation.keyBindings.map((binding) => ({ ...binding, sourceColumnId: '' })) })}>{allowedAliases.map((alias) => <option key={alias} value={alias}>{name(alias)}</option>)}</select></label>
       </div>
-      <p className={styles.hint}>没有匹配记录时，仍保留“{name(relation.fromAliasId)}”的报表记录。每个关联键需指向唯一记录；复合键请逐一添加分量。</p>
+      <p className={styles.hint}>没有匹配记录时，仍保留“{name(relation.fromAliasId)}”的报表记录。优先继承伯俊字典中的完整关联键；需要时可调整字段。</p>
       <fieldset className={styles.keyFieldset}><legend>关联键 · {relation.keyBindings.length} 个分量</legend>{relation.keyBindings.map((binding, index) => <div className={styles.keyBinding} key={index}>
         <label className={styles.field}>来源字段<select aria-label={`第 ${index + 1} 个来源字段`} value={binding.sourceColumnId} onChange={(event) => { const sourceColumnId = event.currentTarget.value; onChange({ ...relation, keyBindings: relation.keyBindings.map((item, itemIndex) => itemIndex === index ? { ...item, sourceColumnId } : item) }) }}><option value="">选择来源字段</option>{sourceColumns.map((column) => <option key={column.id} value={String(column.id)}>{column.description || column.dbName} · {column.dbName}</option>)}</select></label>
         <span className={styles.bindingEquals} aria-hidden="true">=</span>

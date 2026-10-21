@@ -1,4 +1,5 @@
-import type { ReportQueryCondition, ReportQueryConditionGroup, ReportQueryRelation, ReportQuerySpec } from '../../types'
+import { isBojunColumnAllowed } from '../../bojunQueryConfig.js'
+import type { BojunColumn, BojunTable, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryRelation, ReportQuerySpec } from '../../types'
 
 export function tableDescendants(spec: ReportQuerySpec, aliasId: string) {
   const aliases = new Set([aliasId])
@@ -48,4 +49,23 @@ export function removeReportTables(spec: ReportQuerySpec, aliasId: string) {
 
 export function newWorkspaceRelation(id: string, fromAliasId: string): ReportQueryRelation {
   return { id, name: '', fromAliasId, targetTableId: '', keyBindings: [], cardinality: 'MANY_TO_ONE', joinType: 'LEFT', displayColumnIds: [], detailColumnIds: [], matchConditions: { logic: 'AND', items: [] } }
+}
+
+
+type DictionaryTable = { table: BojunTable; columns: BojunColumn[] }
+
+export function inheritDictionaryRelationKeys(relation: ReportQueryRelation, source?: DictionaryTable, target?: DictionaryTable): ReportQueryRelation {
+  if (!source || !target || !target.table.primaryKeys.length) return relation
+  const primaryKeys = target.table.primaryKeys
+  if (relation.keyBindings.some((binding) => !primaryKeys.includes(binding.targetColumnId))) return relation
+  const inferred = primaryKeys.map((targetColumnId) => {
+    const targetColumn = target.columns.find((column) => String(column.id) === targetColumnId && isBojunColumnAllowed(target.table, column))
+    if (!targetColumn) return null
+    const candidates = source.columns.filter((column) => isBojunColumnAllowed(source.table, column) && column.refTableId === target.table.bojunTableId && column.refColumnId === targetColumn.bojunColumnId)
+    if (candidates.length !== 1) return null
+    return { sourceColumnId: relation.keyBindings.find((binding) => binding.targetColumnId === targetColumnId)?.sourceColumnId || String(candidates[0].id), targetColumnId }
+  })
+  if (inferred.some((binding) => binding === null)) return relation
+  const keyBindings = inferred.filter((binding) => binding !== null)
+  return JSON.stringify(keyBindings) === JSON.stringify(relation.keyBindings) ? relation : { ...relation, keyBindings }
 }

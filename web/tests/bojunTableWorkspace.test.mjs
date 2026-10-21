@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { newWorkspaceRelation, relationSourceAliases, removeReportTables } from '../.test-dist/reportCenter/components/ReportQueryDesigner/tableWorkspace.js'
+import { inheritDictionaryRelationKeys, newWorkspaceRelation, relationSourceAliases, removeReportTables } from '../.test-dist/reportCenter/components/ReportQueryDesigner/tableWorkspace.js'
 
 function fixture() {
  const relations = [newWorkspaceRelation('store', 'base'), newWorkspaceRelation('region', 'store'), newWorkspaceRelation('product', 'base')].map((relation, index) => ({ ...relation, targetTableId: String(index + 2) }))
@@ -49,4 +49,41 @@ test('new connections retain complete editable key and display contracts', () =>
  assert.equal(relation.cardinality, 'MANY_TO_ONE')
  assert.deepEqual(relation.keyBindings, [])
  assert.deepEqual(relation.matchConditions, { logic: 'AND', items: [] })
+})
+
+
+function dictionaryRelationFixture() {
+ const column = (id, bojunColumnId, refTableId = '', refColumnId = '') => ({ id, bojunColumnId, refTableId, refColumnId, isPhysical: true, isSelectable: true })
+ const source = { table: { bojunTableId: 'order' }, columns: [column(11, 'store_fk', 'store', 'store_id'), column(12, 'tenant_fk', 'store', 'tenant_id'), column(13, 'manual_id')] }
+ const target = { table: { bojunTableId: 'store', primaryKeys: ['21', '22'] }, columns: [column(21, 'store_id'), column(22, 'tenant_id')] }
+ const relation = { ...newWorkspaceRelation('store', 'base'), targetTableId: '2', keyBindings: [{ sourceColumnId: '', targetColumnId: '21' }, { sourceColumnId: '', targetColumnId: '22' }] }
+ return { source, target, relation }
+}
+
+test('dictionary relationships populate complete composite keys using dictionary IDs', () => {
+ const { relation, source, target } = dictionaryRelationFixture()
+ const inherited = inheritDictionaryRelationKeys(relation, source, target)
+ assert.deepEqual(inherited.keyBindings, [{ sourceColumnId: '11', targetColumnId: '21' }, { sourceColumnId: '12', targetColumnId: '22' }])
+ assert.equal(relation.keyBindings[0].sourceColumnId, '')
+ assert.equal(inheritDictionaryRelationKeys(inherited, source, target), inherited)
+})
+
+test('dictionary relationships preserve manually selected source fields', () => {
+ const { relation, source, target } = dictionaryRelationFixture()
+ relation.keyBindings[0].sourceColumnId = '13'
+ assert.deepEqual(inheritDictionaryRelationKeys(relation, source, target).keyBindings, [{ sourceColumnId: '13', targetColumnId: '21' }, { sourceColumnId: '12', targetColumnId: '22' }])
+})
+
+test('incomplete and ambiguous dictionary relationships stay editable without partial guesses', () => {
+ const { relation, source, target } = dictionaryRelationFixture()
+ assert.equal(inheritDictionaryRelationKeys(relation, { ...source, columns: source.columns.slice(0, 1) }, target), relation)
+ assert.equal(inheritDictionaryRelationKeys(relation, { ...source, columns: [...source.columns, { ...source.columns[0], id: 14 }] }, target), relation)
+ assert.equal(inheritDictionaryRelationKeys(relation, source), relation)
+})
+
+test('dictionary relationships respect restricted fields and custom target keys', () => {
+ const { relation, source, target } = dictionaryRelationFixture()
+ assert.equal(inheritDictionaryRelationKeys(relation, { ...source, table: { ...source.table, config: { selectableColumns: ['11'] } } }, target), relation)
+ const manual = { ...relation, keyBindings: [{ sourceColumnId: '13', targetColumnId: '23' }] }
+ assert.equal(inheritDictionaryRelationKeys(manual, source, target), manual)
 })
