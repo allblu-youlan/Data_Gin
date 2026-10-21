@@ -25,7 +25,7 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
   const [excelSchemaState, setExcelSchemaState] = useState<ExcelMappingSchemaState>({ status: 'idle', error: '' })
   const [excelSchema, setExcelSchema] = useState<ReportResultTableColumn[] | null>(null)
   const [excelSchemaReload, setExcelSchemaReload] = useState(0)
-  const tabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'basic' as const, label: '基本信息' }, { key: 'procedure' as const, label: '主表与关联' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
+  const tabs = draft.executionMode === 'SELECT_SNAPSHOT' ? [{ key: 'basic' as const, label: '基本信息' }, { key: 'procedure' as const, label: '关联表' }, { key: 'conditions' as const, label: '查询条件' }, { key: 'excel' as const, label: '列与导出' }, { key: 'validation' as const, label: '核验与试运行' }] : legacyTabs
 
   useEffect(() => {
     if (!report) return
@@ -78,7 +78,7 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
     if (datasources.find((item) => item.id === draft.datasourceId)?.enabled === false) return '当前 Oracle 数据源已停用，请先启用或更换数据源。'
     if (draft.executionMode === 'SELECT_SNAPSHOT') {
       if (!publishing) return ''
-      if (!draft.querySpec?.base.tableId || !draft.querySpec.columns.length) return '请选择主表并至少添加一列。'
+      if (!draft.querySpec?.base.tableId || !draft.querySpec.columns.length) return '请加入至少一张表并添加报表列。'
       try { parseReportInputSchemaDocument(draft.inputSchema, true) } catch (error) { return error instanceof Error ? error.message : '输入参数不完整。' }
       return ''
     }
@@ -143,7 +143,7 @@ export function ReportConfigDrawer({ client, report, datasources, datasourcesLoa
   const requestClose = () => dirty ? setCloseConfirmationOpen(true) : onClose()
   const footer = <><span className={styles.version}>版本锁 {draft.lockVersion || '新建'} · {dirty ? '有未保存修改' : '草稿已保存'}</span><button type="button" onClick={requestClose}>关闭</button><button type="button" onClick={() => void save()} disabled={state.loading || state.saving || !dirty}>{state.saving ? '处理中…' : '仅保存草稿'}</button><Button variant="primary" onClick={() => void publish()} disabled={state.loading || state.saving}>{state.saving ? '处理中…' : dirty || !draft.id ? '保存并核验发布' : '核验并发布'}</Button></>
   return <>
-    <Drawer open title={report ? '编辑报表配置' : '创建报表配置'} description={draft.executionMode === 'SELECT_SNAPSHOT' ? '通过伯俊目录配置主表、关联、字段与条件；源表只读，结果按运行隔离保留。' : '配置保存于 MySQL；Oracle 过程仅接收一份 JSON，系统整表读取运行结果并在导出成功后清理。'} size="wide" closeDisabled={state.saving} onClose={requestClose} footer={footer}>
+    <Drawer open title={report ? '编辑报表配置' : '创建报表配置'} description={draft.executionMode === 'SELECT_SNAPSHOT' ? '通过伯俊目录配置表、关联、字段与条件；源表只读，结果按运行隔离保留。' : '配置保存于 MySQL；Oracle 过程仅接收一份 JSON，系统整表读取运行结果并在导出成功后清理。'} size="wide" closeDisabled={state.saving} onClose={requestClose} footer={footer}>
       <div className={styles.tabs} role="tablist" aria-label="报表配置步骤" onKeyDown={(event) => { const current = tabs.findIndex((item) => item.key === tab); const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0; if (!delta) return; event.preventDefault(); const next = tabs[(current + delta + tabs.length) % tabs.length]; setTab(next.key); document.getElementById(`report-config-tab-${next.key}`)?.focus() }}>{tabs.map((item, index) => <button id={`report-config-tab-${item.key}`} type="button" role="tab" aria-selected={tab === item.key} aria-controls="report-config-panel" tabIndex={tab === item.key ? 0 : -1} className={tab === item.key ? styles.active : ''} onClick={() => setTab(item.key)} key={item.key}><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>{item.label}</button>)}</div>
       <div id="report-config-panel" role="tabpanel" aria-labelledby={`report-config-tab-${tab}`} tabIndex={0} ref={bodyRef} className={styles.body}>
         {state.loading ? <p>正在读取草稿…</p> : <fieldset className={styles.editorFieldset} disabled={state.saving} aria-busy={state.saving || undefined}><Editor dirty={dirty} tab={tab} client={client} draft={draft} datasources={datasources} datasourcesLoading={datasourcesLoading} datasourcesError={datasourcesError} onChange={setDraft} excelSchema={excelSchema} excelSchemaState={excelSchemaState} onExcelSchemaRetry={() => setExcelSchemaReload((value) => value + 1)} /></fieldset>}

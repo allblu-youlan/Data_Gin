@@ -57,7 +57,7 @@ export function parseReportExecutionPolicy(value: unknown): ReportExecutionPolic
   if (!isQueryRecord(value)) return { ...defaultReportExecutionPolicy }
   return { exportPolicy: value.exportPolicy === 'AUTO' ? 'AUTO' : 'MANUAL', resultRetentionHours: typeof value.resultRetentionHours === 'number' ? value.resultRetentionHours : 24, purgeAfterExport: value.purgeAfterExport === true }
 }
-export function queryColumnSourceLabel(source: ReportColumnSource) { return source.kind === 'BASE_COLUMN' ? `主表 · 字段 #${source.columnId}` : source.kind === 'RELATION_DISPLAY' ? `${source.relationId} · 默认显示` : `${source.relationId} · 字段 #${source.columnId}` }
+export function queryColumnSourceLabel(source: ReportColumnSource) { return source.kind === 'BASE_COLUMN' ? `表 1 · 字段 #${source.columnId}` : source.kind === 'RELATION_DISPLAY' ? `${source.relationId} · 默认显示` : `${source.relationId} · 字段 #${source.columnId}` }
 
 export function isBojunColumnAllowed(table: BojunTable | undefined, column: BojunColumn, detail = false) {
   if (!table || !column.isPhysical || !column.isSelectable) return false

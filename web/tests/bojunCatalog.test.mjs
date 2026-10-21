@@ -24,6 +24,15 @@ test('catalog cursor queries are bounded and table sync uses the controller nume
  await startBojunSync(client, 3, '1')
  assert.deepEqual(calls[2].options.body, { scope: 'TABLE', tableId: 1 })
 })
+test('designer requests available tables while dictionary management can request all rows', async () => {
+ const paths = []
+ const client = async (path) => { paths.push(path); return { ok: true, status: 200, data: { data: { items: [], hasMore: false, nextAfter: '', generation: 0 } } } }
+ await getBojunTables(client, 3, { availableOnly: true })
+ await getBojunTables(client, 3, { availableOnly: false, after: 'approved-page' })
+ assert.equal(new URL(paths[0], 'https://local.test').searchParams.get('availableOnly'), 'true')
+ assert.equal(new URL(paths[1], 'https://local.test').searchParams.has('availableOnly'), false)
+ assert.equal(new URL(paths[1], 'https://local.test').searchParams.get('after'), 'approved-page')
+})
 test('catalog configuration preserves explicit field restrictions and administrator scopes', async () => {
  let sent
  const parsed = parseBojunTable(table)
