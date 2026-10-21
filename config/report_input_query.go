@@ -135,6 +135,12 @@ func loadReportInputOracleConfig() (ReportInputOracleConfig, error) {
 	}, nil
 }
 
+// LoadReportInputOracleConfig shares the system Oracle connection settings
+// without requiring any named input queries to be configured.
+func LoadReportInputOracleConfig() (ReportInputOracleConfig, error) {
+	return loadReportInputOracleConfig()
+}
+
 func loadReportInputQueries() (map[string]ReportInputQuery, error) {
 	raw := strings.TrimSpace(os.Getenv(EnvReportInputQueriesJSON))
 	if raw == "" {

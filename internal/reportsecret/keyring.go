@@ -84,6 +84,9 @@ func (environment EnvironmentKeyring) Decrypt(version, ciphertext string) (strin
 }
 
 func (environment EnvironmentKeyring) DecryptScoped(purpose, version, ciphertext string) (string, error) {
+	if version == SystemOracleCredentialVersion {
+		return systemOraclePassword(purpose, ciphertext)
+	}
 	variable := strings.TrimSpace(environment.Variable)
 	if variable == "" {
 		variable = "REPORT_CREDENTIAL_KEYS_JSON"

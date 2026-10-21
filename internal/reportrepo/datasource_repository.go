@@ -24,6 +24,9 @@ func (repository *Repository) ListReportDatasources(ctx context.Context) ([]mode
 	if repository == nil || repository.db == nil || ctx == nil {
 		return nil, fmt.Errorf("report datasource: repository and context are required")
 	}
+	if err := repository.ensureEnvironmentDatasource(ctx); err != nil {
+		return nil, fmt.Errorf("report datasource: system environment: %w", err)
+	}
 	var items []model.ReportDatasource
 	if err := repository.db.WithContext(ctx).Where("driver = ?", model.ReportDatasourceDriverOracle).Order("id ASC").Find(&items).Error; err != nil {
 		return nil, fmt.Errorf("report datasource: list: %w", err)
@@ -89,6 +92,9 @@ func (repository *Repository) UpdateReportDatasource(ctx context.Context, actor 
 			return ErrDatasourceNotFound
 		} else if err != nil {
 			return fmt.Errorf("report datasource: lock current: %w", err)
+		}
+		if systemEnvironmentDatasource(current) {
+			return ErrDatasourceInUse
 		}
 		if datasourceConnectionChanged(current, *datasource) {
 			if datasourcePhysicalIdentityChanged(current, *datasource) {

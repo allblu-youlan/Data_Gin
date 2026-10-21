@@ -42,7 +42,8 @@ const (
 )
 
 // ReportDatasource stores Oracle connection configuration in the MySQL
-// control database. PasswordCiphertext must only contain encrypted material.
+// control database. PasswordCiphertext contains encrypted material or an explicit
+// system-environment reference; the environment password is never persisted.
 type ReportDatasource struct {
 	BaseModel
 	Code                  string     `gorm:"column:code;size:64;not null;uniqueIndex" json:"code"`
