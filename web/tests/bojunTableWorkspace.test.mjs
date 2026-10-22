@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { inheritDictionaryRelationKeys, newWorkspaceRelation, relationSourceAliases, removeReportTables } from '../.test-dist/reportCenter/components/ReportQueryDesigner/tableWorkspace.js'
+import { appendDictionaryDefaultColumns, inheritDictionaryRelationKeys, newWorkspaceRelation, relationSourceAliases, removeReportTables } from '../.test-dist/reportCenter/components/ReportQueryDesigner/tableWorkspace.js'
 
 function fixture() {
  const relations = [newWorkspaceRelation('store', 'base'), newWorkspaceRelation('region', 'store'), newWorkspaceRelation('product', 'base')].map((relation, index) => ({ ...relation, targetTableId: String(index + 2) }))
@@ -86,4 +86,43 @@ test('dictionary relationships respect restricted fields and custom target keys'
  assert.equal(inheritDictionaryRelationKeys(relation, { ...source, table: { ...source.table, config: { selectableColumns: ['11'] } } }, target), relation)
  const manual = { ...relation, keyBindings: [{ sourceColumnId: '13', targetColumnId: '23' }] }
  assert.equal(inheritDictionaryRelationKeys(manual, source, target), manual)
+})
+
+function defaultColumnsFixture() {
+ const table = { id: 1, enabled: true, validationStatus: 'VALID', primaryKeys: ['10'], displayFields: ['12', '11'] }
+ const columns = [
+  { id: 10, dbName: 'ID', description: '记录标识', isPhysical: true, isSelectable: true },
+  { id: 11, dbName: 'CODE', description: '编码', isPhysical: true, isSelectable: true },
+  { id: 12, dbName: 'NAME', description: '名称', isPhysical: true, isSelectable: true },
+ ]
+ return { table, columns, spec: { ...fixture(), columns: [] } }
+}
+
+test('new table outputs default display fields in dictionary order with stable independent identities', () => {
+ const { table, columns, spec } = defaultColumnsFixture()
+ const next = appendDictionaryDefaultColumns(spec, 'base', table, columns)
+ assert.deepEqual(next.columns.map((column) => column.header), ['名称', '编码'])
+ assert.deepEqual(next.columns.map((column) => column.source), [{ kind: 'BASE_COLUMN', columnId: '12' }, { kind: 'BASE_COLUMN', columnId: '11' }])
+ assert.equal(new Set(next.columns.map((column) => column.fieldId)).size, 2)
+ assert.equal(next.columns.every((column) => column.valueMode === 'DISPLAY' && column.previewVisible && column.exportVisible), true)
+ assert.equal(appendDictionaryDefaultColumns(next, 'base', table, columns), next)
+ assert.equal(spec.columns.length, 0)
+})
+
+test('default output selection respects table aliases, allowed columns and the selected target identity', () => {
+ const { table, columns, spec } = defaultColumnsFixture()
+ const target = { ...table, id: 2, config: { selectableColumns: ['11'] } }
+ const next = appendDictionaryDefaultColumns(spec, 'store', target, columns)
+ assert.deepEqual(next.columns.map((column) => column.source), [{ kind: 'RELATION_COLUMN', relationId: 'store', columnId: '11' }])
+ assert.equal(appendDictionaryDefaultColumns(spec, 'region', target, columns), spec)
+ assert.equal(appendDictionaryDefaultColumns(spec, 'base', { ...table, enabled: false }, columns), spec)
+ assert.equal(appendDictionaryDefaultColumns(spec, 'base', { ...table, validationStatus: 'PENDING' }, columns), spec)
+})
+
+test('default output selection falls back to the primary key and skips unavailable physical fields', () => {
+ const { table, columns, spec } = defaultColumnsFixture()
+ const fallback = appendDictionaryDefaultColumns(spec, 'base', { ...table, displayFields: [] }, columns)
+ assert.deepEqual(fallback.columns.map((column) => column.source.columnId), ['10'])
+ const next = appendDictionaryDefaultColumns(spec, 'base', table, columns.map((column) => ({ ...column, isPhysical: column.id !== 12 })))
+ assert.deepEqual(next.columns.map((column) => column.header), ['编码'])
 })

@@ -40,7 +40,7 @@ export function ReportTablesWorkspace({ client, datasourceId, spec, metadata, pa
   function add(fromAliasId = active?.aliasId ?? spec.base.aliasId) {
     if (!spec.base.tableId) { setEdit({ aliasId: spec.base.aliasId, adding: true, spec }); return }
     const id = `rel_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
-    setEdit({ aliasId: id, adding: true, spec: { ...spec, relations: [...spec.relations, newWorkspaceRelation(id, fromAliasId)], columns: [...spec.columns, newReportQueryColumn({ kind: 'RELATION_DISPLAY', relationId: id }, '关联显示')] } })
+    setEdit({ aliasId: id, adding: true, spec: { ...spec, relations: [...spec.relations, newWorkspaceRelation(id, fromAliasId)] } })
   }
   function toggleField(columnId: string, header: string, checked: boolean) {
     if (!active) return

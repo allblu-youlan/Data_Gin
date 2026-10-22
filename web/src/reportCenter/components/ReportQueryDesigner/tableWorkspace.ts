@@ -1,4 +1,4 @@
-import { isBojunColumnAllowed } from '../../bojunQueryConfig.js'
+import { isBojunColumnAllowed, newReportQueryColumn } from '../../bojunQueryConfig.js'
 import type { BojunColumn, BojunTable, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryRelation, ReportQuerySpec } from '../../types'
 
 export function tableDescendants(spec: ReportQuerySpec, aliasId: string) {
@@ -49,6 +49,18 @@ export function removeReportTables(spec: ReportQuerySpec, aliasId: string) {
 
 export function newWorkspaceRelation(id: string, fromAliasId: string): ReportQueryRelation {
   return { id, name: '', fromAliasId, targetTableId: '', keyBindings: [], cardinality: 'MANY_TO_ONE', joinType: 'LEFT', displayColumnIds: [], detailColumnIds: [], matchConditions: { logic: 'AND', items: [] } }
+}
+
+export function appendDictionaryDefaultColumns(spec: ReportQuerySpec, aliasId: string, table: BojunTable, columns: BojunColumn[]): ReportQuerySpec {
+  const tableId = aliasId === spec.base.aliasId ? spec.base.tableId : spec.relations.find((relation) => relation.id === aliasId)?.targetTableId
+  if (tableId !== String(table.id) || !table.enabled || table.validationStatus !== 'VALID') return spec
+  const defaults = table.displayFields.length ? table.displayFields : table.primaryKeys
+  const selected = new Set(spec.columns.flatMap((column) => {
+    const source = column.source
+    return source.kind !== 'RELATION_DISPLAY' && (source.kind === 'BASE_COLUMN' ? spec.base.aliasId : source.relationId) === aliasId ? [source.columnId] : []
+  }))
+  const additions = defaults.flatMap((id) => { const column = columns.find((item) => String(item.id) === id); return column && !selected.has(id) && isBojunColumnAllowed(table, column) ? [column] : [] }).map((column) => newReportQueryColumn(aliasId === spec.base.aliasId ? { kind: 'BASE_COLUMN', columnId: String(column.id) } : { kind: 'RELATION_COLUMN', relationId: aliasId, columnId: String(column.id) }, column.description || column.dbName))
+  return additions.length ? { ...spec, columns: [...spec.columns, ...additions] } : spec
 }
 
 

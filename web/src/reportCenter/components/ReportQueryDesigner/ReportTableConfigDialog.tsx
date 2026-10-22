@@ -9,6 +9,7 @@ import type { BojunMetadata } from './BojunMetadata'
 import type { QueryFieldOption } from './ReportConditionEditor'
 import { ReportRelationEditor } from './ReportRelationEditor'
 import { useBojunMetadata } from './useBojunMetadata'
+import { appendDictionaryDefaultColumns } from './tableWorkspace'
 import reportDesign from '../../reportDesign.module.css'
 import styles from './ReportTableConfigDialog.module.css'
 
@@ -39,6 +40,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   const searchRef = useRef<HTMLInputElement>(null)
   const allFieldsRef = useRef<HTMLInputElement>(null)
   const relationSettingsRef = useRef<HTMLDetailsElement>(null)
+  const initializedDefaults = useRef('')
   const lookup = useBojunMetadata(client, datasourceId, [spec.base.tableId, ...spec.relations.map((relation) => relation.targetTableId)], metadataReload)
   const metadata = { ...initialMetadata, ...lookup.metadata }
   const aliases = [{ aliasId: spec.base.aliasId, tableId: spec.base.tableId }, ...spec.relations.map((relation) => ({ aliasId: relation.id, tableId: relation.targetTableId }))]
@@ -58,6 +60,12 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   const checkedCount = selectableFields.filter((column) => selectedIds.has(String(column.id))).length
   const defaultIds = item?.table.displayFields.length ? item.table.displayFields : item?.table.primaryKeys ?? []
   const displayIds = relation?.displayColumnIds.length ? relation.displayColumnIds : defaultIds
+
+  useEffect(() => {
+    if (!adding || !item || item.table.validationStatus !== 'VALID' || !item.table.enabled || initializedDefaults.current === tableId) return
+    initializedDefaults.current = tableId
+    setSpec((current) => appendDictionaryDefaultColumns(current, aliasId, item.table, item.columns))
+  }, [adding, aliasId, item, tableId])
 
   useEffect(() => {
     catalogRequest.current?.abort()
@@ -101,6 +109,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
 
   function choose(table: BojunTable) {
     if (!adding && String(table.id) !== tableId) return
+    if (String(table.id) !== tableId) initializedDefaults.current = ''
     setSpec((current) => selectTable(current, aliasId, table))
     setFieldSearch(''); setFieldPage(0); setError('')
   }
