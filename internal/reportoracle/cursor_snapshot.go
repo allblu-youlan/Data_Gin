@@ -26,6 +26,10 @@ const (
 	jsonSnapshotInsertBatch   = 200
 )
 
+// ErrJSONSnapshotStoreNotReady indicates missing deployment storage, not an
+// invalid report procedure, selected source table, or output configuration.
+var ErrJSONSnapshotStoreNotReady = errors.New("oracle JSON snapshot store is not ready")
+
 type JSONCursorCallPlan struct {
 	statement     string
 	payloadIsCLOB bool
@@ -56,7 +60,7 @@ WHERE (table_name = 'REPORT_RUN_SNAPSHOTS' AND column_name IN ('RUN_ID','SCHEMA_
 		return fmt.Errorf("validate JSON snapshot store: %w", err)
 	}
 	if columnCount != 9 {
-		return fmt.Errorf("%w: Oracle JSON snapshot tables are not installed", ErrMetadataMismatch)
+		return fmt.Errorf("%w: Oracle JSON snapshot tables are not installed", ErrJSONSnapshotStoreNotReady)
 	}
 	return nil
 }

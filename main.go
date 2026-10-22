@@ -52,6 +52,7 @@ func registerChildrenCmd() {
 		cmd.MigrateCmd,   // 数据库迁移命令
 		cmd.BackfillCmd,  // 数据补拉命令（有赞订单/退款）
 		cmd.MallWeatherCmd,
+		cmd.ReportSnapshotCmd,
 	)
 }
 

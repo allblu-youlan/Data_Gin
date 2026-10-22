@@ -53,6 +53,7 @@ func TestReportControllerErrorContract(t *testing.T) {
 		{name: "delete conflict", err: data_svc.ErrReportDeleteConflict, wantStatus: http.StatusConflict},
 		{name: "invalid", err: data_svc.ErrReportInvalid, wantStatus: http.StatusUnprocessableEntity},
 		{name: "publication invalid", err: data_svc.ErrReportPublicationInvalid, wantStatus: http.StatusUnprocessableEntity},
+		{name: "snapshot store not ready", err: data_svc.ErrReportSnapshotStoreNotReady, wantStatus: http.StatusServiceUnavailable},
 		{name: "temporary result table", err: fmt.Errorf("%w: %w", data_svc.ErrReportPublicationInvalid, data_svc.ErrReportPublicationTemporaryTable), wantStatus: http.StatusUnprocessableEntity},
 		{name: "parameter keyring unavailable", err: data_svc.ErrReportRunCredentialUnavailable, wantStatus: http.StatusServiceUnavailable},
 		{name: "report run busy", err: data_svc.ErrReportRunBusy, wantStatus: http.StatusConflict},
@@ -71,6 +72,33 @@ func TestReportControllerErrorContract(t *testing.T) {
 			}
 			if strings.Contains(recorder.Body.String(), "password") || strings.Contains(recorder.Body.String(), "secret") {
 				t.Fatalf("internal error leaked: %s", recorder.Body)
+			}
+		})
+	}
+}
+
+func TestReportPublishAndPreviewExplainMissingSnapshotStorage(t *testing.T) {
+	internalError := fmt.Errorf("%w: password=secret", data_svc.ErrReportSnapshotStoreNotReady)
+	for _, test := range []struct {
+		name string
+		run  gin.HandlerFunc
+	}{
+		{name: "publish", run: func(c *gin.Context) { writeReportError(c, internalError) }},
+		{name: "preview", run: func(c *gin.Context) { writeDatasetError(c, internalError) }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router := reportControllerRouter()
+			router.POST("/report-operation", test.run)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/report-operation", nil))
+			body := recorder.Body.String()
+			if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(body, "报表结果存储尚未就绪") || !strings.Contains(body, "report-snapshot init") {
+				t.Fatalf("response = %d %s", recorder.Code, body)
+			}
+			for _, forbidden := range []string{"过程或结果表", "password", "secret"} {
+				if strings.Contains(body, forbidden) {
+					t.Fatalf("snapshot storage response contains %q: %s", forbidden, body)
+				}
 			}
 		})
 	}

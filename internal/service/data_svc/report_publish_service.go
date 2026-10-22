@@ -20,6 +20,8 @@ import (
 var (
 	ErrReportPublicationInvalid        = errors.New("report publication: invalid contract")
 	ErrReportPublicationTemporaryTable = errors.New("report publication: temporary result table is unsupported")
+	// Keep direct dataset inspection and publication errors on the same contract.
+	ErrReportSnapshotStoreNotReady = reportoracle.ErrJSONSnapshotStoreNotReady
 )
 
 const defaultReportPublicationInspectionTimeout = 5 * time.Minute
@@ -366,6 +368,9 @@ func exportableReportColumnCount(columns []model.ReportColumn) int {
 }
 
 func classifyOracleInspectionError(target string, err error) error {
+	if errors.Is(err, ErrReportSnapshotStoreNotReady) {
+		return fmt.Errorf("report publication: inspect Oracle %s: %w", target, err)
+	}
 	if errors.Is(err, reportoracle.ErrTemporaryResultTable) {
 		return fmt.Errorf("%w: %w", ErrReportPublicationInvalid, ErrReportPublicationTemporaryTable)
 	}

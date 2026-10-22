@@ -295,6 +295,17 @@ func TestClassifyOracleInspectionErrorSeparatesContractAndInfrastructure(t *test
 	}
 }
 
+func TestClassifySnapshotStoreNotReadyPreservesDeploymentError(t *testing.T) {
+	source := fmt.Errorf("%w: missing required store columns", reportoracle.ErrJSONSnapshotStoreNotReady)
+	err := classifyOracleInspectionError("JSON snapshot store", source)
+	if !errors.Is(err, ErrReportSnapshotStoreNotReady) || !errors.Is(err, reportoracle.ErrJSONSnapshotStoreNotReady) || errors.Is(err, ErrReportPublicationInvalid) {
+		t.Fatalf("snapshot deployment error = %v", err)
+	}
+	if !strings.Contains(err.Error(), "JSON snapshot store") || !strings.Contains(err.Error(), "missing required store columns") {
+		t.Fatalf("snapshot inspection context was lost: %v", err)
+	}
+}
+
 func TestClassifyPublicationStoreErrorUsesResourceSpecificSemantics(t *testing.T) {
 	tests := []struct {
 		name   string

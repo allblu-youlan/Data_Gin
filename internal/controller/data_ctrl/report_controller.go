@@ -372,6 +372,8 @@ func classifyReportError(err error) (*errcode.Error, string) {
 		return errcode.Conflict, "报表草稿已被修改或编码已存在，请刷新后重试"
 	case errors.Is(err, data_svc.ErrReportDeleteConflict):
 		return errcode.Conflict, "仅未发布且从未运行的草稿模板可以删除"
+	case errors.Is(err, data_svc.ErrReportSnapshotStoreNotReady):
+		return errcode.ServiceUnavailable, "报表结果存储尚未就绪，请联系管理员执行 report-snapshot init 初始化后重试"
 	case errors.Is(err, data_svc.ErrReportInvalid):
 		return errcode.UnprocessableEntity, reportDraftValidationMessage(err)
 	case errors.Is(err, data_svc.ErrReportPublicationTemporaryTable):
