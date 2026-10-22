@@ -3,17 +3,17 @@
   --tag-background: var(--color-surface-subtle);
 
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
   width: fit-content;
   min-height: 24px;
   padding: 2px var(--space-2);
-  border: 1px solid currentColor;
-  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   color: var(--tag-color);
   background: var(--tag-background);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -41,7 +41,7 @@
 }
 
 .warning {
-  --tag-color: var(--color-warning);
+  --tag-color: var(--color-warning-text);
   --tag-background: var(--color-warning-soft);
 }
 

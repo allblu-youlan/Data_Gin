@@ -508,7 +508,7 @@ async function waitForMallWeatherExportAbortableRequest<T>(
   if (!Number.isSafeInteger(timeoutMilliseconds) || timeoutMilliseconds < 1 || controller.signal.aborted) {
     throw new Error('invalid mall weather export request timeout')
   }
-  let timer = 0
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined
   let timedOut = false
   let cancelRequest: (() => void) | null = null
   try {

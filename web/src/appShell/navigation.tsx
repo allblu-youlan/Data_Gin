@@ -48,6 +48,9 @@ export type NavKey =
   | 'excel_schemes'
   | 'excel_write'
   | 'excel_export'
+  | 'excel_oracle_import'
+  | 'excel_procedure'
+  | 'excel_workflow'
   | 'report_catalog'
   | 'report_configuration'
   | 'report_query'
@@ -142,6 +145,9 @@ export const navGroups: NavGroup[] = [
   {
     label: '数据工具',
     items: [
+      { key: 'excel_workflow', label: '复杂操作台', description: '匹配、导入、过程与导出串行执行', icon: <ListChecks aria-hidden="true" /> },
+      { key: 'excel_oracle_import', label: '导入 Excel 数据', description: '保存 Excel 到 Oracle 导入方法', icon: <Upload aria-hidden="true" /> },
+      { key: 'excel_procedure', label: '存储过程执行', description: '调用 Oracle 过程与校验成功标志', icon: <Database aria-hidden="true" /> },
       { key: 'excel_jobs', label: 'Excel 任务', description: '状态与结果下载', icon: <ScrollText aria-hidden="true" /> },
       { key: 'excel_export', label: 'Excel 导出', description: 'Oracle 表数据导出', icon: <Download aria-hidden="true" /> },
       { key: 'excel_schemes', label: 'Excel 匹配', description: '自定义多步骤方案', icon: <Upload aria-hidden="true" /> },
@@ -156,7 +162,7 @@ const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
   'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'store_info',
   'mall_weather', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
-  'excel_schemes', 'excel_write', 'excel_export',
+  'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
   'office_messages', 'office_push',
   'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',
 ])

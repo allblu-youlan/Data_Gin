@@ -30,7 +30,8 @@
   max-height: min(86vh, 760px);
   min-width: 0;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-overlay);
   color: var(--color-text);
   background: var(--color-canvas);
 }
@@ -56,7 +57,7 @@
 .heading h2 {
   margin: 0;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.5;
 }
 
@@ -74,7 +75,7 @@
   height: var(--button-height);
   padding: 0;
   place-items: center;
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
   color: var(--color-text-secondary);
   background: var(--color-canvas);
@@ -117,6 +118,7 @@
     max-height: 92vh;
     border-inline: 0;
     border-bottom: 0;
+    border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
   }
 
   .header,

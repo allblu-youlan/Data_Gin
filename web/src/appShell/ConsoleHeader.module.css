@@ -1,64 +1,29 @@
-.session {
-  display: flex;
-  gap: var(--space-5);
-  align-items: center;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-.date,
-.health {
-  display: inline-flex;
-  gap: 9px;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.date svg {
-  width: 20px;
-  height: 20px;
-}
-
-.user {
-  display: none;
-}
-
-.refresh,
-.logout {
-  min-width: 112px;
-}
-
-.logout {
-  color: var(--color-danger);
-}
-
-.health {
-  color: var(--color-success-text);
-  font-weight: 650;
-}
-
-.health::before {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
-  border-radius: 999px;
-  background: currentColor;
-  content: '';
-}
-
-.health.loading {
-  color: var(--color-warning);
-}
-
+.breadcrumb { display: inline-flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.breadcrumb > span { color: var(--color-text-tertiary); white-space: nowrap; }
+.breadcrumb strong { overflow: hidden; color: var(--color-text); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--color-text-disabled); }
+.session { display: flex; gap: var(--space-4); align-items: center; color: var(--color-text-secondary); font-size: 12px; }
+.date, .health { display: inline-flex; gap: var(--space-2); align-items: center; white-space: nowrap; }
+.date { color: var(--color-text-tertiary); }
+.date svg { width: 14px; height: 14px; }
+.user { display: inline-flex; gap: var(--space-2); align-items: center; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user > span { display: inline-grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text-secondary); background: var(--color-surface-subtle); font-weight: 600; }
+.refresh, .logout { min-height: 32px; border-color: transparent; background: transparent; color: var(--color-text-secondary); padding: var(--space-1) var(--space-2); font-size: 12px; font-weight: 500; }
+.refresh svg, .logout svg { width: 16px; height: 16px; }
+.logout { width: 32px; padding: 0; }
+.logout:hover { color: var(--color-danger); }
+.health { color: var(--color-text-secondary); font-size: 11px; }
+.health::before { width: 6px; height: 6px; flex: 0 0 6px; border-radius: var(--radius-pill); background: var(--color-success); content: ''; }
+.health.loading::before { background: var(--color-warning); }
+@media (max-width: 1200px) { .date { display: none; } }
 @media (max-width: 840px) {
-  .session {
-    gap: var(--space-2);
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .date,
-  .health {
-    font-size: 12px;
-  }
+  .session { gap: var(--space-2); }
+  .user { max-width: 120px; }
+  .refresh, .logout { min-height: 40px; min-width: 40px; }
+}
+@media (max-width: 580px) {
+  .health, .user { display: none; }
+  .refresh > span { display: none; }
+  .breadcrumb { gap: var(--space-1); }
+  .breadcrumb > span, .breadcrumb svg { display: none; }
 }

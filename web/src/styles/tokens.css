@@ -1,16 +1,22 @@
 :root {
-  --color-brand: #FF9D0A;
-  --color-brand-hover: #e88900;
-  --color-brand-active: #8a4b00;
-  --color-brand-soft: #fff7e9;
-  --color-text: #1f2329;
-  --color-text-secondary: #68707c;
-  --color-text-disabled: #98a0ab;
-  --color-border: #e3e7ed;
-  --color-border-strong: #cbd1d9;
-  --color-workspace: #f7f8fa;
+  --color-brand: #e68a14;
+  --color-brand-hover: #cc750b;
+  --color-brand-active: #975308;
+  --color-brand-soft: #fff8ed;
+  --color-primary: #272a30;
+  --color-primary-hover: #3b3f47;
+  --color-on-primary: #ffffff;
+  --color-text: #24272e;
+  --color-text-secondary: #646b76;
+  --color-text-tertiary: #68707c;
+  --color-text-disabled: #9299a3;
+  --color-border: #e8eaee;
+  --color-border-strong: #d7dbe2;
+  --color-workspace: #f6f7f9;
   --color-canvas: #ffffff;
-  --color-surface-subtle: #f2f4f7;
+  --color-surface-subtle: #f5f6f8;
+  --color-surface-hover: #f0f2f5;
+  --color-control: #fafbfc;
   --color-success: #07954c;
   --color-success-text: #06733c;
   --color-success-soft: #edf8f2;
@@ -20,16 +26,17 @@
   --color-danger-soft: #fff1f0;
   --color-info: #185f9e;
   --color-info-soft: #eef6fd;
-  --color-focus: #b86800;
+  --color-focus: #555d6a;
   --color-on-brand: #ffffff;
   --color-notice-danger: #fff5f4;
   --color-warning-text: #713f12;
-  --color-navigation-text: #5f6670;
-  --color-navigation-muted: #717985;
-  --color-navigation-icon: #898f98;
-  --color-navigation-hover: #fbfaf7;
-  --color-navigation-active: #8a4b00;
-  --color-brand-control-hover: #eb8e00;
+  --color-navigation-text: #59616e;
+  --color-navigation-muted: #68707c;
+  --color-navigation-icon: #7b8390;
+  --color-navigation-hover: #f5f6f8;
+  --color-navigation-active: #24272e;
+  --color-navigation-selected: #f0f2f5;
+  --color-brand-control-hover: #cc750b;
   --color-chart-precipitation: #0f9f78;
   --color-chart-emerald: #047857;
   --color-chart-green: #15803d;
@@ -59,12 +66,16 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
 
   --radius-none: 0;
-  --radius-control: 2px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
   --radius-pill: 999px;
   --control-height: 40px;
-  --button-height: 38px;
+  --button-height: 36px;
   --table-row-height: 44px;
 
   --page-padding-inline: 24px;
@@ -73,6 +84,28 @@
   --layer-sticky: 20;
   --layer-overlay: 1000;
   --layer-dialog: 1100;
+  --shadow-panel: 0 1px 2px rgb(24 31 44 / 3%);
+  --shadow-overlay: 0 16px 48px rgb(24 31 44 / 14%);
+
+  --background: var(--color-workspace);
+  --foreground: var(--color-text);
+  --card: var(--color-canvas);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-canvas);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-on-primary);
+  --secondary: var(--color-surface-subtle);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface-subtle);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-surface-hover);
+  --accent-foreground: var(--color-text);
+  --destructive: var(--color-danger);
+  --border: var(--color-border);
+  --input: var(--color-border-strong);
+  --ring: var(--color-focus);
+  --radius: 0.5rem;
 }
 
 @media (max-width: 1179px) {

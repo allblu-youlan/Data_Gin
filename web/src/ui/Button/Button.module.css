@@ -1,14 +1,5 @@
-.primary {
-  border-color: var(--color-brand);
-  background: var(--color-brand);
-  color: var(--color-text);
-}
-
-.primary:hover:not(:disabled) {
-  background: var(--color-brand-hover);
-}
-
-.danger {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-}
+.primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
+.primary:hover:not(:disabled) { border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
+.primary:active:not(:disabled) { background: var(--color-primary); }
+.danger { border-color: var(--color-border-strong); color: var(--color-danger); }
+.danger:hover:not(:disabled) { border-color: var(--color-danger); background: var(--color-danger-soft); }

@@ -1,66 +1,15 @@
-.surface :where(button, input, select, textarea) {
-  font: inherit;
-}
-
-.surface :where(button) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: var(--button-height);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-control);
-  background: var(--color-canvas);
-  color: var(--color-text);
-  cursor: pointer;
-  font-weight: 650;
-  padding: 7px 11px;
-}
-
-.surface :where(button:hover:not(:disabled)) {
-  background: var(--color-surface-subtle);
-}
-
-.surface :where(button:disabled) {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.surface :where(button svg) {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-
-.surface :where(label) {
-  display: grid;
-  gap: 6px;
-  color: var(--color-text);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.surface :where(input, select, textarea) {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-control);
-  background: var(--color-canvas);
-  color: var(--color-text);
-  font-size: 13px;
-  padding: 8px 9px;
-}
-
-.surface :where(input[type='checkbox'], input[type='radio']) {
-  width: auto;
-}
-
-.surface :where(button, a, input, select, textarea) {
-  outline-color: var(--color-focus);
-  outline-offset: 2px;
-}
-
-.surface :where(button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible) {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
+:where(.surface) :where(button, input, select, textarea) { font-family: inherit; }
+:where(.surface) :where(button:not([data-slot])) { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--button-height); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-canvas); color: var(--color-text); cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.5; padding: var(--space-2) var(--space-3); transition: background-color 140ms, border-color 140ms, color 140ms; }
+:where(.surface) :where(button:not([data-slot]):hover:not(:disabled)) { background: var(--color-surface-subtle); border-color: var(--color-text-disabled); }
+:where(.surface) :where(button:not([data-slot]):active:not(:disabled)) { background: var(--color-surface-hover); }
+:where(.surface) :where(button:not([data-slot]):disabled) { cursor: not-allowed; opacity: .45; }
+:where(.surface) :where(button svg) { width: 16px; height: 16px; flex: 0 0 auto; }
+:where(.surface) :where(label:not([data-slot])) { display: grid; gap: var(--space-2); color: var(--color-text-secondary); font-size: 12px; font-weight: 500; }
+:where(.surface) :where(input:not([data-slot]), select:not([data-slot]), textarea:not([data-slot])) { width: 100%; min-width: 0; min-height: var(--control-height); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-control); color: var(--color-text); font-size: 13px; line-height: 1.5; padding: var(--space-2) var(--space-3); }
+:where(.surface) :where(input:not([data-slot])::placeholder, textarea:not([data-slot])::placeholder) { color: var(--color-text-tertiary); }
+:where(.surface) :where(input:not([data-slot]):disabled, select:not([data-slot]):disabled, textarea:not([data-slot]):disabled) { color: var(--color-text-secondary); background: var(--color-surface-subtle); cursor: not-allowed; opacity: .7; }
+:where(.surface) :where(textarea:not([data-slot])) { resize: vertical; }
+:where(.surface) :where(input[type='checkbox']:not([data-slot]), input[type='radio']:not([data-slot])) { width: 16px; min-height: 16px; height: 16px; accent-color: var(--color-primary); }
+:where(.surface) :where(button, a, input, select, textarea, summary) { outline-color: var(--color-focus); outline-offset: 3px; }
+:where(.surface) :where(button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+@media (max-width: 840px) { :where(.surface) :where(button:not([data-slot]), input:not([data-slot]), select:not([data-slot])) { min-height: 40px; } :where(.surface) :where(input[type='checkbox']:not([data-slot]), input[type='radio']:not([data-slot])) { min-height: 16px; } }

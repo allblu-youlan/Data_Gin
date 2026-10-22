@@ -1,13 +1,28 @@
 .page {
-  --excel-control-height: 34px;
-  --button-height: 34px;
+  --excel-control-height: 36px;
+  --button-height: 36px;
+}
+
+.page:not([role]) {
+  display: grid;
+  gap: var(--space-5);
+  background: var(--color-workspace);
+}
+
+.page.page > section:not(.masterDetail) {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-panel);
 }
 
 .panel {
   min-width: 0;
-  border: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
   background: var(--color-canvas);
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 
 .panelTitle {
@@ -15,11 +30,10 @@
   align-items: center;
   gap: var(--space-2);
   margin-block-end: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  padding-block-end: var(--space-3);
+  padding-block-end: var(--space-2);
 }
 
-.panelTitle svg { width: 18px; height: 18px; color: var(--color-brand); }
+.panelTitle svg { width: 18px; height: 18px; color: var(--color-text-secondary); }
 .panelTitle h3 { margin: 0; font-size: 16px; }
 .panelTitle span { color: var(--color-text-secondary); font-size: 12px; }
 
@@ -32,13 +46,13 @@
 }
 
 .uploadForm > label,
-.dialog .uploadForm > label { display: grid; gap: var(--space-1); min-width: 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 650; }
+.dialog .uploadForm > label { display: grid; gap: var(--space-2); min-width: 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 500; }
 .uploadForm input,
 .uploadForm select,
 .uploadForm textarea,
 .dialog .uploadForm input,
 .dialog .uploadForm select,
-.dialog .uploadForm textarea { width: 100%; min-width: 0; min-height: var(--excel-control-height); border: 1px solid var(--color-border-strong); background: var(--color-canvas); padding-inline: var(--space-3); }
+.dialog .uploadForm textarea { width: 100%; min-width: 0; min-height: var(--excel-control-height); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-control); padding-inline: var(--space-3); }
 .uploadForm textarea,
 .dialog .uploadForm textarea { padding-block: var(--space-2); }
 
@@ -56,7 +70,7 @@
 .schemeToolbar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(100px, .3fr) auto; align-items: end; gap: var(--space-3); margin-block-end: var(--space-4); }
 .schemeForm { display: block; }
 .stepEditor,
-.dialog .stepEditor { display: grid; grid-column: 1 / -1; gap: var(--space-2); border-block: 1px solid var(--color-border); padding-block: var(--space-3); }
+.dialog .stepEditor { display: grid; grid-column: 1 / -1; gap: var(--space-3); border: 0; border-radius: var(--radius-panel); background: var(--color-surface-subtle); padding: var(--space-4); }
 .stepEditorTitle,
 .stepHeading,
 .stepFilterHeading,
@@ -66,7 +80,7 @@
 .stepCard,
 .dialog .stepCard { display: grid; gap: var(--space-3); border: 1px solid var(--color-border); background: var(--color-canvas); padding: var(--space-3); }
 .stepIndex,
-.dialog .stepIndex { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--color-brand); border-radius: 50%; color: var(--color-brand); }
+.dialog .stepIndex { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); color: var(--color-text-secondary); }
 .stepFields,
 .dialog .stepFields { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: var(--space-3); }
 .stepFilterEditor,
@@ -89,22 +103,23 @@
 .dialog .stepFilterEmpty,
 .dialog .modeNote { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
 .stepNameInput,
-.dialog .stepNameInput { min-height: 32px; border: 0; background: transparent; font: inherit; font-weight: 650; }
+.dialog .stepNameInput { min-height: 32px; border: 0; background: transparent; font: inherit; font-weight: 500; }
 .catalogControl,
 .catalogExplanation,
 .dialog .catalogControl,
 .dialog .catalogExplanation { min-width: 0; }
 .catalogExplanation,
-.dialog .catalogExplanation { display: grid; gap: 2px; margin-block-start: var(--space-1); border-inline-start: 2px solid var(--color-brand); padding-inline-start: var(--space-2); }
+.dialog .catalogExplanation { display: grid; gap: var(--space-1); margin-block-start: var(--space-1); border-inline-start: 2px solid var(--color-border-strong); padding-inline-start: var(--space-2); }
 .catalogExplanation small,
 .dialog .catalogExplanation small { color: var(--color-text-secondary); font-size: 11px; }
 .catalogError,
 .dialog .catalogError { display: flex; justify-content: space-between; gap: var(--space-2); border: 1px solid var(--color-danger); padding: var(--space-2); }
-.schemeAdvanced { margin-block-start: var(--space-4); border: 1px solid var(--color-border); padding: var(--space-3); }
+.schemeAdvanced { margin-block-start: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface-subtle); padding: var(--space-4); }
 .schemeAdvanced > div { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: end; gap: var(--space-2); padding-block-start: var(--space-3); }
 
-.modeSwitch { display: flex; gap: var(--space-2); margin-block-end: var(--space-3); }
-.modeSwitch .active { border-color: var(--color-brand); background: var(--color-brand-soft); }
+.modeSwitch { display: flex; width: fit-content; gap: var(--space-1); margin-block-end: var(--space-3); border-radius: var(--radius-panel); background: var(--color-surface-subtle); padding: var(--space-1); }
+.modeSwitch button { border-color: transparent; background: transparent; }
+.modeSwitch .active { border-color: var(--color-border); background: var(--color-canvas); box-shadow: var(--shadow-panel); }
 .writeSummary { display: grid; gap: var(--space-3); margin-block-start: var(--space-4); border-top: 1px solid var(--color-border); padding-block-start: var(--space-4); }
 .jobDetail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric { display: grid; gap: var(--space-1); padding: var(--space-3); border-inline-end: 1px solid var(--color-border); }
@@ -113,9 +128,9 @@
 
 .jobRowProgress { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--space-2); }
 .jobRowProgress progress { grid-column: 1 / -1; width: 100%; height: 5px; accent-color: var(--color-success); }
-.jobMatchCount { color: var(--color-success); }
+.jobMatchCount { color: var(--color-success-text); }
 .jobUnmatchedCount { color: var(--color-danger); }
-.historyRowSelected { background: var(--color-brand-soft); }
+.historyRowSelected { background: var(--color-navigation-selected); }
 .jobDetailPanel,
 .jobDetailMeta,
 .jobLogList { display: grid; gap: var(--space-3); }
@@ -130,7 +145,7 @@
 .jobProgress { display: grid; gap: var(--space-2); border-block: 1px solid var(--color-border); padding-block: var(--space-3); }
 .jobProgress progress { width: 100%; accent-color: var(--color-success); }
 .jobLogHeading,
-.jobActionHeading { border-bottom: 1px solid var(--color-border); padding-block-end: var(--space-2); font-weight: 650; }
+.jobActionHeading { border-bottom: 1px solid var(--color-border); padding-block-end: var(--space-2); font-weight: 500; }
 .recordRow { padding-block: var(--space-2); border-bottom: 1px solid var(--color-border); }
 .recordRow > div { display: grid; gap: var(--space-1); }
 .recordRow span { color: var(--color-text-secondary); font-size: 11px; }
@@ -144,7 +159,7 @@
 .checkboxLabel input,
 .dialog .checkboxLabel input { width: auto; min-height: auto; }
 .fileInputLabel span,
-.dialog .fileInputLabel span { min-height: var(--excel-control-height); border: 1px solid var(--color-border-strong); padding: var(--space-2) var(--space-3); }
+.dialog .fileInputLabel span { min-height: var(--excel-control-height); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-control); padding: var(--space-2) var(--space-3); }
 .fileInputLabel input[type='file'],
 .dialog .fileInputLabel input[type='file'] { width: 1px; height: 1px; position: absolute; clip-path: inset(50%); }
 .errorBanner,
@@ -160,10 +175,12 @@
 }
 
 .primary {
-  border-color: var(--color-brand);
-  background: var(--color-brand);
-  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
+
+.primary:hover:not(:disabled) { border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
 
 .danger {
   border-color: var(--color-danger);
@@ -171,22 +188,22 @@
 }
 
 .active {
-  border-color: var(--color-brand);
-  background: var(--color-brand-soft);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-subtle);
 }
 
 .stepComplete,
 .stepIncomplete {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .stepComplete {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .stepIncomplete {
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .configSummary,
@@ -203,6 +220,8 @@
 .tableWrap {
   min-width: 0;
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
 }
 
 .previewTable {
@@ -230,16 +249,18 @@
   max-height: min(92vh, 860px);
 }
 
+.page .masterDetail { padding: 0; border: 0; background: transparent; }
+
 .masterDetail {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr);
   min-width: 0;
-  border-top: 1px solid var(--color-border);
+  gap: var(--space-5);
 }
 
 .aside {
   min-width: 0;
-  border-left: 1px solid var(--color-border);
+  border-left: 0;
 }
 
 .search {
@@ -301,20 +322,20 @@
 .schemeTable th:nth-child(3) { width: 32%; }
 .schemeTable th:nth-child(4) { width: 20%; }
 
-.matchWorkspace { min-width: 0; border: 1px solid var(--color-border); background: var(--color-canvas); padding: var(--space-4); }
+.matchWorkspace { min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-canvas); padding: var(--space-5); }
 .workspaceHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
 .workspaceHeading > div { display: grid; gap: var(--space-1); min-width: 0; }
-.workspaceHeading strong { font-size: 15px; overflow-wrap: anywhere; }
+.workspaceHeading strong { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
 .workspaceHeading span { color: var(--color-text-secondary); font-size: 12px; }
 .workspaceHeading > button { flex-shrink: 0; }
 .stepEditorTitle > div, .stepFilterHeading > div { display: grid; gap: var(--space-1); }
 .stepEditorTitle > div > span, .stepFilterHeading span { color: var(--color-text-secondary); font-size: 12px; font-weight: 400; }
 .ruleCount { margin-left: var(--space-2); color: var(--color-success-text); font-size: 12px; font-weight: 500; }
-.rule { min-width: 0; border: 1px solid var(--color-border); background: var(--color-canvas); }
+.rule { min-width: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-canvas); }
 .ruleExpanded { border-color: var(--color-border-strong); }
 .ruleHeader { display: flex; align-items: center; gap: var(--space-2); padding-right: var(--space-3); }
 .ruleSummary { display: flex; flex: 1; justify-content: flex-start; min-width: 0; gap: var(--space-3); padding: var(--space-3); border: 0; background: transparent; text-align: left; }
-.ruleNumber { flex: 0 0 28px; color: var(--color-brand-active); font: 13px var(--font-mono); }
+.ruleNumber { display: inline-grid; flex: 0 0 28px; min-height: 28px; place-items: center; border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-text-secondary); font: 12px var(--font-mono); }
 .ruleTitle { display: grid; flex: 1; min-width: 100px; gap: var(--space-1); }
 .ruleTitle strong { font-size: 13px; overflow-wrap: anywhere; }
 .ruleTitle > span { color: var(--color-text-secondary); font-size: 11px; font-weight: 400; }
@@ -340,7 +361,7 @@
 .ruleFields .catalogExplanation { font-size: 11px; }
 .ruleFields .stepFields { align-items: start; }
 .supplementalSettings { border-top: 1px solid var(--color-border); margin-top: var(--space-1); padding-top: var(--space-3); }
-.supplementalSettings summary, .schemeAdvanced summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+.supplementalSettings summary, .schemeAdvanced summary { cursor: pointer; font-size: 13px; font-weight: 500; }
 .supplementalSettings summary span { margin-left: var(--space-2); font-size: 12px; color: var(--color-text-secondary); font-weight: 400; }
 .supplementalSettings > div { border: 0; }
 .fileInputLabel:focus-within span { outline: 2px solid var(--color-focus); outline-offset: 2px; }
@@ -360,7 +381,7 @@
   }
 
   .aside {
-    border-top: 1px solid var(--color-border);
+    border-top: 0;
     border-left: 0;
   }
 
@@ -380,7 +401,11 @@
   .ruleDetailHeading, .stepFilterHeading, .stepEditorTitle { flex-wrap: wrap; }
   .stepFilterHeading > div { flex-basis: 100%; }
   .workspaceHeading { align-items: flex-start; }
-  .matchWorkspace { padding: var(--space-3); }
+  .page.page > section, .matchWorkspace { padding: var(--space-3); }
+  .page .stepEditor { padding: var(--space-3); }
+  .previewMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .previewMetrics .metric { border: 0; }
+  .jobDetailMeta { grid-template-columns: minmax(0, 1fr); }
   .schemeToolbarActions { justify-content: flex-start; }
   .search {
     min-width: 100%;

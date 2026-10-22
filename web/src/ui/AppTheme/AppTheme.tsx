@@ -10,7 +10,7 @@ dayjs.locale('zh-cn')
 
 const consoleTheme: ThemeConfig = {
   token: {
-    colorPrimary: consoleColors.brand,
+    colorPrimary: consoleColors.primary,
     colorInfo: consoleColors.info,
     colorSuccess: consoleColors.success,
     colorWarning: consoleColors.warning,
@@ -20,23 +20,23 @@ const consoleTheme: ThemeConfig = {
     colorBorder: consoleColors.border,
     colorBgBase: consoleColors.canvas,
     colorBgLayout: consoleColors.workspace,
-    borderRadius: 2,
-    borderRadiusLG: 2,
+    borderRadius: 6,
+    borderRadiusLG: 8,
     controlHeight: 40,
     fontFamily: '"IBM Plex Sans Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", sans-serif',
   },
   components: {
     Button: {
-      borderRadius: 2,
-      controlHeight: 38,
+      borderRadius: 6,
+      controlHeight: 36,
       primaryShadow: 'none',
     },
     Card: {
-      borderRadiusLG: 0,
+      borderRadiusLG: 8,
       boxShadowTertiary: 'none',
     },
     Modal: {
-      borderRadiusLG: 2,
+      borderRadiusLG: 12,
     },
     Drawer: {
       borderRadiusLG: 0,

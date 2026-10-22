@@ -2,6 +2,7 @@
   min-width: 0;
   padding-block: var(--space-6);
   border-bottom: 1px solid var(--color-border);
+  scroll-margin-block-start: var(--space-6);
 }
 
 .header {
@@ -20,7 +21,7 @@
   margin: 0;
   color: var(--color-text);
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.5;
 }
 

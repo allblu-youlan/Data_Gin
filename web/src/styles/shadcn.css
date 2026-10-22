@@ -1,0 +1,43 @@
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@theme inline {
+ --color-background: var(--background);
+ --color-foreground: var(--foreground);
+ --color-card: var(--card);
+ --color-card-foreground: var(--card-foreground);
+ --color-popover: var(--popover);
+ --color-popover-foreground: var(--popover-foreground);
+ --color-primary: var(--primary);
+ --color-primary-foreground: var(--primary-foreground);
+ --color-secondary: var(--secondary);
+ --color-secondary-foreground: var(--secondary-foreground);
+ --color-muted: var(--muted);
+ --color-muted-foreground: var(--muted-foreground);
+ --color-accent: var(--accent);
+ --color-accent-foreground: var(--accent-foreground);
+ --color-destructive: var(--destructive);
+ --color-border: var(--border);
+ --color-input: var(--input);
+ --color-ring: var(--ring);
+ --radius-sm: calc(var(--radius) - 4px);
+ --radius-md: calc(var(--radius) - 2px);
+ --radius-lg: var(--radius);
+ --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Scope Tailwind's native-control reset to generated components so existing
+   console controls keep their established behavior and styles. */
+@layer base {
+ [data-slot] { border-color: var(--border); border-style: solid; border-width: 0; }
+ button[data-slot], input[data-slot], select[data-slot], textarea[data-slot] {
+  font-family: inherit;
+  color: inherit;
+  margin: 0;
+ }
+ button[data-slot] { appearance: none; background: transparent; cursor: pointer; }
+ button[data-slot]:disabled { cursor: not-allowed; }
+ [data-slot='table'] { border-collapse: collapse; border-spacing: 0; }
+ [data-slot='table-head'] { text-align: left; }
+}

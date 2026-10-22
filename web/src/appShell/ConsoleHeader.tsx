@@ -1,8 +1,8 @@
 import type { RefObject } from 'react'
-import { CalendarDays, LogOut, RefreshCcw } from 'lucide-react'
+import { CalendarDays, ChevronRight, LogOut, RefreshCcw } from 'lucide-react'
 import type { SessionUser } from '../api/auth'
 import { WorkspaceHeader } from '../ui'
-import type { NavKey } from './navigation'
+import { navGroupFor, type NavKey } from './navigation'
 import styles from './ConsoleHeader.module.css'
 
 interface ConsoleHeaderProps {
@@ -17,7 +17,7 @@ interface ConsoleHeaderProps {
   onRefresh: () => void
 }
 
-const titles: Record<NavKey, { title: string; subtitle: string }> = {
+const titles: Partial<Record<NavKey, { title: string; subtitle: string }>> = {
   business_overview: { title: '营业概况', subtitle: '查看销售日结、收款构成与门店对账记录。' },
   overview: { title: '运行总览', subtitle: '只看当前运行与交付健康度，快速定位失败。' },
   runs: { title: '流水线运行', subtitle: '按状态、运行类型和 Trace ID 查询执行记录。' },
@@ -65,11 +65,15 @@ export function ConsoleHeader({
   onOpenNavigation,
   onRefresh,
 }: ConsoleHeaderProps) {
+  const group = navGroupFor(activeNav)
+  const item = group?.items.find((entry) => entry.key === activeNav)
+  const heading = titles[activeNav] ?? { title: item?.label ?? '数据协同控制台', subtitle: item?.description ?? '' }
+  const userName = sessionUser?.nickname || sessionUser?.account
   return (
     <WorkspaceHeader
-      title={compact ? undefined : titles[activeNav].title}
-      description={compact ? undefined : titles[activeNav].subtitle}
-      context={compact ? headerContext(activeNav) : undefined}
+      title={compact ? undefined : heading.title}
+      description={compact ? undefined : heading.subtitle}
+      context={compact ? <span className={styles.breadcrumb}><span>{group?.label ?? '控制台'}</span><ChevronRight aria-hidden="true" /><strong>{item?.label ?? heading.title}</strong></span> : undefined}
       menuButtonRef={mobileNavTriggerRef}
       onOpenNavigation={onOpenNavigation}
       actions={(
@@ -80,27 +84,18 @@ export function ConsoleHeader({
               {new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' }).format(new Date())}
             </span>
           ) : null}
-          {sessionUser ? <span className={styles.user}>{sessionUser.nickname || sessionUser.account}</span> : null}
-          <button className={styles.refresh} type="button" onClick={onRefresh} disabled={refreshing}>
-            <RefreshCcw aria-hidden="true" />{refreshing ? '刷新中' : '刷新数据'}
-          </button>
-          <button className={styles.logout} type="button" onClick={onLogout}>
-            <LogOut aria-hidden="true" />退出登录
-          </button>
-          <span className={`${styles.health} ${loading ? styles.loading : ''}`}>
-            {loading ? '数据加载中' : '系统正常'}
+          <span className={`${styles.health} ${loading ? styles.loading : ''}`} role="status">
+            {loading ? '加载中' : '数据就绪'}
           </span>
+          <button className={styles.refresh} type="button" onClick={onRefresh} disabled={refreshing} aria-label={refreshing ? '数据刷新中' : '刷新数据'} title="刷新数据">
+            <RefreshCcw aria-hidden="true" /><span>{refreshing ? '刷新中' : '刷新'}</span>
+          </button>
+          {userName ? <span className={styles.user} title={userName}><span aria-hidden="true">{userName.slice(0, 1).toUpperCase()}</span>{userName}</span> : null}
+          <button className={styles.logout} type="button" onClick={onLogout} aria-label="退出登录" title="退出登录">
+            <LogOut aria-hidden="true" />
+          </button>
         </div>
       )}
     />
   )
-}
-
-function headerContext(activeNav: NavKey) {
-  if (activeNav === 'business_overview') return 'STORE OPERATIONS'
-  if (activeNav === 'access_management') return 'ACCESS CONTROL'
-  if (['sources', 'rules', 'destinations'].includes(activeNav)) return 'DATA CONFIGURATION'
-  if (['overview', 'runs', 'delivery_logs', 'step_runs'].includes(activeNav)) return 'OPERATIONS'
-  if (['office_messages', 'office_push'].includes(activeNav)) return 'OFFICE MESSAGING'
-  return 'REPORT CENTER'
 }

@@ -1,12 +1,13 @@
 export const consoleColors = {
-  brand: '#FF9D0A',
+  brand: '#E68A14',
+  primary: '#272A30',
   info: '#185F9E',
   success: '#07954C',
   warning: '#D97706',
   danger: '#D92D20',
-  text: '#1F2329',
-  textSecondary: '#68707C',
-  border: '#E3E7ED',
+  text: '#24272E',
+  textSecondary: '#646B76',
+  border: '#E8EAEE',
   canvas: '#FFFFFF',
-  workspace: '#F7F8FA',
+  workspace: '#F6F7F9',
 } as const

@@ -8,20 +8,20 @@
 }
 
 .compact {
-  padding-block: var(--space-4);
+  padding-block: var(--page-padding-block);
 }
 
 .compact > [role="region"] {
-  padding-block: var(--space-2);
+  padding-block: var(--space-3);
 }
 
 .compact > section {
-  padding-block: var(--space-4);
+  padding-block: var(--page-padding-block);
 }
 
 .compact table th,
 .compact table td {
-  padding-block: var(--space-1);
+  padding-block: var(--space-2);
 }
 
 .compact table td {

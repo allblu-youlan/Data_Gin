@@ -27,7 +27,7 @@
     "test:report-center": "tsc src/reportCenter/api.ts src/reportCenter/bojunApi.ts src/reportCenter/components/ReportQueryDesigner/tableWorkspace.ts src/reportCenter/components/ReportQueryDesigner/referenceJoin.ts src/reportCenter/components/ReportQueryDesigner/runtimeFilters.ts src/reportCenter/components/ReportQueryDesigner/filterConfig.ts src/reportCenter/inputOptions.ts src/reportCenter/datasourceValidation.ts src/reportCenter/parameterConfig.ts src/reportCenter/queryParameters.ts src/reportCenter/components/ReportVersionDrawer/requestGuard.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/reportCenter.test.mjs tests/bojunCatalog.test.mjs tests/bojunTableWorkspace.test.mjs tests/bojunReferenceJoin.test.mjs tests/bojunFilterConfig.test.mjs",
     "test:report-column-metadata": "tsc src/reportCenter/refCursorConfig.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/reportColumnMetadata.test.mjs",
     "test:office-message": "tsc src/officeMessage/contracts.ts src/officeMessage/pushTargetDraft.ts src/officeMessage/types.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --experimental-specifier-resolution=node --test tests/officeMessage.test.mjs",
-    "test:excel": "tsc src/vite-env.d.ts src/excelMatchConfig.ts src/excelPages/oracleExportConfig.ts src/excelPages/oracleExportSchemes.ts --rootDir src --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/excelMatchConfig.test.mjs tests/oracleExportConfig.test.mjs tests/oracleExportSchemes.test.mjs",
+    "test:excel": "tsc src/vite-env.d.ts src/excelMatchConfig.ts src/excelPages/oracleExportConfig.ts src/excelPages/oracleExportSchemes.ts src/excelPages/excelOperations.ts --rootDir src --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/excelMatchConfig.test.mjs tests/oracleExportConfig.test.mjs tests/oracleExportSchemes.test.mjs tests/excelOperations.test.mjs",
     "test:mall-import": "tsc src/mallImport.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallImport.test.mjs",
     "test:capacity": "tsc src/mallWeatherCapacityPlan.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeatherCapacityPlan.test.mjs",
     "test:pipeline-run": "tsc src/pipelineRun.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/pipelineRun.test.mjs",
@@ -46,13 +46,19 @@
     "@fontsource-variable/noto-sans-sc": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "antd": "^5.29.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dayjs": "^1.11.21",
     "lucide-react": "^1.23.0",
+    "radix-ui": "^1.8.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
@@ -60,6 +66,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.11.0",
     "vite": "^5.4.10"

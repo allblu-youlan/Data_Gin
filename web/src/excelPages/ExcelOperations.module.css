@@ -1,0 +1,36 @@
+.page { --button-height: 36px; --control-height: 36px; }
+.layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); align-items: start; gap: var(--space-5); }
+.stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.fieldsThree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.note { color: var(--color-text-secondary); font-size: 13px; line-height: 1.7; margin: 0; text-wrap: pretty; }
+.methodList { display: grid; gap: var(--space-2); }
+.method { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-canvas); }
+.method button:first-child { flex: 1; justify-content: start; min-width: 0; overflow-wrap: anywhere; text-align: left; white-space: normal; }
+.table { width: 100%; overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.table table { min-width: 600px; }
+.table input, .table select { min-width: 120px; }
+.steps { padding: 0; margin: 0; list-style: none; display: grid; gap: var(--space-3); }
+.step { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-canvas); display: grid; gap: var(--space-4); }
+.stepHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.stepTitle { display: flex; align-items: center; gap: var(--space-3); font-size: 14px; font-weight: 600; }
+.number { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; background: var(--color-surface-subtle); color: var(--color-text-secondary); border-radius: 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.stepDone { border-color: var(--color-success); }
+.stepRunning { border-color: var(--color-brand); }
+.stepFailed { border-color: var(--color-danger); }
+.runPanel { display: grid; gap: var(--space-3); background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-panel); padding: var(--space-4); }
+.runPanel progress { width: 100%; height: 8px; accent-color: var(--color-primary); }
+.logs { display: grid; gap: var(--space-2); padding: 0; margin: 0; list-style: none; max-height: 320px; overflow: auto; }
+.log { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-3); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.log time { color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
+.logError { color: var(--color-danger); }
+.file { border: 1px dashed var(--color-border-strong); border-radius: var(--radius-panel); padding: var(--space-4); background: var(--color-surface-subtle); }
+.footer { border-top: 1px solid var(--color-border); padding-top: var(--space-4); display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); align-items: center; }
+@media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } .methodList { grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); } }
+@media (max-width: 640px) { .fields,.fieldsThree { grid-template-columns: minmax(0, 1fr); } .step { padding: var(--space-3); } .stepHead { align-items: start; } .stepTitle { font-size: 13px; } }
+.methodLink { color: var(--color-text-secondary); text-decoration: none; font-size: 13px; }
+.methodLink:hover { color: var(--color-text); text-decoration: underline; text-underline-offset: 4px; }
+.page :global([data-slot='field-description']) { color: var(--color-text-secondary); }
+.page :global([data-slot='field'][data-invalid='true'] [data-slot='field-description']) { color: var(--color-danger); }
