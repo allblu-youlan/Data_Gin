@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -229,5 +230,74 @@ func TestOracleProcedureValidatesSignatureAndSuccessOutput(t *testing.T) {
 	normalized, err := normalizeOracleProcedureWithMetadata(oracleProcedureTestConfig(), oracleProcedureTestArguments())
 	if err != nil || normalized.Parameters[1].Direction != "IN OUT" || normalized.Success.Parameter != "R_FLAG" {
 		t.Fatalf("normalized=%+v error=%v", normalized, err)
+	}
+}
+
+func TestOracleProcedureDefaultNoFlagCanBeSavedAndExecuted(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		parameters []OracleProcedureParameter
+		arguments  []reportoracle.ProcedureArgument
+	}{
+		{name: "no argument procedure"},
+		{name: "input without success flag", parameters: []OracleProcedureParameter{{Name: "P_CODE", Direction: "IN", DataType: "VARCHAR2", Value: "ORDER_001"}}, arguments: []reportoracle.ProcedureArgument{{Name: "P_CODE", Direction: "IN", DataType: "VARCHAR2"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := OracleProcedureConfig{Owner: "DEMO", ProcedureName: "SYNC_ORDERS", Parameters: test.parameters, Success: OracleProcedureSuccess{Operator: "eq"}}
+			raw, err := json.Marshal(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := &operationSchemeMemoryStore{}
+			service := &ExcelOperationSchemeService{store: store, normalize: func(_ context.Context, _ string, raw json.RawMessage) (json.RawMessage, error) {
+				var input OracleProcedureConfig
+				if err := json.Unmarshal(raw, &input); err != nil {
+					return nil, err
+				}
+				normalized, err := normalizeOracleProcedureWithMetadata(input, test.arguments)
+				if err != nil {
+					return nil, err
+				}
+				return json.Marshal(normalized)
+			}}
+			saved, err := service.Save(t.Context(), "无标志过程", ExcelOperationOracleProcedure, raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var persisted OracleProcedureConfig
+			if err := json.Unmarshal(saved.Config, &persisted); err != nil {
+				t.Fatal(err)
+			}
+			if persisted.Success != (OracleProcedureSuccess{}) {
+				t.Fatalf("default success setting was not cleared: %+v", persisted.Success)
+			}
+			state := &oracleOperationsTestState{}
+			db := sql.OpenDB(oracleOperationsTestConnector{state: state})
+			defer db.Close()
+			connection := oracleOperationsFakeConnection{db: db, arguments: test.arguments, outputs: map[string]string{}}
+			if _, err := executeOracleProcedureOnConnection(t.Context(), connection, persisted); err != nil {
+				t.Fatal(err)
+			}
+			if state.commits != 1 || state.rollbacks != 0 {
+				t.Fatalf("no-flag procedure did not commit: %+v", state)
+			}
+		})
+	}
+}
+
+func TestOracleProcedureNoFlagStillRejectsResidualSuccessConfig(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		success OracleProcedureSuccess
+	}{
+		{name: "value without parameter", success: OracleProcedureSuccess{Operator: "eq", Value: "执行成功"}},
+		{name: "contains without parameter", success: OracleProcedureSuccess{Operator: "contains"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := OracleProcedureConfig{Owner: "DEMO", ProcedureName: "SYNC_ORDERS", Success: test.success}
+			if _, err := normalizeOracleProcedureWithMetadata(config, nil); err == nil {
+				t.Fatal("residual success setting accepted")
+			}
+		})
 	}
 }

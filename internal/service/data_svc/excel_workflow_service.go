@@ -44,7 +44,7 @@ func (s *ExcelMatchJobService) CreateWorkflowJob(ctx context.Context, input Exce
 		name = "组合操作"
 	}
 	expires := time.Now().Add(excelMatchRetention)
-	record := &model.ExcelMatchJob{SourceFileName: name, ConfigJSON: string(encoded), Status: excelMatchStatusPending, ExpiresAt: &model.TimeNormal{Time: expires}}
+	record := &model.ExcelMatchJob{SourceFileName: name, ConfigJSON: string(encoded), Status: excelMatchStatusPending, TotalRows: len(config.Steps), ExpiresAt: &model.TimeNormal{Time: expires}}
 	if _, err = s.jobDAO.Create(ctx, record); err != nil {
 		return nil, err
 	}

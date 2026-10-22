@@ -107,6 +107,10 @@ func normalizeOracleProcedureWithMetadata(input OracleProcedureConfig, arguments
 	input.Success.Parameter = strings.ToUpper(strings.TrimSpace(input.Success.Parameter))
 	input.Success.Operator = strings.ToLower(strings.TrimSpace(input.Success.Operator))
 	input.Success.Value = strings.TrimSpace(input.Success.Value)
+	if input.Success.Parameter == "" && input.Success.Value == "" && (input.Success.Operator == "" || input.Success.Operator == "eq") {
+		input.Success = OracleProcedureSuccess{}
+		return input, nil
+	}
 	if input.Success.Parameter != "" {
 		if !outputs[input.Success.Parameter] {
 			return input, errors.New("成功标志必须引用 OUT 或 IN OUT 参数")

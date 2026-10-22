@@ -109,6 +109,9 @@ func (s *ExcelMatchJobService) executeExcelWorkflowStep(ctx context.Context, rec
 		if err := json.Unmarshal(step.Config, &config); err != nil {
 			return "", err
 		}
+		if step.Source == "previous" {
+			config.SheetName = defaultExcelResultSheet
+		}
 		output := filepath.Join(record.WorkDir, fmt.Sprintf("match_%d.xlsx", index+1))
 		err := withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
 			_, err := processExcelMatchFile(ctx, source, output, config, databaseExcelMatchLookup{dao: s.jobDAO})
@@ -116,8 +119,8 @@ func (s *ExcelMatchJobService) executeExcelWorkflowStep(ctx context.Context, rec
 		})
 		return output, err
 	case ExcelOperationOracleImport:
-		var config OracleExcelImportConfig
-		if err := json.Unmarshal(step.Config, &config); err != nil {
+		config, err := excelWorkflowImportConfig(step)
+		if err != nil {
 			return "", err
 		}
 		count, err := ExecuteOracleExcelImport(ctx, source, config)
@@ -166,4 +169,18 @@ func (s *ExcelMatchJobService) executeExcelWorkflowStep(ctx context.Context, rec
 	default:
 		return "", fmt.Errorf("未知组合操作类型: %s", step.Operation)
 	}
+}
+
+// Matching always writes a new workbook with a first-row header in Result_1.
+// The original upload's sheet/header settings do not apply to that artifact.
+func excelWorkflowImportConfig(step ExcelWorkflowStep) (OracleExcelImportConfig, error) {
+	var config OracleExcelImportConfig
+	if err := json.Unmarshal(step.Config, &config); err != nil {
+		return config, err
+	}
+	if step.Source == "previous" {
+		config.SheetName = defaultExcelResultSheet
+		config.HeaderRow = 1
+	}
+	return config, nil
 }
