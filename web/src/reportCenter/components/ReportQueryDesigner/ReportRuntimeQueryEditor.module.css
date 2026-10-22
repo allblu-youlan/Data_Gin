@@ -1,0 +1,28 @@
+.editor { display: grid; grid-column: 1 / -1; gap: 12px; min-width: 0; }
+.heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.heading strong { font-size: 13px; font-weight: 600; }
+.heading strong > span { margin-left: 4px; color: var(--color-text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.heading small { color: var(--color-text-secondary); font-size: 11px; }
+.filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
+.filter { min-width: 0; margin: 0; padding: 0; border: 0; }
+.filter legend { margin-bottom: 5px; padding: 0; color: var(--color-text-secondary); font-size: 12px; font-weight: 500; }
+.controls { display: flex; align-items: stretch; gap: 5px; min-width: 0; }
+.controls > select { flex: 0 0 94px; width: 94px; }
+.controls input, .controls select, .order select { min-height: 32px; max-width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-canvas); color: var(--color-text); padding: 5px 7px; font-size: 12px; }
+.controls > input { flex: 1; min-width: 0; width: 0; }
+.range { display: flex; flex: 1; align-items: center; gap: 4px; min-width: 0; }
+.range input { flex: 1; min-width: 0; width: 0; }
+.range > span, .noValue { color: var(--color-text-tertiary); font-size: 11px; }
+.noValue { display: flex; align-items: center; padding-inline: 6px; }
+.sort, .compatibility { min-width: 0; border-top: 1px solid var(--color-border); padding-top: 9px; }
+.sort summary, .compatibility summary { cursor: pointer; color: var(--color-text-secondary); font-size: 12px; }
+.compatibility > p { color: var(--color-text-secondary); font-size: 12px; }
+.orders { display: grid; gap: 8px; padding-top: 10px; }
+.orders > button { justify-self: start; }
+.order { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.order label { display: grid; gap: 4px; color: var(--color-text-secondary); font-size: 11px; }
+.order label:first-child { min-width: 160px; }
+.order button, .orders > button, .compatibility > button { min-height: 30px; font-size: 12px; }
+@media (max-width: 1180px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .filters { grid-template-columns: minmax(0, 1fr); gap: 10px; } .controls > select { flex-basis: 92px; width: 92px; } }
+@media (pointer: coarse) { .controls input, .controls select, .order select, .order button, .orders > button { min-height: 44px; } }

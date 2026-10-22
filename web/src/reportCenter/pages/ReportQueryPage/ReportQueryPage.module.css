@@ -71,3 +71,5 @@
 .waitingResult.waitingResult { border-style: dashed; background: transparent; }
 .querySummary svg { transition: none; }
 @media (max-width: 767px) { .querySteps { gap: var(--space-1); } .querySteps li { grid-template-columns: minmax(0, 1fr); padding: var(--space-2); gap: var(--space-2); } .querySteps li > span { grid-row: auto; } .querySteps small { display: none; } .reportSelector.reportSelector { padding: var(--space-4); } .catalogSelector, .selector { min-width: 0; width: 100%; } }
+.runActions > button, .resultActions > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 12px; font-size: 12px; }
+.runActions > button svg, .resultActions > button svg { flex: 0 0 auto; width: 14px; height: 14px; }

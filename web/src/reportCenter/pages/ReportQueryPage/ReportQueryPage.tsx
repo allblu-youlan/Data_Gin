@@ -11,6 +11,7 @@ import { ReportResultTable } from '../../components/ReportResultTable/ReportResu
 import { ReportRecordDetailDrawer, type RecordDetailSelection } from '../../components/ReportRecordDetailDrawer/ReportRecordDetailDrawer'
 import { ReportRelationSelect } from '../../components/ReportRelationSelect/ReportRelationSelect'
 import { ReportRuntimeQueryEditor } from '../../components/ReportQueryDesigner/ReportRuntimeQueryEditor'
+import { normalizeRuntimeQueryInputs, validateRuntimeQueryInputs } from '../../components/ReportQueryDesigner/runtimeFilters'
 import { ReportFieldDetailDrawer } from '../../components/ReportFieldDetailDrawer/ReportFieldDetailDrawer'
 import { ReportInputQuerySelect } from '../../components/ReportInputQuerySelect/ReportInputQuerySelect'
 import { useReportCatalog } from '../../useReportCatalog'
@@ -114,6 +115,10 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
   async function submitRun(event: FormEvent) {
     event.preventDefault()
     if (!contract || operation.busy) return
+    if (selectSnapshot) {
+      const error = validateRuntimeQueryInputs(contract, queryInputs)
+      if (error) { setOperation({ busy: false, error }); return }
+    }
     let runInput: Record<string, unknown>
     if (contract.jsonInput) {
       const normalized = buildReportConditions(contract.inputSchema, values)
@@ -126,13 +131,13 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
     }
     setOperation({ busy: true, error: '' })
     const controller = replacePollController()
-    const response = await createReportRun(client, contract.definitionId, runInput, contract.executionMode, contract.jsonInput, controller.signal, selectSnapshot ? queryInputs : undefined, selectSnapshot && run ? crypto.randomUUID() : undefined)
+    const response = await createReportRun(client, contract.definitionId, runInput, contract.executionMode, contract.jsonInput, controller.signal, selectSnapshot ? normalizeRuntimeQueryInputs(queryInputs) : undefined, selectSnapshot && run ? crypto.randomUUID() : undefined)
     if (!ownsPoll(controller)) return
     if (!response.ok) {
       setOperation({ busy: false, error: response.error })
       return
     }
-    setSubmittedInputFingerprint(JSON.stringify({ values, queryInputs }))
+    setSubmittedInputFingerprint(JSON.stringify({ values, queryInputs: normalizeRuntimeQueryInputs(queryInputs) }))
     setRun(response.data)
     setResult(null)
     setReportExport(null)
@@ -322,11 +327,13 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
     setFiltersOpen(next.filtersOpen)
     setParametersOpen(next.parametersOpen)
     setValues(contract.jsonInput ? initialReportConditionValues(contract.inputSchema) : next.values)
+    setQueryInputs({ where: { logic: 'AND', items: [] }, orderBy: [] })
+    setSubmittedInputFingerprint('')
     setOperation(next.operation)
   }
 
   const frozen = Boolean(run) && !selectSnapshot
-  const conditionsChanged = Boolean(selectSnapshot && run && submittedInputFingerprint !== JSON.stringify({ values, queryInputs }))
+  const conditionsChanged = Boolean(selectSnapshot && run && submittedInputFingerprint !== JSON.stringify({ values, queryInputs: normalizeRuntimeQueryInputs(queryInputs) }))
   const canStartNewRun = run ? canStartNewReportRun(run.status, reportExport, operation.busy, purgeAfterExport) : false
   return (
     <PageCanvas density="compact" className={`${design.surface} ${design.page}`}>
@@ -467,7 +474,7 @@ function groupReportsByCategory(reports: ReportSummary[]) {
 	}
 	return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
 }
-function reportConditionCount(contract: ReportRunContract) { return contract.jsonInput ? Object.keys(contract.inputSchema).length : visibleReportParameters(contract.parameters).length }
+function reportConditionCount(contract: ReportRunContract) { return (contract.jsonInput ? Object.keys(contract.inputSchema).length : visibleReportParameters(contract.parameters).length) + (contract.executionMode === 'SELECT_SNAPSHOT' ? contract.allowedFilters?.length ?? 0 : 0) }
 function displayConditionOption(value: unknown) { return typeof value === 'string' ? value : JSON.stringify(value) }
 function comparableConditionValue(value: unknown) { return JSON.stringify(value) }
 function wait(milliseconds: number, signal: AbortSignal) { return new Promise<void>((resolve) => { if (signal.aborted) { resolve(); return } const finish = () => { window.clearTimeout(timer); signal.removeEventListener('abort', finish); resolve() }; const timer = window.setTimeout(finish, milliseconds); signal.addEventListener('abort', finish, { once: true }); if (signal.aborted) finish() }) }

@@ -5,7 +5,7 @@ export type ReportEditorTab = 'basic' | 'procedure' | 'conditions' | 'excel' | '
 const steps = {
   basic: { icon: FileText, detail: '名称、分类与连接' },
   procedure: { icon: Workflow, detail: '业务表与关联' },
-  conditions: { icon: ListFilter, detail: '参数与筛选规则' },
+  conditions: { icon: ListFilter, detail: '定义查询筛选字段' },
   excel: { icon: Columns3, detail: '预览列与 Excel' },
   validation: { icon: ShieldCheck, detail: '检查并试运行' },
   publication: { icon: CheckCheck, detail: '查看本次发布结果' },

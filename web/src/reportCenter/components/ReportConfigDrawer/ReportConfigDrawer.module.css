@@ -67,3 +67,6 @@
   .dialog > footer { padding-block: 8px; }
   .tabs button { min-height: 38px; padding-block: 7px; }
 }
+.savedRules { margin-top: 12px; border: 1px solid var(--report-line); border-radius: var(--report-radius); padding: 12px; background: var(--report-paper); }
+.savedRules summary { cursor: pointer; font-size: 12px; font-weight: 550; }
+.savedRules p { color: var(--color-text-secondary); font-size: 12px; line-height: 1.7; }

@@ -1,0 +1,59 @@
+.designer { min-width: 0; border: 1px solid var(--report-line); border-radius: var(--report-radius-lg); background: var(--report-paper); font-size: 12px; }
+.heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--report-line); }
+.heading h4 { display: flex; align-items: center; gap: 7px; margin: 0 0 5px; font-size: 14px; font-weight: 600; }
+.heading h4 svg { width: 15px; height: 15px; color: var(--report-accent); }
+.heading p, .selection header p { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.count { flex: 0 0 auto; border-radius: 4px; padding: 6px 9px; background: var(--report-accent-soft); color: var(--report-accent); font-variant-numeric: tabular-nums; }
+.count strong { margin-inline: 3px; font-size: 16px; font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); min-width: 0; }
+.catalog { min-width: 0; padding: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.search { display: flex; align-items: center; flex: 1; gap: 6px; min-width: 160px; border: 1px solid var(--report-line); border-radius: 4px; padding-left: 8px; background: var(--report-muted); }
+.search svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--color-text-secondary); }
+.search input { width: 100%; min-width: 0; min-height: 32px; border: 0; padding: 6px; background: transparent; font-size: 12px; }
+.source { min-width: 120px; max-width: 190px; }
+.source select { width: 100%; min-height: 32px; border: 1px solid var(--report-line); border-radius: 4px; padding: 5px 8px; background: var(--report-muted); color: var(--color-text); font-size: 12px; }
+.fieldScroll { max-height: min(55dvh, 520px); overflow: auto; overscroll-behavior: contain; }
+.fieldScroll table { font-size: 12px; }
+.fieldScroll th { position: sticky; top: 0; z-index: 1; font-size: 11px; }
+.fieldScroll th:first-child { width: 42px; }
+.fieldScroll tr[data-selected='true'] { background: var(--report-accent-soft); }
+.checkbox { display: grid; place-items: center; min-height: 30px; }
+.checkbox input { width: 14px; height: 14px; margin: 0; accent-color: var(--report-accent); }
+.identity { display: grid; gap: 3px; min-width: 0; }
+.identity strong { color: var(--color-text); font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.identity span { color: var(--color-text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.identity code { margin-left: 5px; font-size: 10px; }
+.type { color: var(--color-text-secondary); font-size: 11px; white-space: nowrap; }
+.output { display: inline-flex; align-items: center; gap: 3px; color: var(--report-accent); font-size: 11px; white-space: nowrap; }
+.output svg { width: 12px; height: 12px; }
+.muted { color: var(--color-text-secondary); font-size: 11px; white-space: nowrap; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; color: var(--color-text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pagination > div { display: flex; align-items: center; gap: 6px; }
+.pagination button { min-height: 26px; padding: 3px 7px; font-size: 11px; }
+.empty { padding: 28px 12px; color: var(--color-text-secondary); text-align: center; font-size: 12px; line-height: 1.7; }
+.selection { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--report-line); background: color-mix(in srgb, var(--report-muted) 55%, var(--report-paper)); }
+.selection > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px; }
+.selection h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.selection header > span { border: 1px solid var(--report-line); border-radius: 4px; padding: 3px 7px; background: var(--report-paper); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.selection ol { display: grid; align-content: start; gap: 7px; min-width: 0; max-height: 55dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 0 12px 12px; list-style: none; }
+.selection li { display: flex; align-items: center; gap: 7px; min-width: 0; border: 1px solid var(--report-line); border-radius: 4px; padding: 8px; background: var(--report-paper); }
+.ordinal { color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 10px; }
+.selectedCopy { flex: 1; min-width: 0; }
+.selectedCopy input { width: 100%; min-width: 0; min-height: 28px; padding: 3px 5px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--color-text); font-size: 12px; font-weight: 550; }
+.selectedCopy input:hover { border-color: var(--report-line); background: var(--report-muted); }
+.selectedCopy small { display: block; padding-left: 5px; color: var(--color-text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.selectedCopy code { margin-left: 4px; font-size: 10px; }
+.rowActions { display: flex; gap: 2px; flex: 0 0 auto; }
+.rowActions button { width: 24px; min-height: 26px; padding: 4px; border: 0; background: transparent; color: var(--color-text-secondary); }
+.rowActions button svg { width: 12px; height: 12px; }
+.selection > footer { display: flex; align-items: flex-start; gap: 5px; margin-top: auto; border-top: 1px solid var(--report-line); padding: 10px 14px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.7; }
+.selection > footer svg { width: 13px; height: 13px; flex: 0 0 auto; margin-top: 2px; color: var(--report-accent); }
+.emptySelection { display: grid; justify-items: center; align-content: center; flex: 1; gap: 8px; min-height: 210px; padding: 24px; text-align: center; }
+.emptySelection > svg { width: 24px; height: 24px; color: var(--color-text-secondary); }
+.emptySelection strong { font-size: 13px; font-weight: 500; }
+.emptySelection p { max-width: 240px; margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.8; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 880px) { .layout { grid-template-columns: minmax(0, 1fr); } .selection { border-left: 0; border-top: 1px solid var(--report-line); } .selection ol { max-height: 320px; } .emptySelection { min-height: 150px; } }
+@media (max-width: 479px) { .heading, .catalog { padding: 12px; } .source { width: 100%; max-width: none; } .search { flex-basis: 100%; } }
+@media (pointer: coarse) { .rowActions button { width: 44px; min-height: 44px; } .checkbox { min-height: 44px; } }

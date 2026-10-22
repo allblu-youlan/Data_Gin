@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { isBojunColumnAllowed } from '../.test-dist/reportCenter/bojunQueryConfig.js'
+import { isSimpleRuntimeWhere, normalizeRuntimeQueryInputs, readRuntimeFilter, runtimeDateInput, runtimeDateValue, updateRuntimeFilter, validateRuntimeQueryInputs } from '../.test-dist/reportCenter/components/ReportQueryDesigner/runtimeFilters.js'
 import { readdirSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 import ts from 'typescript'
@@ -1168,4 +1169,134 @@ test('designers respect query and detail field restrictions while null inherits 
  assert.equal(isBojunColumnAllowed({ config: { selectableColumns: ['11'], detailColumns: [] } }, column, true), false)
  assert.equal(isBojunColumnAllowed({ config: { selectableColumns: null, detailColumns: null } }, column, true), true)
  assert.equal(isBojunColumnAllowed({ config: {} }, { ...column, isPhysical: false }), false)
+})
+
+test('direct runtime filters preserve exact numeric text and independent alias identities', () => {
+  const field = { aliasId: 'store', columnId: '21', label: '门店编码', logicalType: 'integer', operators: ['EQ', 'BETWEEN', 'IN', 'IS_NULL'] }
+  const other = { ...field, aliasId: 'warehouse' }
+  const contract = { allowedFilters: [field, other], allowedSortFields: [] }
+  const initial = { where: { logic: 'AND', items: [] }, orderBy: [] }
+  const text = '000123456789012345678901234567890'
+  const next = updateRuntimeFilter(initial, field, 'EQ', text)
+  const both = updateRuntimeFilter(next, other, 'EQ', '002')
+  assert.equal(readRuntimeFilter(both, field).value.value, text)
+  assert.equal(both.where.items.length, 2)
+  assert.equal(validateRuntimeQueryInputs(contract, both), '')
+  assert.equal(isSimpleRuntimeWhere(contract, both), true)
+  assert.equal(initial.where.items.length, 0)
+  assert.throws(() => updateRuntimeFilter(initial, field, 'CONTAINS', 'x'), /不允许/)
+})
+
+test('blank runtime controls are omitted while sorting and filled values stay intact', () => {
+  const field = { aliasId: 'base', columnId: '11', logicalType: 'string', operators: ['EQ', 'BETWEEN', 'IN'] }
+  const contract = { allowedFilters: [field], allowedSortFields: [{ aliasId: 'base', columnId: '11' }] }
+  const orderBy = [{ aliasId: 'base', columnId: '11', direction: 'DESC' }]
+  for (const [operator, raw] of [['EQ', '   '], ['BETWEEN', ['', '']], ['IN', ['', ' ']]]) {
+    const value = updateRuntimeFilter({ orderBy }, field, operator, raw)
+    assert.equal(value.where.items.length, 1)
+    assert.equal(validateRuntimeQueryInputs(contract, value), '')
+    assert.deepEqual(normalizeRuntimeQueryInputs(value), { orderBy, where: { logic: 'AND', items: [] } })
+    assert.equal(value.where.items.length, 1)
+  }
+  const cleared = updateRuntimeFilter(updateRuntimeFilter({ orderBy }, field, 'EQ', 'abc'), field, '')
+  assert.deepEqual(cleared.where.items, [])
+  assert.equal(cleared.orderBy, orderBy)
+})
+
+test('runtime ranges reject half-filled endpoints and invalid exact numbers with field labels', () => {
+  const field = { aliasId: 'base', columnId: '12', label: '销售金额', logicalType: 'decimal', operators: ['BETWEEN', 'EQ'] }
+  const contract = { allowedFilters: [field] }
+  assert.match(validateRuntimeQueryInputs(contract, updateRuntimeFilter({}, field, 'BETWEEN', ['12.30', ''])), /销售金额.*完整填写区间/)
+  assert.match(validateRuntimeQueryInputs(contract, updateRuntimeFilter({}, field, 'EQ', '1e20')), /有效数字/)
+  const exact = ['12345678901234567890.12345678', '12345678901234567891.12345678']
+  assert.equal(validateRuntimeQueryInputs(contract, updateRuntimeFilter({}, field, 'BETWEEN', exact)), '')
+  assert.deepEqual(normalizeRuntimeQueryInputs(updateRuntimeFilter({}, field, 'BETWEEN', exact)).where.items[0].value.value, exact)
+})
+
+test('runtime collections discard empty separators and retain text keys without numeric conversion', () => {
+  const field = { aliasId: 'base', columnId: '13', logicalType: 'integer', operators: ['IN', 'NOT_IN'] }
+  const value = updateRuntimeFilter({}, field, 'IN', ['00123', '', ' 00012345678901234567890 ', ''])
+  assert.equal(validateRuntimeQueryInputs({ allowedFilters: [field] }, value), '')
+  assert.deepEqual(normalizeRuntimeQueryInputs(value).where.items[0].value.value, ['00123', '00012345678901234567890'])
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: [field] }, updateRuntimeFilter({}, field, 'IN', Array.from({ length: 101 }, () => '1'))), /1 至 100/)
+})
+
+test('runtime NULL operators carry no value and approved operators cannot be bypassed', () => {
+  const field = { aliasId: 'base', columnId: '14', label: '备注', logicalType: 'string', operators: ['IS_NULL', 'EQ'] }
+  const contract = { allowedFilters: [field] }
+  const value = updateRuntimeFilter({}, field, 'IS_NULL')
+  assert.equal(Object.hasOwn(value.where.items[0], 'value'), false)
+  assert.equal(validateRuntimeQueryInputs(contract, value), '')
+  assert.match(validateRuntimeQueryInputs(contract, { where: { logic: 'AND', items: [{ ...value.where.items[0], value: { kind: 'CONSTANT', value: 'x' } }] } }), /无需填写值/)
+  assert.match(validateRuntimeQueryInputs(contract, { where: { logic: 'AND', items: [{ aliasId: 'base', columnId: '14', operator: 'CONTAINS', value: { kind: 'CONSTANT', value: 'x' } }] } }), /未获当前报表允许/)
+})
+
+test('native datetime controls round-trip the server accepted local date format', () => {
+  assert.equal(runtimeDateValue('2026-10-22T11:30', 'datetime'), '2026-10-22 11:30:00')
+  assert.equal(runtimeDateValue('2026-10-22T11:30:25', 'datetime'), '2026-10-22 11:30:25')
+  assert.equal(runtimeDateInput('2026-10-22 11:30:00', 'datetime'), '2026-10-22T11:30:00')
+  assert.equal(runtimeDateValue('', 'datetime'), '')
+  assert.equal(runtimeDateValue('2026-10-22', 'date'), '2026-10-22')
+  const field = { aliasId: 'base', columnId: '15', label: '创建时间', logicalType: 'datetime', operators: ['BETWEEN'] }
+  assert.equal(validateRuntimeQueryInputs({ allowedFilters: [field] }, updateRuntimeFilter({}, field, 'BETWEEN', ['2026-10-22 00:00:00', '2026-10-22 23:59:59'])), '')
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: [field] }, updateRuntimeFilter({}, field, 'BETWEEN', ['2026-02-30 00:00:00', '2026-10-22 23:59:59'])), /有效日期/)
+})
+
+test('existing complex runtime conditions remain available for compatible editing', () => {
+  const field = { aliasId: 'base', columnId: '16', operators: ['EQ'] }
+  const leaf = { aliasId: 'base', columnId: '16', operator: 'EQ', value: { kind: 'CONSTANT', value: 'A' } }
+  const contract = { allowedFilters: [field] }
+  const value = { where: { logic: 'OR', items: [leaf, { ...leaf, value: { kind: 'CONSTANT', value: 'B' } }] } }
+  assert.equal(isSimpleRuntimeWhere(contract, value), false)
+  assert.equal(validateRuntimeQueryInputs(contract, value), '')
+  assert.deepEqual(normalizeRuntimeQueryInputs(value), value)
+  assert.equal(isSimpleRuntimeWhere(contract, { where: { logic: 'AND', items: [leaf, leaf] } }), false)
+})
+
+test('runtime validation enforces published sort permissions and bounded condition count', () => {
+  const field = { aliasId: 'base', columnId: '17', operators: ['EQ'] }
+  const contract = { allowedFilters: [field], allowedSortFields: [{ aliasId: 'base', columnId: '17' }] }
+  assert.match(validateRuntimeQueryInputs(contract, { orderBy: [{ aliasId: 'other', columnId: '17', direction: 'ASC' }] }), /排序字段未获/)
+  const leaf = { aliasId: 'base', columnId: '17', operator: 'EQ', value: { kind: 'CONSTANT', value: 'A' } }
+  assert.match(validateRuntimeQueryInputs(contract, { where: { logic: 'AND', items: Array.from({ length: 21 }, () => leaf) } }), /最多设置 20/)
+})
+
+test('compact DATE conditions display in native controls without rewriting the submitted value', () => {
+  const field = { aliasId: 'base', columnId: '51', logicalType: 'date', operators: ['EQ', 'BETWEEN', 'IN'] }
+  const contract = { allowedFilters: [field] }
+  assert.equal(runtimeDateInput('20261022', 'date'), '2026-10-22')
+  assert.equal(runtimeDateInput(20261022, 'date'), '2026-10-22')
+  const value = updateRuntimeFilter({}, field, 'BETWEEN', ['20261022', '2026-10-23'])
+  assert.equal(isSimpleRuntimeWhere(contract, value), true)
+  assert.deepEqual(normalizeRuntimeQueryInputs(value).where.items[0].value.value, ['20261022', '2026-10-23'])
+  assert.equal(validateRuntimeQueryInputs(contract, value), '')
+})
+
+test('date values carrying time and zoned or precise timestamps retain compatibility editing without truncation', () => {
+  const fields = [
+    { aliasId: 'base', columnId: '52', logicalType: 'date', operators: ['EQ', 'BETWEEN', 'IN'] },
+    { aliasId: 'base', columnId: '53', logicalType: 'datetime', operators: ['EQ', 'BETWEEN', 'IN'] },
+  ]
+  const cases = [
+    [fields[0], '2026-10-22 12:34:56'],
+    [fields[0], '20261022123456'],
+    [fields[1], '2026-10-22T12:34:56Z'],
+    [fields[1], '2026-10-22T12:34:56+08:00'],
+    [fields[1], '2026-10-22T12:34:56.123456789+08:00'],
+    [fields[1], '2026-10-22 12:34:56.123456789'],
+    [fields[1], '2026-10-22'],
+    [fields[1], '20261022123456'],
+  ]
+  for (const [field, raw] of cases) {
+    const value = updateRuntimeFilter({}, field, 'EQ', raw)
+    assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, value), false, `${field.logicalType}: ${raw}`)
+    assert.equal(normalizeRuntimeQueryInputs(value).where.items[0].value.value, raw)
+    assert.equal(validateRuntimeQueryInputs({ allowedFilters: fields }, value), '', raw)
+    const range = updateRuntimeFilter({}, field, 'BETWEEN', [raw, ''])
+    assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, range), false)
+    const collection = updateRuntimeFilter({}, field, 'IN', [raw])
+    assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, collection), true)
+  }
+  assert.equal(runtimeDateInput('2026-10-22T12:34:56.123456789+08:00', 'datetime'), '2026-10-22T12:34:56.123456789+08:00')
+  assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, updateRuntimeFilter({}, fields[1], 'BETWEEN', ['2026-10-22 00:00:00', '2026-10-23 23:59:59'])), true)
 })
