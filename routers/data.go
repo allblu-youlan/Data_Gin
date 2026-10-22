@@ -359,6 +359,7 @@ func registerReportDatasourceRoutes(api *gin.RouterGroup, controller *data_ctrl.
 	catalogGroup.GET("/:id/bojun-tables", catalog.List)
 	catalogGroup.GET("/:id/bojun-tables/:tableId", catalog.Get)
 	catalogGroup.GET("/:id/bojun-tables/:tableId/columns", catalog.Columns)
+	catalogGroup.GET("/:id/bojun-tables/:tableId/columns/:columnId/reference", catalog.Reference)
 	catalogGroup.PUT("/:id/bojun-tables/:tableId/config", catalog.Configure)
 
 	api.POST("/v1/report-datasource-connection-tests", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("30-M"), controller.TestConnection)

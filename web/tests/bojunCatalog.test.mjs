@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getBojunColumns, getBojunTables, getReportRecordDetail, getReportRelationOptions, parseBojunTable, saveBojunTableConfiguration, startBojunSync } from '../.test-dist/reportCenter/bojunApi.js'
+import { getBojunColumns, getBojunReferenceTable, getBojunTables, getReportRecordDetail, getReportRelationOptions, parseBojunTable, saveBojunTableConfiguration, startBojunSync } from '../.test-dist/reportCenter/bojunApi.js'
 
 const table = { id: '1', bojunTableId: '12888', logicalName: 'C_STORE', primaryKeys: ['10'], displayFields: ['11'], searchFields: ['12'], enabled: true, config: { primaryKeys: null, displayFields: null, searchFields: [], selectableColumns: ['10', '11'], detailColumns: [], requiredFilterColumns: ['12'], dataScope: { mode: 'SCOPE_COLUMN', columnId: '12', userValues: { '7': ['001', '002'] } } } }
 test('catalog parses local string ids and keeps inherited, empty and approved field overrides distinct', () => {
@@ -32,6 +32,19 @@ test('designer requests available tables while dictionary management can request
  assert.equal(new URL(paths[0], 'https://local.test').searchParams.get('availableOnly'), 'true')
  assert.equal(new URL(paths[1], 'https://local.test').searchParams.has('availableOnly'), false)
  assert.equal(new URL(paths[1], 'https://local.test').searchParams.get('after'), 'approved-page')
+})
+test('reference navigation resolves the local field through the server and preserves cancellation', async () => {
+ const calls = []
+ const controller = new AbortController()
+ const client = async (path, options) => { calls.push({ path, options }); return { ok: true, status: 200, data: { data: table } } }
+ const response = await getBojunReferenceTable(client, 3, '17', '29', controller.signal)
+ assert.equal(calls[0].path, '/v1/report-datasources/3/bojun-tables/17/columns/29/reference')
+ assert.equal(calls[0].options.method, 'GET')
+ assert.equal(calls[0].options.signal, controller.signal)
+ assert.equal(response.ok, true)
+ assert.equal(response.data.id, 1)
+ assert.equal(response.data.bojunTableId, '12888')
+ assert.equal(response.data.logicalName, 'C_STORE')
 })
 test('catalog configuration preserves explicit field restrictions and administrator scopes', async () => {
  let sent

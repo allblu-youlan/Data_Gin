@@ -159,6 +159,16 @@ func (r *Repository) GetBojunTable(ctx context.Context, ds, id uint) (*model.Rep
 	e := r.db.WithContext(ctx).Where("id = ? AND datasource_id = ? AND source_active = ?", id, ds, true).First(&t).Error
 	return &t, e
 }
+func (r *Repository) GetBojunTableBySourceID(ctx context.Context, ds uint, sourceID string) (*model.ReportBojunTable, error) {
+	var t model.ReportBojunTable
+	e := bojunTableSourceScope(r.db.WithContext(ctx), ds, sourceID).First(&t).Error
+	return &t, e
+}
+
+func bojunTableSourceScope(db *gorm.DB, ds uint, sourceID string) *gorm.DB {
+	return db.Where("datasource_id = ? AND bojun_table_id = ? AND source_active = ?", ds, sourceID, true)
+}
+
 func (r *Repository) SaveBojunMetadata(ctx context.Context, record *model.ReportBojunTable, t reportdataset.Table) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Lock the table so a concurrent generation switch cannot publish stale fields.

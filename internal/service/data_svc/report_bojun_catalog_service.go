@@ -273,6 +273,44 @@ func (s *ReportBojunCatalogService) Get(ctx context.Context, ds, id uint, refres
 	}
 	return s.dto(ctx, *t)
 }
+
+func (s *ReportBojunCatalogService) GetReference(ctx context.Context, ds, tableID, columnID uint) (BojunTableDTO, error) {
+	return resolveBojunReferenceTable(ctx, ds, tableID, columnID, s.Get, s.repo.GetBojunTableBySourceID)
+}
+
+func resolveBojunReferenceTable(
+	ctx context.Context, ds, tableID, columnID uint,
+	get func(context.Context, uint, uint, bool) (BojunTableDTO, error),
+	findSource func(context.Context, uint, string) (*model.ReportBojunTable, error),
+) (BojunTableDTO, error) {
+	source, err := get(ctx, ds, tableID, false)
+	if err != nil {
+		return BojunTableDTO{}, err
+	}
+	for _, column := range source.Columns {
+		if column.ID != strconv.FormatUint(uint64(columnID), 10) {
+			continue
+		}
+		if column.RefTableID == "" {
+			return BojunTableDTO{}, invalidReport("字段未定义关联表")
+		}
+		// RefTableID belongs to the source dictionary, not the local catalog.
+		target, err := findSource(ctx, ds, column.RefTableID)
+		if err != nil {
+			return BojunTableDTO{}, err
+		}
+		detail, err := get(ctx, ds, target.ID, false)
+		if err != nil {
+			return BojunTableDTO{}, err
+		}
+		if !detail.Enabled || detail.ValidationStatus != "VALID" {
+			return BojunTableDTO{}, invalidReport("关联表暂不可用")
+		}
+		return detail, nil
+	}
+	return BojunTableDTO{}, gorm.ErrRecordNotFound
+}
+
 func (s *ReportBojunCatalogService) Configure(ctx context.Context, actor, ds, id uint, expected uint64, config reportdataset.TableConfig) (BojunTableDTO, error) {
 	t, e := s.Get(ctx, ds, id, false)
 	if e != nil {

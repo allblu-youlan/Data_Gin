@@ -26,3 +26,15 @@ func TestBojunAdministrationKeepsUnapprovedTablesVisible(t *testing.T) {
 		t.Fatalf("administration cannot approve pending or disabled tables: %s", statement.SQL.String())
 	}
 }
+
+func TestBojunReferenceUsesExactDictionaryIDAndDatasource(t *testing.T) {
+	statement := bojunTableSourceScope(newDryRunDB(t), 7, "00012345678901234567890").First(&model.ReportBojunTable{}).Statement
+	for _, required := range []string{"datasource_id = ?", "bojun_table_id = ?", "source_active = ?"} {
+		if !strings.Contains(statement.SQL.String(), required) {
+			t.Fatalf("reference catalog SQL lacks %q: %s", required, statement.SQL.String())
+		}
+	}
+	if len(statement.Vars) < 3 || statement.Vars[0] != uint(7) || statement.Vars[1] != "00012345678901234567890" || statement.Vars[2] != true {
+		t.Fatalf("reference scope variables = %#v", statement.Vars)
+	}
+}

@@ -114,6 +114,24 @@ func (h *ReportBojunCatalogController) Get(c *gin.Context) {
 	}
 	responses.New(c).ToResponse(v)
 }
+func (h *ReportBojunCatalogController) Reference(c *gin.Context) {
+	ds, id, e := bojunIDs(c)
+	if e != nil {
+		writeBojunError(c, e)
+		return
+	}
+	columnID, e := parseReportUint(c.Param("columnId"), "column id")
+	if e != nil {
+		writeBojunError(c, e)
+		return
+	}
+	v, e := h.service.GetReference(c.Request.Context(), ds, id, columnID)
+	if e != nil {
+		writeBojunError(c, e)
+		return
+	}
+	responses.New(c).ToResponse(v)
+}
 func (h *ReportBojunCatalogController) Columns(c *gin.Context) {
 	ds, id, e := bojunIDs(c)
 	if e != nil {
