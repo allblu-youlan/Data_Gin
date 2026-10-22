@@ -13,8 +13,8 @@ import (
 )
 
 type fakeSelectSourceInspector struct {
-	storeErr, metadataErr error
-	metadataCalls         int
+	storeErr, metadataErr     error
+	storeCalls, metadataCalls int
 }
 
 type fakeSelectPublicationInspector struct {
@@ -78,6 +78,7 @@ func TestSelectPublicationUsesSourceInspectionErrorClassification(t *testing.T) 
 }
 
 func (f *fakeSelectSourceInspector) ValidateJSONSnapshotStore(context.Context) error {
+	f.storeCalls++
 	return f.storeErr
 }
 
@@ -124,6 +125,38 @@ func TestInspectSelectSourceDistinguishesMetadataChangesFromSourceFailures(t *te
 			}
 			if tc.stage == "metadata" && !strings.Contains(err.Error(), "BOS.C_STORE") {
 				t.Fatalf("source table missing from private diagnostic: %v", err)
+			}
+		})
+	}
+}
+
+func TestSelectSampleMetadataCheckDoesNotDependOnSnapshotStorage(t *testing.T) {
+	dataset := reportdataset.Compiled{
+		Query:  reportdataset.QuerySpec{Base: reportdataset.Base{TableID: "1", AliasID: "base"}},
+		Tables: map[string]reportdataset.Table{"1": {ID: "1", Owner: "BOS", PhysicalTable: "C_STORE"}},
+	}
+	for _, test := range []struct {
+		name            string
+		metadataErr     error
+		wantUnavailable bool
+	}{
+		{name: "source ready while platform store missing"},
+		{name: "source schema still checked", metadataErr: errors.New("REPORT_METADATA_CHANGED: source schema changed")},
+		{name: "source failure still checked", metadataErr: context.DeadlineExceeded, wantUnavailable: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			inspector := &fakeSelectSourceInspector{storeErr: ErrReportSnapshotStoreNotReady, metadataErr: test.metadataErr}
+			err := inspectSelectMetadata(t.Context(), inspector, dataset)
+			if !errors.Is(err, test.metadataErr) || errors.Is(err, ErrReportDatasourceOracleUnavailable) != test.wantUnavailable {
+				t.Fatalf("sample source inspection error = %v, want cause=%v unavailable=%t", err, test.metadataErr, test.wantUnavailable)
+			}
+			if inspector.storeCalls != 0 || inspector.metadataCalls != 1 {
+				t.Fatalf("sample validation calls: store=%d metadata=%d", inspector.storeCalls, inspector.metadataCalls)
+			}
+			// Publication and execution retain the stricter deployment requirement.
+			err = inspectSelectSource(t.Context(), inspector, dataset)
+			if !errors.Is(err, ErrReportSnapshotStoreNotReady) || inspector.storeCalls != 1 || inspector.metadataCalls != 1 {
+				t.Fatalf("snapshot execution did not enforce store readiness: error=%v store=%d metadata=%d", err, inspector.storeCalls, inspector.metadataCalls)
 			}
 		})
 	}

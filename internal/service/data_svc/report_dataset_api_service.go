@@ -127,7 +127,7 @@ func (s *ReportDatasetService) Preview(ctx context.Context, actor, id uint, lock
 		return ReportQueryPreview{}, fmt.Errorf("%w: acquire preview source: %w", ErrReportDatasourceOracleUnavailable, e)
 	}
 	defer done()
-	if e = inspectSelectSource(ctx, a, c); e != nil {
+	if e = inspectSelectMetadata(ctx, a, c); e != nil {
 		return ReportQueryPreview{}, e
 	}
 	_, rows, e := a.QuerySelectSample(ctx, plan, 100)

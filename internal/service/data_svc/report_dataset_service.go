@@ -142,15 +142,24 @@ func validateSelectRunAuthorization(ctx context.Context, run model.ReportRun, ve
 	return nil
 }
 
-type selectSourceInspector interface {
-	ValidateJSONSnapshotStore(context.Context) error
+type selectMetadataInspector interface {
 	ValidateBojunMetadata(context.Context, reportdataset.Table) error
+}
+
+type selectSourceInspector interface {
+	selectMetadataInspector
+	ValidateJSONSnapshotStore(context.Context) error
 }
 
 func inspectSelectSource(ctx context.Context, a selectSourceInspector, c reportdataset.Compiled) error {
 	if e := a.ValidateJSONSnapshotStore(ctx); e != nil {
 		return classifySelectSourceError("JSON snapshot store", e)
 	}
+	return inspectSelectMetadata(ctx, a, c)
+}
+
+// Draft samples only read the source and do not use the platform snapshot store.
+func inspectSelectMetadata(ctx context.Context, a selectMetadataInspector, c reportdataset.Compiled) error {
 	for _, t := range c.DependencyTables() {
 		if e := a.ValidateBojunMetadata(ctx, t); e != nil {
 			return classifySelectSourceError(t.Owner+"."+t.PhysicalTable, e)
