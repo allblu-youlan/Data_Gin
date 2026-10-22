@@ -116,6 +116,7 @@ func writeDatasetError(c *gin.Context, e error) {
 	}
 	code, message := classifyDatasetError(e)
 	if code != nil {
+		_ = c.Error(e).SetType(gin.ErrorTypePrivate)
 		responses.New(c).ToSafeErrorResponse(code, message)
 		return
 	}

@@ -3,10 +3,10 @@ package data_svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"gin-biz-web-api/internal/reportcontract"
 	"gin-biz-web-api/internal/reportdataset"
-	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/model"
@@ -141,16 +141,29 @@ func validateSelectRunAuthorization(ctx context.Context, run model.ReportRun, ve
 	}
 	return nil
 }
-func inspectSelectSource(ctx context.Context, a *reportoracle.Adapter, c reportdataset.Compiled) error {
+
+type selectSourceInspector interface {
+	ValidateJSONSnapshotStore(context.Context) error
+	ValidateBojunMetadata(context.Context, reportdataset.Table) error
+}
+
+func inspectSelectSource(ctx context.Context, a selectSourceInspector, c reportdataset.Compiled) error {
 	if e := a.ValidateJSONSnapshotStore(ctx); e != nil {
-		return e
+		return classifySelectSourceError("JSON snapshot store", e)
 	}
 	for _, t := range c.DependencyTables() {
 		if e := a.ValidateBojunMetadata(ctx, t); e != nil {
-			return e
+			return classifySelectSourceError(t.Owner+"."+t.PhysicalTable, e)
 		}
 	}
 	return nil
+}
+
+func classifySelectSourceError(target string, err error) error {
+	if errors.Is(err, ErrReportSnapshotStoreNotReady) || strings.Contains(err.Error(), "REPORT_METADATA_CHANGED") {
+		return fmt.Errorf("inspect SELECT source %s: %w", target, err)
+	}
+	return fmt.Errorf("%w: inspect SELECT source %s: %w", ErrReportDatasourceOracleUnavailable, target, err)
 }
 func canonicalSelectInputSchema(raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "{}" {

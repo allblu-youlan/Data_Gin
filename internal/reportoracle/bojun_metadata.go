@@ -296,8 +296,9 @@ func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Tab
 		if c.Scale != nil {
 			s = sql.NullInt64{Int64: int64(*c.Scale), Valid: true}
 		}
-		if actual[c.DBName] != fmt.Sprintf("%s:%v:%v:%t", c.OracleType, p, s, c.Nullable) {
-			return fmt.Errorf("REPORT_METADATA_CHANGED: source schema changed")
+		expected := fmt.Sprintf("%s:%v:%v:%t", c.OracleType, p, s, c.Nullable)
+		if actual[c.DBName] != expected {
+			return fmt.Errorf("REPORT_METADATA_CHANGED: column %s differs (expected %s, actual %s)", c.DBName, expected, actual[c.DBName])
 		}
 	}
 
@@ -339,7 +340,7 @@ func (a *Adapter) ValidateBojunMetadata(ctx context.Context, t reportdataset.Tab
 			}
 		}
 		if !valid {
-			return fmt.Errorf("REPORT_METADATA_CHANGED: required unique constraint changed")
+			return fmt.Errorf("REPORT_METADATA_CHANGED: required unique constraint changed (columns=%v, column IDs=%v)", names, required)
 		}
 	}
 	return nil

@@ -32,6 +32,7 @@ func writeKnownDatasetError(c *gin.Context, e error) bool {
 	if status == 0 {
 		return false
 	}
+	_ = c.Error(e).SetType(gin.ErrorTypePrivate)
 	c.AbortWithStatusJSON(status, responses.ResponseData{Code: errcode.BadRequest.Code(), Msg: message, Data: gin.H{"errorCode": code}})
 	return true
 }

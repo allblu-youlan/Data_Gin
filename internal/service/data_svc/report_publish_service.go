@@ -282,19 +282,12 @@ func (service *ReportPublishService) inspectContract(
 		if err != nil {
 			return inspection, err
 		}
-		source, ok := inspector.(interface {
-			ValidateBojunMetadata(context.Context, reportdataset.Table) error
-		})
+		source, ok := inspector.(selectSourceInspector)
 		if !ok {
 			return inspection, ErrReportPublicationInvalid
 		}
-		if err := inspector.ValidateJSONSnapshotStore(inspectionCtx); err != nil {
-			return inspection, classifyOracleInspectionError("JSON snapshot store", err)
-		}
-		for _, table := range dataset.DependencyTables() {
-			if err := source.ValidateBojunMetadata(inspectionCtx, table); err != nil {
-				return inspection, invalidReport("REPORT_METADATA_CHANGED: 发布依赖字段已发生变化")
-			}
+		if err := inspectSelectSource(inspectionCtx, source, dataset); err != nil {
+			return inspection, err
 		}
 		draft.Columns = selectReportColumns(dataset)
 		metadata, _ := json.Marshal(dataset.Tables)

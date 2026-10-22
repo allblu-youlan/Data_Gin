@@ -124,15 +124,15 @@ func (s *ReportDatasetService) Preview(ctx context.Context, actor, id uint, lock
 	}
 	a, done, e := acquireSelectOracle(ctx, *ds, password)
 	if e != nil {
-		return ReportQueryPreview{}, ErrReportDatasourceOracleUnavailable
+		return ReportQueryPreview{}, fmt.Errorf("%w: acquire preview source: %w", ErrReportDatasourceOracleUnavailable, e)
 	}
 	defer done()
 	if e = inspectSelectSource(ctx, a, c); e != nil {
-		return ReportQueryPreview{}, invalidReport("REPORT_METADATA_CHANGED: 依赖字段已变化，请刷新字典")
+		return ReportQueryPreview{}, e
 	}
 	_, rows, e := a.QuerySelectSample(ctx, plan, 100)
 	if e != nil {
-		return ReportQueryPreview{}, ErrReportDatasourceOracleUnavailable
+		return ReportQueryPreview{}, fmt.Errorf("%w: query preview sample: %w", ErrReportDatasourceOracleUnavailable, e)
 	}
 	out := ReportQueryPreview{SampleOnly: true, ElapsedMS: time.Since(start).Milliseconds(), Columns: selectResultColumns(c), Rows: []ReportResultRowDTO{}}
 	for i, row := range rows {

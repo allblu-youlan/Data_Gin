@@ -52,3 +52,34 @@ func TestDatasetErrorsKeepHTTPStatusAndStableCodeAcrossReportHandlers(t *testing
 		}
 	}
 }
+
+func TestDatasetErrorsRecordPrivateCauseWithoutLeakingIt(t *testing.T) {
+	for name, write := range map[string]func(*gin.Context, error){
+		"definition": writeReportError,
+		"dataset":    writeDatasetError,
+	} {
+		for _, tc := range []struct {
+			name   string
+			err    error
+			status int
+		}{
+			{"metadata", errors.New("REPORT_METADATA_CHANGED: BOS.C_STORE.ID password=secret"), http.StatusConflict},
+			{"snapshot", fmt.Errorf("%w: password=secret", data_svc.ErrReportSnapshotStoreNotReady), http.StatusServiceUnavailable},
+			{"connection", fmt.Errorf("%w: password=secret", data_svc.ErrReportDatasourceOracleUnavailable), http.StatusServiceUnavailable},
+		} {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				gin.SetMode(gin.TestMode)
+				recorder := httptest.NewRecorder()
+				ctx, _ := gin.CreateTestContext(recorder)
+				write(ctx, tc.err)
+				privateErrors := ctx.Errors.ByType(gin.ErrorTypePrivate)
+				if len(privateErrors) != 1 || !errors.Is(privateErrors[0].Err, tc.err) {
+					t.Fatalf("private cause missing or duplicated: %#v", privateErrors)
+				}
+				if recorder.Code != tc.status || strings.Contains(recorder.Body.String(), "secret") || strings.Contains(recorder.Body.String(), "BOS.C_STORE") {
+					t.Fatalf("response status=%d body=%s", recorder.Code, recorder.Body)
+				}
+			})
+		}
+	}
+}

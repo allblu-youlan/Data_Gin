@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
+	"gin-biz-web-api/internal/reportdataset"
 	"strings"
 	"testing"
 )
@@ -61,5 +63,55 @@ func TestLogicalTableInheritsVerifiedPhysicalDisplayKey(t *testing.T) {
 	table, e := a.InspectBojunTable(t.Context(), BojunNamespace{Owner: "BOSNDS3", DBLink: "Link_To_Bojun"}, source, map[string]BojunTableMetadata{"16940": source, "12888": actual})
 	if e != nil || table.LogicalName != "C_V_RESTORE" || table.PhysicalTable != "C_STORE" || len(table.DisplayFields) != 1 || table.DisplayFields[0] != "SCUSTOM01" {
 		t.Fatalf("%#v %v", table, e)
+	}
+}
+
+func TestValidateBojunMetadataDistinguishesSchemaAndUniqueKeyChanges(t *testing.T) {
+	precision, scale := 10, 0
+	table := reportdataset.Table{
+		Owner: "BOS", DBLink: "LINK_BOJUN", PhysicalTable: "C_STORE",
+		Columns:    []reportdataset.Column{{ID: "11", DBName: "ID", OracleType: "NUMBER", Precision: &precision, Scale: &scale, IsPhysical: true, IsSelectable: true}},
+		UniqueKeys: [][]string{{"11"}},
+	}
+	for _, tc := range []struct {
+		name, nullable, liveKey, wantDetail string
+	}{
+		{"unchanged", "N", "ID", ""},
+		{"nullable changed", "Y", "ID", "column ID differs"},
+		{"unique key changed", "N", "OTHER_ID", "columns=[ID]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+				if len(args) != 2 || args[0].Value != "BOS" || args[1].Value != "C_STORE" {
+					t.Fatalf("unexpected table bindings: %#v", args)
+				}
+				if strings.Contains(query, "ALL_TAB_COLUMNS@LINK_BOJUN") {
+					return &bojunQueryTestRows{columns: []string{"COLUMN_NAME", "DATA_TYPE", "DATA_PRECISION", "DATA_SCALE", "NULLABLE"}, values: [][]driver.Value{{"ID", "NUMBER", int64(10), int64(0), tc.nullable}}}, nil
+				}
+				if !strings.Contains(query, "ALL_CONSTRAINTS@LINK_BOJUN") || !strings.Contains(query, "c.STATUS = 'ENABLED' AND c.VALIDATED = 'VALIDATED'") {
+					t.Fatalf("unexpected constraint check: %s", query)
+				}
+				return &bojunQueryTestRows{columns: []string{"CONSTRAINT_NAME", "COLUMN_NAME"}, values: [][]driver.Value{{"PK_STORE", tc.liveKey}}}, nil
+			})
+			err := adapter.ValidateBojunMetadata(t.Context(), table)
+			if tc.wantDetail == "" {
+				if err != nil {
+					t.Fatalf("unchanged source rejected: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "REPORT_METADATA_CHANGED") || !strings.Contains(err.Error(), tc.wantDetail) {
+				t.Fatalf("metadata diagnostic = %v, want %q", err, tc.wantDetail)
+			}
+		})
+	}
+}
+
+func TestValidateBojunMetadataPreservesOracleFailure(t *testing.T) {
+	cause := errors.New("ORA-03113: connection lost")
+	adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+		return nil, cause
+	})
+	err := adapter.ValidateBojunMetadata(t.Context(), reportdataset.Table{Owner: "BOS", PhysicalTable: "C_STORE"})
+	if !errors.Is(err, cause) || strings.Contains(err.Error(), "REPORT_METADATA_CHANGED") {
+		t.Fatalf("Oracle failure misclassified: %v", err)
 	}
 }
