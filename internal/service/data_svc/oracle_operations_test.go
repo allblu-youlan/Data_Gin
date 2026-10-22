@@ -19,8 +19,10 @@ import (
 type oracleOperationsTestState struct {
 	commits, rollbacks int
 	statement          string
+	statements         []string
 	rows               [][]driver.NamedValue
 	writeError         error
+	writeErrorAt       int
 }
 
 type oracleOperationsTestConnector struct{ state *oracleOperationsTestState }
@@ -42,13 +44,16 @@ type oracleOperationsTestConn struct{ state *oracleOperationsTestState }
 
 func (connection *oracleOperationsTestConn) Prepare(statement string) (driver.Stmt, error) {
 	connection.state.statement = statement
-	return &oracleOperationsTestStmt{state: connection.state}, nil
+	return &oracleOperationsTestStmt{state: connection.state, query: statement}, nil
 }
 func (*oracleOperationsTestConn) Close() error { return nil }
 func (connection *oracleOperationsTestConn) Begin() (driver.Tx, error) {
 	return &oracleOperationsTestTx{state: connection.state}, nil
 }
 func (*oracleOperationsTestConn) CheckNamedValue(*driver.NamedValue) error { return nil }
+func (connection *oracleOperationsTestConn) ExecContext(_ context.Context, query string, values []driver.NamedValue) (driver.Result, error) {
+	return connection.state.execute(query, values)
+}
 
 type oracleOperationsTestTx struct{ state *oracleOperationsTestState }
 
@@ -58,7 +63,10 @@ func (transaction *oracleOperationsTestTx) Rollback() error {
 	return nil
 }
 
-type oracleOperationsTestStmt struct{ state *oracleOperationsTestState }
+type oracleOperationsTestStmt struct {
+	state *oracleOperationsTestState
+	query string
+}
 
 func (*oracleOperationsTestStmt) Close() error  { return nil }
 func (*oracleOperationsTestStmt) NumInput() int { return -1 }
@@ -69,8 +77,16 @@ func (*oracleOperationsTestStmt) Query([]driver.Value) (driver.Rows, error) {
 	return nil, driver.ErrSkip
 }
 func (statement *oracleOperationsTestStmt) ExecContext(_ context.Context, values []driver.NamedValue) (driver.Result, error) {
-	statement.state.rows = append(statement.state.rows, append([]driver.NamedValue(nil), values...))
-	return driver.RowsAffected(1), statement.state.writeError
+	return statement.state.execute(statement.query, values)
+}
+
+func (state *oracleOperationsTestState) execute(query string, values []driver.NamedValue) (driver.Result, error) {
+	state.statements = append(state.statements, query)
+	state.rows = append(state.rows, append([]driver.NamedValue(nil), values...))
+	if state.writeErrorAt == 0 || len(state.rows) == state.writeErrorAt {
+		return driver.RowsAffected(1), state.writeError
+	}
+	return driver.RowsAffected(1), nil
 }
 
 type oracleOperationsFakeConnection struct {
@@ -132,7 +148,7 @@ func TestOracleExcelImportUsesHeaderMappingPreservesValuesAndCommits(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 || state.commits != 1 || state.rollbacks != 0 || len(state.rows) != 2 {
+	if count != 2 || state.commits != 1 || state.rollbacks != 0 || len(state.rows) != 1 {
 		t.Fatalf("count=%d state=%+v", count, state)
 	}
 	if state.statement != `INSERT INTO "DEMO"."ORDERS" ("CODE", "AMOUNT") VALUES (:1, :2)` {
@@ -140,6 +156,9 @@ func TestOracleExcelImportUsesHeaderMappingPreservesValuesAndCommits(t *testing.
 	}
 	if state.rows[0][0].Value != "000123" || state.rows[0][1].Value != godror.Number("12345678901234567890.125") {
 		t.Fatalf("mapped values lost precision or order: %+v", state.rows[0])
+	}
+	if !strings.HasPrefix(state.statements[0], "INSERT ALL ") || state.rows[0][2].Value != "000124" {
+		t.Fatalf("rows were not batched in order: SQL=%s values=%v", state.statements[0], state.rows[0])
 	}
 }
 
