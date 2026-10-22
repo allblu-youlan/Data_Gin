@@ -4,6 +4,37 @@ export type OracleExportColumnDraft = OracleExportColumn & { selected: boolean; 
 export type OracleExportFilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'empty' | 'not_empty'
 export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string }
 export type OracleExportFilterDraft = OracleExportFilter & { id: number }
+export type OracleExportTableConfig = { owner: string; tableName: string; columns: Array<{ field: string; title: string }>; filters: OracleExportFilter[] }
+export type OracleExportSheetConfig = OracleExportTableConfig & { sheetName: string }
+export type OracleExportWorkbookConfig = { sheets: OracleExportSheetConfig[] }
+export const oracleExportSheetLimit = 20
+
+const invalidSheetName = /[[\]:*?/\\]|\p{Cc}/u
+
+export function defaultOracleExportSheetName(tableName: string, existingNames: readonly string[] = []) {
+  const base = tableName.replace(/[[\]:*?/\\]/g, '_').trim().slice(0, 31) || 'Sheet'
+  const used = new Set(existingNames.map((name) => name.trim().toLocaleLowerCase()))
+  let candidate = base
+  let suffix = 2
+  while (used.has(candidate.toLocaleLowerCase())) {
+    const ending = `_${suffix++}`
+    candidate = `${base.slice(0, 31 - ending.length)}${ending}`
+  }
+  return candidate
+}
+
+export function buildOracleExportWorkbookRequest(sheets: OracleExportSheetConfig[]): OracleExportWorkbookConfig {
+  if (!sheets.length || sheets.length > oracleExportSheetLimit) throw new Error(`请配置 1 至 ${oracleExportSheetLimit} 个 Sheet。`)
+  const names = new Set<string>()
+  return { sheets: sheets.map((sheet, index) => {
+    const sheetName = sheet.sheetName.trim()
+    if (!sheetName || sheetName.length > 31 || invalidSheetName.test(sheetName) || sheetName.startsWith("'") || sheetName.endsWith("'")) throw new Error(`第 ${index + 1} 个 Sheet 名称不能为空，最多 31 个字符，不能包含 []:*?/\\ 或控制字符，且首尾不能是单引号。`)
+    const key = sheetName.toLocaleLowerCase()
+    if (names.has(key)) throw new Error(`Sheet 名称“${sheetName}”重复，名称不区分大小写。`)
+    names.add(key)
+    return { ...sheet, sheetName }
+  }) }
+}
 
 export const oracleExportFilterOperators: Array<{ value: OracleExportFilterOperator; label: string }> = [
   { value: 'eq', label: '等于' }, { value: 'neq', label: '不等于' }, { value: 'contains', label: '包含' },

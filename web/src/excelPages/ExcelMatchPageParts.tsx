@@ -65,7 +65,7 @@ export function ExcelJobDetailContent({ job, logs, progress, autoRefreshText, lo
       {autoRefreshText && <p className={styles.modeNote} role="status">{autoRefreshText}</p>}
       <dl className={styles.jobDetailMeta}><div><dt>{oracleExport ? 'Oracle 数据表' : '源文件'}</dt><dd>{job.source_file_name || '-'}</dd></div><div><dt>类型</dt><dd>{excelJobOperationLabel(excelJobOperation(job))}</dd></div></dl>
       <div className={styles.jobDetailCounts}>{oracleExport ? <Metric label="已导出行" value={job.processed_rows.toLocaleString('en-US')} /> : <><Metric label="匹配行" value={job.matched_rows.toLocaleString('en-US')} /><Metric label="未匹配行" value={job.unmatched_rows.toLocaleString('en-US')} /></>}</div>
-      {oracleExport && <p className={styles.modeNote}>每份 Excel 最多 100 万行，超出后拆分为多个 Excel 并打包 ZIP 下载。</p>}
+      {oracleExport && <p className={styles.modeNote}>每个 Sheet 每份最多 100 万行。大表按片序号拆分，小表在每份完整复制；大表无后续数据时保留表头，多份 Excel 打包 ZIP 下载。</p>}
       <div className={styles.jobProgress}><strong>处理进度</strong><span>{streaming ? `已导出 ${job.processed_rows.toLocaleString('en-US')} 行，正在读取…` : `${job.processed_rows.toLocaleString('en-US')} / ${job.total_rows.toLocaleString('en-US')}（${progress}%）`}</span><progress value={streaming ? undefined : progress} max="100" aria-label={`Excel 任务 #${job.id} 处理进度`} /></div>
       <dl className={styles.jobExpiry}><dt>过期时间</dt><dd>{formatDate(job.expires_at)}</dd></dl>
       <div className={styles.jobLogHeading}>实时日志</div><ExcelJobLogList logs={logs} />

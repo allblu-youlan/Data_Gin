@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { parseOracleExportColumns, type OracleExportColumnDraft, type OracleExportFilterDraft, type OracleExportTable } from './oracleExportConfig'
-import { restoreOracleExportConfig, type OracleExportConfig } from './oracleExportSchemes'
+import { parseOracleExportColumns, type OracleExportColumnDraft, type OracleExportFilterDraft, type OracleExportTable, type OracleExportTableConfig } from './oracleExportConfig'
+import { restoreOracleExportConfig } from './oracleExportSchemes'
 import type { ExcelPageClient } from './useExcelUploads'
 
 export function useOracleExportSelection(client: ExcelPageClient) {
@@ -11,12 +11,12 @@ export function useOracleExportSelection(client: ExcelPageClient) {
   const [error, setError] = useState('')
   const [issues, setIssues] = useState<string[]>([])
   const request = useRef<AbortController | null>(null)
-  const retryConfig = useRef<OracleExportConfig | undefined>()
+  const retryConfig = useRef<OracleExportTableConfig | undefined>()
   const filterID = useRef(0)
 
   useEffect(() => () => request.current?.abort(), [])
 
-  const load = useCallback(async (nextTable: OracleExportTable | null, config?: OracleExportConfig) => {
+  const load = useCallback(async (nextTable: OracleExportTable | null, config?: OracleExportTableConfig) => {
     request.current?.abort()
     const controller = new AbortController()
     request.current = controller

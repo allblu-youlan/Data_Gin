@@ -1,7 +1,7 @@
 import type { ExcelPageClient } from './useExcelUploads'
-import { oracleExportDateInputValue, oracleExportDefaultColumnTitle, oracleExportFilterInputType, oracleExportFilterOperators, type OracleExportColumnDraft, type OracleExportFilter, type OracleExportFilterDraft } from './oracleExportConfig.js'
+import { buildOracleExportWorkbookRequest, defaultOracleExportSheetName, oracleExportDateInputValue, oracleExportDefaultColumnTitle, oracleExportFilterInputType, oracleExportFilterOperators, type OracleExportColumnDraft, type OracleExportFilterDraft, type OracleExportSheetConfig, type OracleExportTableConfig, type OracleExportWorkbookConfig } from './oracleExportConfig.js'
 
-export type OracleExportConfig = { owner: string; tableName: string; columns: Array<{ field: string; title: string }>; filters: OracleExportFilter[] }
+export type OracleExportConfig = OracleExportWorkbookConfig
 export type OracleExportScheme = { id: number; name: string; operation: 'oracle_export'; config: OracleExportConfig; updatedAt: number }
 const schemePath = '/v1/excel-match-jobs/oracle-export-schemes'
 const quiet = { showResult: false, silentLoading: true }
@@ -16,10 +16,9 @@ function data(payload: unknown) {
   return root.data === undefined ? root : record(root.data)
 }
 
-function parseScheme(value: unknown): OracleExportScheme {
-  const item = record(value)
-  const config = record(item.config)
-  if (!Number.isInteger(item.id) || Number(item.id) <= 0 || typeof item.name !== 'string' || !item.name || item.operation !== 'oracle_export' || typeof config.owner !== 'string' || !config.owner || typeof config.tableName !== 'string' || !config.tableName || !Array.isArray(config.columns) || !Array.isArray(config.filters)) throw new Error('导出配置内容不完整，请重试。')
+function parseSheet(value: unknown, legacy = false): OracleExportSheetConfig {
+  const config = record(value)
+  if (typeof config.owner !== 'string' || !config.owner || typeof config.tableName !== 'string' || !config.tableName || !Array.isArray(config.columns) || !Array.isArray(config.filters)) throw new Error('导出配置内容不完整，请重试。')
   const columns = config.columns.map((value) => {
     const column = record(value)
     if (typeof column.field !== 'string' || !column.field || typeof column.title !== 'string') throw new Error('导出配置字段格式不完整。')
@@ -31,7 +30,16 @@ function parseScheme(value: unknown): OracleExportScheme {
     if (typeof filter.field !== 'string' || !filter.field || !operator || typeof filter.value !== 'string') throw new Error('导出配置筛选条件格式不完整。')
     return { field: filter.field, op: operator.value, value: filter.value }
   })
-  return { id: Number(item.id), name: item.name, operation: 'oracle_export', config: { owner: config.owner, tableName: config.tableName, columns, filters }, updatedAt: typeof item.updated_at === 'number' ? item.updated_at : 0 }
+  const sheetName = legacy ? defaultOracleExportSheetName(config.tableName) : typeof config.sheetName === 'string' ? config.sheetName : ''
+  return { sheetName, owner: config.owner, tableName: config.tableName, columns, filters }
+}
+
+function parseScheme(value: unknown): OracleExportScheme {
+  const item = record(value)
+  const rawConfig = record(item.config)
+  if (!Number.isInteger(item.id) || Number(item.id) <= 0 || typeof item.name !== 'string' || !item.name || item.operation !== 'oracle_export') throw new Error('导出配置内容不完整，请重试。')
+  const sheets = rawConfig.sheets === undefined ? [parseSheet(rawConfig, true)] : Array.isArray(rawConfig.sheets) ? rawConfig.sheets.map((sheet) => parseSheet(sheet)) : []
+  return { id: Number(item.id), name: item.name, operation: 'oracle_export', config: buildOracleExportWorkbookRequest(sheets), updatedAt: typeof item.updated_at === 'number' ? item.updated_at : 0 }
 }
 
 export function parseOracleExportSchemes(payload: unknown) {
@@ -57,7 +65,7 @@ export async function deleteOracleExportScheme(client: ExcelPageClient, id: numb
   if (!response.ok) throw new Error(response.error?.message || '导出配置删除失败，请重试。')
 }
 
-export function restoreOracleExportConfig(config: OracleExportConfig, metadata: OracleExportColumnDraft[]) {
+export function restoreOracleExportConfig(config: OracleExportTableConfig, metadata: OracleExportColumnDraft[]) {
   const selected = new Map(config.columns.map((column) => [column.field, column.title]))
   const available = new Set(metadata.map((column) => column.name))
   const missingColumns = config.columns.filter((column) => !available.has(column.field)).map((column) => column.field)

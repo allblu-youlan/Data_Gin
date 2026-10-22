@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildOracleExportRequest, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
+import { buildOracleExportRequest, buildOracleExportWorkbookRequest, defaultOracleExportSheetName, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
 
 const table = { owner: 'ERP', name: 'ORDERS', columnCount: 2 }
 const rawColumns = [
@@ -83,4 +83,31 @@ test('keeps contains for text and switches it to equality when choosing number o
   assert.equal(oracleExportFilterOperatorForType('contains', 'NUMBER'), 'eq')
   assert.equal(oracleExportFilterOperatorForType('contains', 'DATE'), 'eq')
   assert.equal(oracleExportFilterOperatorForType('gte', 'TIMESTAMP(6)'), 'gte')
+})
+
+test('builds independent table columns and date filters for each workbook sheet', () => {
+  const columns = parseOracleExportColumns({ columns: rawColumns })
+  const first = { sheetName: ' 订单 ', ...buildOracleExportRequest(table, columns, [{ id: 1, field: 'TOTAL', op: 'gte', value: '100' }]) }
+  const second = { sheetName: '订单汇总', ...buildOracleExportRequest({ ...table, name: 'ORDER_SUMMARY' }, columns.map((column) => ({ ...column, selected: column.name === 'TOTAL', title: '合计' })), []) }
+  const workbook = buildOracleExportWorkbookRequest([first, second])
+  assert.deepEqual(workbook, { sheets: [{ ...first, sheetName: '订单' }, second] })
+  assert.equal(workbook.sheets[0].filters.length, 1)
+  assert.equal(workbook.sheets[1].filters.length, 0)
+  assert.deepEqual(workbook.sheets[1].columns, [{ field: 'TOTAL', title: '合计' }])
+})
+
+test('defaults sheet names from table names with legal characters, length and unique suffixes', () => {
+  assert.equal(defaultOracleExportSheetName('A[B]:C*D?E/F\\G'), 'A_B__C_D_E_F_G')
+  assert.equal(defaultOracleExportSheetName('ORDERS', ['orders', 'ORDERS_2']), 'ORDERS_3')
+  assert.equal(defaultOracleExportSheetName('A'.repeat(40)).length, 31)
+  assert.equal(defaultOracleExportSheetName('A'.repeat(40), ['A'.repeat(31)]), `${'A'.repeat(29)}_2`)
+})
+
+test('rejects empty, illegal, overlong or case-insensitive duplicate sheet names and more than twenty sheets', () => {
+  const sheet = { sheetName: 'Orders', owner: 'ERP', tableName: 'ORDERS', columns: [{ field: 'DOCNO', title: '订单号' }], filters: [] }
+  for (const sheetName of ['', ' ', 'X'.repeat(32), "'Orders", "Orders'", 'Ord\u0007ers', ...'[]:*?/\\']) assert.throws(() => buildOracleExportWorkbookRequest([{ ...sheet, sheetName }]), /Sheet 名称/)
+  assert.throws(() => buildOracleExportWorkbookRequest([sheet, { ...sheet, sheetName: 'orders' }]), /不区分大小写/)
+  assert.throws(() => buildOracleExportWorkbookRequest([]), /1 至 20/)
+  assert.throws(() => buildOracleExportWorkbookRequest(Array.from({ length: 21 }, (_, index) => ({ ...sheet, sheetName: `Sheet${index}` }))), /1 至 20/)
+  assert.equal(buildOracleExportWorkbookRequest(Array.from({ length: 20 }, (_, index) => ({ ...sheet, sheetName: `Sheet${index}` }))).sheets.length, 20)
 })

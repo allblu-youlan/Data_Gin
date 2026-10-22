@@ -12,8 +12,8 @@ test('loads persisted export configuration through its dedicated API and retains
   const client = async (path, options) => { requests.push({ path, method: options.method }); return { ok: true, data: { data: { schemes: [scheme] } } } }
   const schemes = await getOracleExportSchemes(client)
   assert.deepEqual(requests, [{ path: '/v1/excel-match-jobs/oracle-export-schemes', method: 'GET' }])
-  assert.equal(schemes[0].config.tableName, 'OLD_ORDERS')
-  assert.deepEqual(schemes[0].config, config)
+  assert.equal(schemes[0].config.sheets[0].tableName, 'OLD_ORDERS')
+  assert.deepEqual(schemes[0].config, { sheets: [{ sheetName: 'OLD_ORDERS', ...config }] })
 })
 
 test('restores exactly saved selection and titles without selecting newly added columns', () => {
@@ -44,12 +44,26 @@ test('reports vanished selected and filter fields rather than widening saved exp
 test('saves configuration without creating an export job and deletes only the selected configuration', async () => {
   const requests = []
   const client = async (path, options) => { requests.push({ path, method: options.method, body: options.body }); return { ok: true, data: { data: { scheme } } } }
-  const saved = await saveOracleExportScheme(client, ' 十月订单 ', config)
+  const workbook = { sheets: [{ sheetName: '订单', ...config }, { ...config, sheetName: '汇总', tableName: 'TOTALS', filters: [] }] }
+  const saved = await saveOracleExportScheme(client, ' 十月订单 ', workbook)
   await deleteOracleExportScheme(client, saved.id)
-  assert.deepEqual(requests, [{ path: '/v1/excel-match-jobs/oracle-export-schemes', method: 'POST', body: { name: '十月订单', config } }, { path: '/v1/excel-match-jobs/oracle-export-schemes/7', method: 'DELETE', body: undefined }])
+  assert.deepEqual(requests, [{ path: '/v1/excel-match-jobs/oracle-export-schemes', method: 'POST', body: { name: '十月订单', config: workbook } }, { path: '/v1/excel-match-jobs/oracle-export-schemes/7', method: 'DELETE', body: undefined }])
 })
 
 test('rejects incomplete persisted configurations and surfaces save failures', async () => {
   assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, filters: [{ field: 'DOCNO', op: 'raw_sql', value: 'x' }] } }] }), /筛选条件/)
-  await assert.rejects(saveOracleExportScheme(async () => ({ ok: false, error: { message: '无管理权限' } }), '十月订单', config), /无管理权限/)
+  await assert.rejects(saveOracleExportScheme(async () => ({ ok: false, error: { message: '无管理权限' } }), '十月订单', { sheets: [{ sheetName: '订单', ...config }] }), /无管理权限/)
+})
+
+test('parses all sheets from saved workbooks and keeps their independent titles and filters', () => {
+  const sheets = [{ sheetName: '订单', ...config }, { ...config, sheetName: '汇总', tableName: 'TOTALS', columns: [{ field: 'ADDED_LATER', title: '合计' }], filters: [] }]
+  const parsed = parseOracleExportSchemes({ schemes: [{ ...scheme, config: { sheets } }] })[0]
+  assert.deepEqual(parsed.config.sheets, sheets)
+  assert.equal(restoreOracleExportConfig(parsed.config.sheets[0], metadata).columns[0].selected, true)
+  const summary = restoreOracleExportConfig(parsed.config.sheets[1], metadata)
+  assert.equal(summary.columns[0].selected, false)
+  assert.equal(summary.columns[2].selected, true)
+  assert.equal(summary.columns[2].title, '合计')
+  assert.deepEqual(summary.filters, [])
+  assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, sheets: [] } }] }), /1 至 20/)
 })

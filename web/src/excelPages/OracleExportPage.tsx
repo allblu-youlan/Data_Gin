@@ -1,16 +1,17 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { Download, Search } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { Download, Plus, Trash2 } from 'lucide-react'
 import type { ClientResponse } from '../api/client'
 import { FeedbackState, PageCanvas, PageHeader, Section } from '../ui'
 import { ExcelJobDetailContent } from './ExcelMatchPageParts'
 import { excelJobProgressPercent } from './excelPageSupport'
-import { OracleExportFields, OracleExportFilters } from './OracleExportFields'
-import { buildOracleExportRequest, parseOracleExportTables, type OracleExportTable } from './oracleExportConfig'
+import { buildOracleExportWorkbookRequest, defaultOracleExportSheetName, oracleExportSheetLimit, type OracleExportSheetConfig } from './oracleExportConfig'
 import { OracleExportSchemeBar } from './OracleExportSchemeBar'
-import { useOracleExportSelection } from './useOracleExportSelection'
+import { OracleExportSheetEditor, type OracleExportSheetSnapshot } from './OracleExportSheetEditor'
 import { useExcelJobs } from './useExcelJobs'
 import type { ExcelPageClient } from './useExcelUploads'
 import styles from './OracleExportPage.module.css'
+
+type SheetDraft = { id: number; sheetName: string; defaultName: boolean; initial?: OracleExportSheetConfig }
 
 export function OracleExportPage({ client, token, loading, refreshVersion, canExecute, canManage, setLoading, setResult, onNavigateToJobs }: {
   client: ExcelPageClient
@@ -24,51 +25,43 @@ export function OracleExportPage({ client, token, loading, refreshVersion, canEx
   onNavigateToJobs: () => void
 }) {
   const jobs = useExcelJobs({ section: 'schemes', client, token, refreshVersion, setLoading, setResult })
-  const [owner, setOwner] = useState('')
-  const [search, setSearch] = useState('')
-  const [query, setQuery] = useState({ owner: '', search: '' })
-  const [tables, setTables] = useState<OracleExportTable[]>([])
-  const [tablesLoading, setTablesLoading] = useState(true)
-  const [tablesError, setTablesError] = useState('')
-  const selection = useOracleExportSelection(client)
-  const { table, columns, filters } = selection
+  const nextID = useRef(1)
+  const [sheets, setSheets] = useState<SheetDraft[]>([{ id: 1, sheetName: '', defaultName: true }])
+  const [activeID, setActiveID] = useState(1)
+  const [snapshots, setSnapshots] = useState<Record<number, OracleExportSheetSnapshot>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const submitInFlight = useRef(false)
+  const onSnapshot = useCallback((id: number, snapshot: OracleExportSheetSnapshot) => setSnapshots((current) => ({ ...current, [id]: snapshot })), [])
+  const onNameChange = useCallback((id: number, sheetName: string) => setSheets((current) => current.map((sheet) => sheet.id === id ? { ...sheet, sheetName, defaultName: false } : sheet)), [])
+  const onTableSelected = useCallback((id: number, tableName: string) => setSheets((current) => current.map((sheet) => sheet.id === id && sheet.defaultName ? { ...sheet, sheetName: defaultOracleExportSheetName(tableName, current.filter((item) => item.id !== id).map((item) => item.sheetName)) } : sheet)), [])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    setTablesLoading(true)
-    setTablesError('')
-    const params = new URLSearchParams({ owner: query.owner.trim(), search: query.search.trim(), limit: '100' })
-    void (async () => {
-      try {
-        const response = await client(`/v1/excel-match-jobs/oracle-tables?${params}`, { method: 'GET', signal: controller.signal, showResult: false, silentLoading: true })
-        if (controller.signal.aborted) return
-        if (!response.ok) throw new Error(response.error?.message || 'Oracle 表目录加载失败，请重试。')
-        setTables(parseOracleExportTables(response.data))
-      } catch (error) {
-        if (!controller.signal.aborted) setTablesError(error instanceof Error ? error.message : 'Oracle 表目录加载失败，请重试。')
-      } finally {
-        if (!controller.signal.aborted) setTablesLoading(false)
-      }
-    })()
-    return () => controller.abort()
-  }, [client, query, refreshVersion])
+  function currentConfig() {
+    return buildOracleExportWorkbookRequest(sheets.map((sheet, index) => {
+      const snapshot = snapshots[sheet.id]
+      if (!snapshot?.config) throw new Error(`第 ${index + 1} 个 Sheet（${sheet.sheetName || '未命名'}）：${snapshot?.issue || '请先选择数据表'}。`)
+      return { ...snapshot.config, sheetName: sheet.sheetName }
+    }))
+  }
 
-  function selectTable(value: string) {
-    void selection.load(tableOptions.find((item) => `${item.owner}.${item.name}` === value) ?? null)
+  function addSheet() {
+    if (sheets.length >= oracleExportSheetLimit) return
+    const id = ++nextID.current
+    setSheets((current) => [...current, { id, sheetName: '', defaultName: true }])
+    setActiveID(id)
     setSubmitError('')
   }
 
-  function currentConfig() {
-    if (!table || selection.loading || selection.error || selection.issues.length) throw new Error('请先选择数据表并处理字段加载提示。')
-    return buildOracleExportRequest(table, columns, filters)
+  function removeSheet() {
+    if (sheets.length <= 1) return
+    const remaining = sheets.filter((sheet) => sheet.id !== activeID)
+    setSheets(remaining)
+    setActiveID(remaining[0].id)
+    setSubmitError('')
   }
 
-  async function createExport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!table || !canExecute || submitInFlight.current) return
+  async function createExport() {
+    if (!canExecute || submitInFlight.current) return
     setSubmitError('')
     submitInFlight.current = true
     setSubmitting(true)
@@ -77,42 +70,37 @@ export function OracleExportPage({ client, token, loading, refreshVersion, canEx
       const response = await client('/v1/excel-match-jobs/oracle-exports', { method: 'POST', body, showResult: false, silentLoading: true, retry: false })
       if (!response.ok) throw new Error(response.error?.message || 'Oracle 导出任务创建失败，请重试。')
       if (!jobs.registerCreatedJob(response, false)) throw new Error('任务响应缺少任务信息，请到 Excel 任务中查询。')
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Oracle 导出任务创建失败，请重试。')
-    } finally {
-      submitInFlight.current = false
-      setSubmitting(false)
-    }
+    } catch (cause) { setSubmitError(cause instanceof Error ? cause.message : 'Oracle 导出任务创建失败，请重试。') }
+    finally { submitInFlight.current = false; setSubmitting(false) }
   }
 
-  const tableOptions = table && !tables.some((item) => item.owner === table.owner && item.name === table.name) ? [table, ...tables] : tables
+  let configIssue = ''
+  try { currentConfig() } catch (cause) { configIssue = cause instanceof Error ? cause.message : '请完成全部 Sheet 配置。' }
   const busy = submitting || loading
-  const configReady = Boolean(table) && !selection.loading && !selection.error && !selection.issues.length && columns.some((column) => column.selected)
+  const reading = sheets.some((sheet) => snapshots[sheet.id]?.loading)
   return <PageCanvas className={styles.page} density="compact">
-    <PageHeader eyebrow="EXCEL WORKSPACE" title="Excel 导出" description="从默认 Oracle 环境选择数据表，按字段和条件生成 Excel。" actions={<button type="button" onClick={onNavigateToJobs}>查看 Excel 任务</button>} />
-    <OracleExportSchemeBar client={client} canManage={canManage} disabled={busy || selection.loading} canSave={configReady} refreshVersion={refreshVersion} getConfig={currentConfig} onLoad={(scheme) => { setSubmitError(''); setOwner(scheme.config.owner); return selection.load({ owner: scheme.config.owner, name: scheme.config.tableName, columnCount: scheme.config.columns.length }, scheme.config) }} />
-    <Section title="选择数据表" description="使用系统配置的 Oracle 连接。Owner 留空时查询全部可访问 Owner；最多显示 100 张表，可按表名缩小范围。">
+    <PageHeader eyebrow="EXCEL WORKSPACE" title="Excel 导出" description="从默认 Oracle 环境选择数据表，一个配置可导出多个 Sheet，各 Sheet 独立设置字段和筛选。" actions={<button type="button" onClick={onNavigateToJobs}>查看 Excel 任务</button>} />
+    <OracleExportSchemeBar client={client} canManage={canManage} disabled={busy || reading} canSave={!configIssue} refreshVersion={refreshVersion} getConfig={currentConfig} onLoad={async (scheme) => {
+      const restored = scheme.config.sheets.map((initial) => ({ id: ++nextID.current, sheetName: initial.sheetName, defaultName: false, initial }))
+      setSnapshots({})
+      setSheets(restored)
+      setActiveID(restored[0].id)
+      setSubmitError('')
+      return true
+    }} />
+    <Section title={`工作表（${sheets.length} / ${oracleExportSheetLimit}）`} description="切换 Sheet 会保留当前编辑内容。每个 Sheet 对应一张 Oracle 表。">
       <div className={styles.stack}>
-        <form className={styles.catalog} onSubmit={(event) => { event.preventDefault(); setQuery({ owner, search }) }}>
-          <label>Owner（可选）<input name="oracle_owner" value={owner} placeholder="全部可访问 Owner" disabled={busy} onChange={(event) => setOwner(event.currentTarget.value)} /></label>
-          <label>搜索表名<input name="oracle_table_search" type="search" value={search} placeholder="输入表名关键字" disabled={busy} onChange={(event) => setSearch(event.currentTarget.value)} /></label>
-          <button type="submit" disabled={tablesLoading || busy}><Search aria-hidden="true" />{tablesLoading ? '查询中…' : '查询表'}</button>
-        </form>
-        {tablesError && <FeedbackState kind="error" title="表目录加载失败" description={tablesError} action={<button type="button" onClick={() => setQuery({ owner, search })} disabled={tablesLoading}>重试</button>} />}
-        <label className={styles.tablePicker}>Oracle 数据表<select name="oracle_table" value={table ? `${table.owner}.${table.name}` : ''} disabled={tablesLoading || busy} onChange={(event) => selectTable(event.currentTarget.value)}><option value="">{tablesLoading ? '正在加载表目录…' : '选择需要导出的表'}</option>{tableOptions.map((item) => <option key={`${item.owner}.${item.name}`} value={`${item.owner}.${item.name}`}>{item.owner}.{item.name} · {item.columnCount} 个字段</option>)}</select></label>
-        {!tablesLoading && !tablesError && tables.length === 0 && <FeedbackState kind="empty" title="没有找到数据表" description="请调整 Owner 或表名关键字后重新查询。" />}
+        <div className={styles.sheetBar}><label>当前编辑的 Sheet<select aria-label="当前编辑的 Sheet" value={activeID} disabled={busy} onChange={(event) => setActiveID(Number(event.currentTarget.value))}>{sheets.map((sheet, index) => <option key={sheet.id} value={sheet.id}>{index + 1}. {sheet.sheetName || '未命名 Sheet'}{snapshots[sheet.id]?.issue ? ` · ${snapshots[sheet.id].loading ? '读取中' : '待配置'}` : ''}</option>)}</select></label><div className={styles.actions}><button type="button" disabled={busy || sheets.length >= oracleExportSheetLimit} onClick={addSheet}><Plus aria-hidden="true" />添加 Sheet</button><button type="button" disabled={busy || sheets.length <= 1} onClick={removeSheet}><Trash2 aria-hidden="true" />移除当前 Sheet</button></div></div>
+        {configIssue && <p className={styles.hint} role="status">{configIssue}</p>}
       </div>
     </Section>
-    <form className={styles.stack} onSubmit={(event) => void createExport(event)}>
-      <Section title="导出字段与列名" description={table ? `${table.owner}.${table.name} · 默认导出全部字段，Excel 列名可直接修改。` : '先选择数据表，再选择导出字段。'}>
-        {selection.loading ? <FeedbackState kind="loading" title="正在读取 Oracle 字段…" /> : selection.error ? <FeedbackState kind="error" title="字段加载失败" description={selection.error} action={<button type="button" onClick={() => void selection.retry()}>重试</button>} /> : columns.length ? <OracleExportFields columns={columns} disabled={busy} onChange={selection.setColumns} /> : <FeedbackState kind="empty" title={table ? '该表没有可导出的字段' : '尚未选择数据表'} />}
-        {selection.issues.length > 0 && <FeedbackState kind="error" title="已保存配置包含失效字段" description={`${selection.issues.join('；')}。当前已暂停保存和导出，请核对字段后明确移除失效引用。`} action={<button type="button" disabled={busy} onClick={selection.removeInvalidReferences}>移除失效引用并继续配置</button>} />}
-      </Section>
-      <Section title="数据筛选（可选）"><OracleExportFilters columns={columns} filters={filters} disabled={busy || selection.loading || Boolean(selection.error)} onChange={selection.setFilters} onAdd={selection.addFilter} /></Section>
-      {submitError && <FeedbackState kind="error" title="导出任务未创建" description={submitError} />}
-      <div className={styles.submit}><p>每份 Excel 最多 100 万行；超出后分成多个 Excel，以 ZIP 下载。结果保留 24 小时。</p><button type="submit" disabled={!canExecute || busy || !configReady}><Download aria-hidden="true" />{submitting ? '正在创建…' : '创建导出任务'}</button></div>
-      {!canExecute && <p className={styles.hint}>当前账号没有执行 Excel 任务的权限。</p>}
-    </form>
+    {sheets.map((sheet) => <OracleExportSheetEditor key={sheet.id} id={sheet.id} active={activeID === sheet.id} client={client} initial={sheet.initial} sheetName={sheet.sheetName} disabled={busy} refreshVersion={refreshVersion} onNameChange={onNameChange} onTableSelected={onTableSelected} onSnapshot={onSnapshot} />)}
+    <Section title="多文件拆分规则" description="每个 Sheet 每份文件最多 100 万行；有多份时以 ZIP 下载，结果保留 24 小时。">
+      <div className={styles.stack}><p className={styles.hint}>超过 100 万行的表按相同片序号写入各份 Excel；不超过 100 万行的表会在每份 Excel 中完整复制。大表后续无数据时，该 Sheet 保留表头。总文件数取各表分片数的最大值。</p><p className={styles.hint}>例如：A 表 150 万行、B 表 20 万行，将生成 2 份 Excel。A Sheet 分别为 100 万行和 50 万行，B Sheet 两份均为完整 20 万行。</p></div>
+    </Section>
+    {submitError && <FeedbackState kind="error" title="导出任务未创建" description={submitError} />}
+    <div className={styles.submit}><p>共 {sheets.length} 个 Sheet。{configIssue || '全部 Sheet 已就绪，可保存配置或创建导出任务。'}</p><button type="button" disabled={!canExecute || busy || Boolean(configIssue)} onClick={() => void createExport()}><Download aria-hidden="true" />{submitting ? '正在创建…' : '创建导出任务'}</button></div>
+    {!canExecute && <p className={styles.hint}>当前账号没有执行 Excel 任务的权限。</p>}
     {jobs.job && <Section title={`最近导出任务 #${jobs.job.id}`} description="可留在此页跟踪进度，或到 Excel 任务查看历史。"><ExcelJobDetailContent job={jobs.job} logs={jobs.jobLogs} progress={excelJobProgressPercent(jobs.job)} autoRefreshText={jobs.autoRefreshText} loading={loading} downloading={jobs.downloadingJobID === jobs.job.id} onRefresh={() => void jobs.refreshJobByID(jobs.job!.id)} onDownload={() => void jobs.downloadJob(jobs.job!.id)} /></Section>}
   </PageCanvas>
 }
