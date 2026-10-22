@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, Table2 } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Link2, Table2 } from 'lucide-react'
 import { Button, DataTable, Dialog, FeedbackState } from '../../../ui'
 import type { ReportCenterClient } from '../../api'
 import { getBojunReferenceTable } from '../../bojunApi'
@@ -7,12 +7,13 @@ import type { BojunColumn, BojunTable } from '../../types'
 import type { BojunMetadata } from '../ReportQueryDesigner/BojunMetadata'
 import { ReportDefaultFields } from '../ReportQueryDesigner/ReportDefaultFields'
 import { useBojunMetadata } from '../ReportQueryDesigner/useBojunMetadata'
+import type { ReportReferenceStep } from '../ReportQueryDesigner/referenceJoin'
 import { BojunReferenceField } from './BojunReferenceField'
 import reportDesign from '../../reportDesign.module.css'
 import styles from './BojunReferenceDialog.module.css'
 
-export type BojunReferenceSelection = { tableId: string; tableName: string; column: BojunColumn; trigger: HTMLElement }
-type ReferenceStep = Omit<BojunReferenceSelection, 'trigger'>
+export type BojunReferenceSelection = { aliasId?: string; tableId: string; tableName: string; column: BojunColumn; trigger: HTMLElement }
+type ReferenceStep = Omit<BojunReferenceSelection, 'trigger'> & { target?: BojunMetadata[string] }
 
 function useReferenceTable(client: ReportCenterClient, datasourceId: number, step: ReferenceStep, reload: number) {
   const identity = `${datasourceId}:${step.tableId}:${step.column.id}`
@@ -29,9 +30,10 @@ function useReferenceTable(client: ReportCenterClient, datasourceId: number, ste
   return state.identity === identity ? state : { table: null, loading: true, error: '' }
 }
 
-export function BojunReferenceDialog({ client, datasourceId, selection, onClose }: { client: ReportCenterClient; datasourceId: number; selection: BojunReferenceSelection; onClose: () => void }) {
+export function BojunReferenceDialog({ client, datasourceId, selection, onClose, onJoin }: { client: ReportCenterClient; datasourceId: number; selection: BojunReferenceSelection; onClose: () => void; onJoin?: (steps: ReportReferenceStep[]) => void }) {
   const [history, setHistory] = useState<ReferenceStep[]>([selection])
   const [reload, setReload] = useState(0)
+  const [joinError, setJoinError] = useState('')
   const step = history[history.length - 1]
   const resolved = useReferenceTable(client, datasourceId, step, reload)
   const table = resolved.table
@@ -41,9 +43,23 @@ export function BojunReferenceDialog({ client, datasourceId, selection, onClose 
   const name = table?.description || table?.logicalName
   const label = name || '正在定位关联表…'
   const path = [selection.tableName, ...history.slice(1).map((entry) => entry.tableName), label]
-  return <Dialog open className={`${reportDesign.surface} ${styles.dialog}`} title={<span className={styles.title}><Table2 aria-hidden="true" />关联表详情{name ? ` · ${name}` : ''}<small>只读</small></span>} description={`来自 ${step.tableName} · ${step.column.dbName}，按伯俊字典关联查看表结构。`} closeLabel="关闭关联表详情" returnFocus={selection.trigger} onClose={onClose} footer={<><span className={styles.footerNote}>查看详情保留当前报表与字段选择</span>{history.length > 1 ? <Button onClick={() => setHistory((current) => current.slice(0, -1))}><ArrowLeft aria-hidden="true" />返回上一张表</Button> : null}<Button onClick={onClose}>返回配置</Button></>}>
+  function join() {
+    if (!onJoin || !item || error) return
+    try {
+      const steps = history.map((entry, index): ReportReferenceStep => {
+        const target = index === history.length - 1 ? item : entry.target
+        if (!target) throw new Error('关联路径尚未读取完整，请返回上一张表后重试。')
+        return { sourceTableId: entry.tableId, sourceColumnId: String(entry.column.id), target }
+      })
+      onJoin(steps)
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : '加入关联表失败，请重试。')
+    }
+  }
+  return <Dialog open className={`${reportDesign.surface} ${styles.dialog}`} title={<span className={styles.title}><Table2 aria-hidden="true" />关联表详情{name ? ` · ${name}` : ''}<small>{onJoin ? '字典关联' : '只读'}</small></span>} description={`来自 ${step.tableName} · ${step.column.dbName}，按伯俊字典关联查看表结构。`} closeLabel="关闭关联表详情" returnFocus={selection.trigger} onClose={onClose} footer={<><span className={styles.footerNote}>{onJoin ? '按访问路径关联，默认显示字段自动选中' : '查看详情保留当前报表与字段选择'}</span>{history.length > 1 ? <Button onClick={() => { setHistory((current) => current.slice(0, -1)); setJoinError('') }}><ArrowLeft aria-hidden="true" />返回上一张表</Button> : null}<Button onClick={onClose}>返回配置</Button>{onJoin ? <Button variant="primary" disabled={resolved.loading || !item || Boolean(error)} onClick={join}><Link2 aria-hidden="true" />加入并自动关联</Button> : null}</>}>
     <nav className={styles.path} aria-label="关联表访问路径">{path.map((part, index) => <span key={index}>{index ? <ChevronRight aria-hidden="true" /> : null}<span>{part}</span></span>)}</nav>
-    {error ? <FeedbackState kind="error" title="关联表详情暂不可用" description={error} action={<Button onClick={() => setReload((value) => value + 1)}>重新读取</Button>} /> : resolved.loading || !item ? <FeedbackState kind="loading" title="正在读取关联表与字段…" /> : <ReferenceFields key={`${step.tableId}:${step.column.id}`} item={item} matchingColumnId={step.column.refColumnId} onInspect={(column) => setHistory((current) => [...current, { tableId: String(item.table.id), tableName: item.table.description || item.table.logicalName, column }])} />}
+    {joinError ? <p className={styles.joinError} role="alert">{joinError}</p> : null}
+    {error ? <FeedbackState kind="error" title="关联表详情暂不可用" description={error} action={<Button onClick={() => setReload((value) => value + 1)}>重新读取</Button>} /> : resolved.loading || !item ? <FeedbackState kind="loading" title="正在读取关联表与字段…" /> : <ReferenceFields key={`${step.tableId}:${step.column.id}`} item={item} matchingColumnId={step.column.refColumnId} onInspect={(column) => { setHistory((current) => [...current.slice(0, -1), { ...current[current.length - 1], target: item }, { tableId: String(item.table.id), tableName: item.table.description || item.table.logicalName, column }]); setJoinError('') }} />}
   </Dialog>
 }
 

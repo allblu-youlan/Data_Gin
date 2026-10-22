@@ -9,7 +9,8 @@ import type { BojunMetadata } from './BojunMetadata'
 import type { QueryFieldOption } from './ReportConditionEditor'
 import { ReportRelationEditor } from './ReportRelationEditor'
 import { useBojunMetadata } from './useBojunMetadata'
-import { appendDictionaryDefaultColumns } from './tableWorkspace'
+import { appendDictionaryDefaultColumns, removeReportTables } from './tableWorkspace'
+import { joinReportReferencePath, type ReportReferenceStep } from './referenceJoin'
 import { BojunReferenceField } from '../BojunReferenceDialog/BojunReferenceField'
 import { BojunReferenceDialog, type BojunReferenceSelection } from '../BojunReferenceDialog/BojunReferenceDialog'
 import reportDesign from '../../reportDesign.module.css'
@@ -21,14 +22,15 @@ const pageSize = 40
 function selectTable(spec: ReportQuerySpec, aliasId: string, table: BojunTable): ReportQuerySpec {
   const relation = spec.relations.find((item) => item.id === aliasId)
   const tableId = String(table.id)
+  if ((relation?.targetTableId ?? spec.base.tableId) === tableId) return spec
+  spec = spec.relations.filter((item) => item.fromAliasId === aliasId).reduce((current, child) => removeReportTables(current, child.id).query, spec)
   if (relation) {
-    if (relation.targetTableId === tableId) return spec
     return { ...spec, relations: spec.relations.map((item) => item.id === aliasId ? { ...item, name: table.description || table.logicalName, targetTableId: tableId, displayColumnIds: table.displayFields, detailColumnIds: table.displayFields.filter((id) => table.config?.detailColumns == null || table.config.detailColumns.includes(id)), keyBindings: table.primaryKeys.map((targetColumnId) => ({ sourceColumnId: '', targetColumnId })), matchConditions: { logic: 'AND', items: [] } } : item), columns: spec.columns.filter((column) => column.source.kind !== 'RELATION_COLUMN' || column.source.relationId !== aliasId) }
   }
   return spec.base.tableId === tableId ? spec : { ...spec, base: { ...spec.base, tableId }, columns: [] }
 }
 
-export function ReportTableConfigDialog({ client, datasourceId, initialSpec, aliasId, adding, initialMetadata, parameters, onClose, onSave }: { client: ReportCenterClient; datasourceId: number; initialSpec: ReportQuerySpec; aliasId: string; adding: boolean; initialMetadata: BojunMetadata; parameters: string[]; onClose: () => void; onSave: (spec: ReportQuerySpec) => void }) {
+export function ReportTableConfigDialog({ client, datasourceId, initialSpec, aliasId, adding, initialMetadata, parameters, onClose, onSave }: { client: ReportCenterClient; datasourceId: number; initialSpec: ReportQuerySpec; aliasId: string; adding: boolean; initialMetadata: BojunMetadata; parameters: string[]; onClose: () => void; onSave: (spec: ReportQuerySpec, metadata: BojunMetadata) => void }) {
   const [spec, setSpec] = useState(() => structuredClone(initialSpec))
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -38,6 +40,8 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   const [fieldSearch, setFieldSearch] = useState('')
   const [fieldPage, setFieldPage] = useState(0)
   const [reference, setReference] = useState<BojunReferenceSelection | null>(null)
+  const [joinedMetadata, setJoinedMetadata] = useState<BojunMetadata>({})
+  const [joinNotice, setJoinNotice] = useState('')
   const catalogRequest = useRef<AbortController | null>(null)
   const syncTimer = useRef<number | undefined>(undefined)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -45,7 +49,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   const relationSettingsRef = useRef<HTMLDetailsElement>(null)
   const initializedDefaults = useRef('')
   const lookup = useBojunMetadata(client, datasourceId, [spec.base.tableId, ...spec.relations.map((relation) => relation.targetTableId)], metadataReload)
-  const metadata = { ...initialMetadata, ...lookup.metadata }
+  const metadata = { ...initialMetadata, ...joinedMetadata, ...lookup.metadata }
   const aliases = [{ aliasId: spec.base.aliasId, tableId: spec.base.tableId }, ...spec.relations.map((relation) => ({ aliasId: relation.id, tableId: relation.targetTableId }))]
   const fields: QueryFieldOption[] = aliases.flatMap((alias) => (metadata[alias.tableId]?.columns ?? []).filter((column) => isBojunColumnAllowed(metadata[alias.tableId]?.table, column)).map((column) => ({ aliasId: alias.aliasId, columnId: String(column.id), label: `${metadata[alias.tableId]?.table.description || metadata[alias.tableId]?.table.logicalName} → ${column.dbName}`, operators: column.supportedOperators.length ? column.supportedOperators : ['EQ' as const], logicalType: column.logicalType })))
   const relation = spec.relations.find((item) => item.id === aliasId)
@@ -114,7 +118,14 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
     if (!adding && String(table.id) !== tableId) return
     if (String(table.id) !== tableId) initializedDefaults.current = ''
     setSpec((current) => selectTable(current, aliasId, table))
-    setFieldSearch(''); setFieldPage(0); setError('')
+    setFieldSearch(''); setFieldPage(0); setError(''); setJoinNotice('')
+  }
+  function joinReference(steps: ReportReferenceStep[]) {
+    const result = joinReportReferencePath(spec, metadata, aliasId, steps)
+    setSpec(result.spec)
+    setJoinedMetadata(result.metadata)
+    setReference(null)
+    setJoinNotice(result.addedCount ? `已自动关联 ${result.addedCount} 张表，确认后应用到报表；取消将放弃本次修改。` : '此字段的关联表已在当前配置中，无需重复加入。')
   }
   function toggleFields(columns: BojunColumn[], checked: boolean) {
     const ids = new Set(columns.map((column) => String(column.id)))
@@ -136,11 +147,11 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
       if (settings) { settings.open = true; Array.from(settings.querySelectorAll<HTMLSelectElement>('select')).find((select) => !select.value)?.focus() }
       return
     }
-    onSave(relation ? { ...spec, columns: spec.columns.map((column) => column.source.kind === 'RELATION_DISPLAY' && column.source.relationId === aliasId && adding ? { ...column, header: label } : column) } : spec)
+    onSave(relation ? { ...spec, columns: spec.columns.map((column) => column.source.kind === 'RELATION_DISPLAY' && column.source.relationId === aliasId && adding ? { ...column, header: label } : column) } : spec, metadata)
   }
   const fieldNames = (ids: string[]) => ids.map((id) => item?.columns.find((column) => String(column.id) === id)?.dbName || `#${id}`).join('、') || '未定义'
   return <Dialog open className={`${reportDesign.surface} ${styles.dialog}`} title={<span className={styles.dialogTitle}><Table2 aria-hidden="true" />{adding ? '选择业务表与字段' : `配置业务表 · ${label}`}</span>} description="可用表直接展示；主键、默认显示与关联定义沿用伯俊字典，确认后应用到当前报表。" closeLabel="关闭表配置" initialFocusRef={searchRef} onClose={onClose} footer={<><div className={styles.footerSummary} aria-live="polite"><strong>{item ? label : '正在读取业务表'}</strong><span>当前表 {outputs.length} 个输出字段 · 报表共 {spec.columns.length} 列</span></div><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!usable} onClick={save}>{adding ? '确认加入报表' : '应用配置'}</Button></>}>
-    {reference ? <BojunReferenceDialog client={client} datasourceId={datasourceId} selection={reference} onClose={() => setReference(null)} /> : null}
+    {reference ? <BojunReferenceDialog client={client} datasourceId={datasourceId} selection={reference} onClose={() => setReference(null)} onJoin={joinReference} /> : null}
     <div className={styles.contextBar}><ol><li className={styles.current}><span>1</span>选择业务表</li><li><span>2</span>确认字段与关联</li><li><span>3</span>应用到报表</li></ol><span><Database aria-hidden="true" />沿用报表 Oracle 连接</span></div>
     <div className={styles.layout}>
       <aside className={styles.catalog} aria-label="可用业务表目录">
@@ -166,7 +177,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
             const id = String(column.id)
             const allowed = Boolean(item && isBojunColumnAllowed(item.table, column))
             const detailAllowed = Boolean(item && isBojunColumnAllowed(item.table, column, true))
-            return <tr key={id}><td className={styles.checkboxCell}><label><input type="checkbox" aria-label={`选择输出字段 ${column.description || column.dbName}`} checked={selectedIds.has(id)} disabled={!usable || (!allowed && !selectedIds.has(id))} onChange={(event) => toggleFields([column], event.currentTarget.checked)} /></label></td><td><BojunReferenceField column={column} onInspect={(field, trigger) => setReference({ tableId, tableName: label, column: field, trigger })} /></td><td><code>{column.dbName}</code></td><td><span className={styles.oracleType}>{column.oracleType || '—'}</span>{defaultIds.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : item?.table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : !column.isPhysical ? <span className={styles.keyBadge}>虚拟字段</span> : null}</td>{relation ? <><td className={styles.flagCell}><label><input type="checkbox" aria-label={`显示字段 ${column.description || column.dbName}`} checked={displayIds.includes(id)} disabled={!usable || (!allowed && !displayIds.includes(id))} onChange={(event) => updateRelationFields('displayColumnIds', id, event.currentTarget.checked)} /></label></td><td className={styles.flagCell}><label><input type="checkbox" aria-label={`详情字段 ${column.description || column.dbName}`} checked={relation.detailColumnIds.includes(id)} disabled={!usable || (!detailAllowed && !relation.detailColumnIds.includes(id))} onChange={(event) => updateRelationFields('detailColumnIds', id, event.currentTarget.checked)} /></label></td></> : null}</tr>
+            return <tr key={id}><td className={styles.checkboxCell}><label><input type="checkbox" aria-label={`选择输出字段 ${column.description || column.dbName}`} checked={selectedIds.has(id)} disabled={!usable || (!allowed && !selectedIds.has(id))} onChange={(event) => toggleFields([column], event.currentTarget.checked)} /></label></td><td><BojunReferenceField column={column} onInspect={(field, trigger) => setReference({ aliasId, tableId, tableName: label, column: field, trigger })} /></td><td><code>{column.dbName}</code></td><td><span className={styles.oracleType}>{column.oracleType || '—'}</span>{defaultIds.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : item?.table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : !column.isPhysical ? <span className={styles.keyBadge}>虚拟字段</span> : null}</td>{relation ? <><td className={styles.flagCell}><label><input type="checkbox" aria-label={`显示字段 ${column.description || column.dbName}`} checked={displayIds.includes(id)} disabled={!usable || (!allowed && !displayIds.includes(id))} onChange={(event) => updateRelationFields('displayColumnIds', id, event.currentTarget.checked)} /></label></td><td className={styles.flagCell}><label><input type="checkbox" aria-label={`详情字段 ${column.description || column.dbName}`} checked={relation.detailColumnIds.includes(id)} disabled={!usable || (!detailAllowed && !relation.detailColumnIds.includes(id))} onChange={(event) => updateRelationFields('detailColumnIds', id, event.currentTarget.checked)} /></label></td></> : null}</tr>
           })}</tbody></table>
           {lookup.loading && !visibleFields.length ? <FeedbackState kind="loading" title="正在读取与核验表字段…" /> : null}
           {!lookup.loading && !lookup.error && item && !matchingFields.length ? <FeedbackState kind="empty" title="没有匹配的字段" description="试试字段编码或业务名称。" /> : null}
@@ -174,6 +185,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
         {matchingFields.length > pageSize ? <div className={styles.fieldPagination}><span>第 {page + 1} / {Math.ceil(matchingFields.length / pageSize)} 页 · {matchingFields.length} 个字段</span><div><Button disabled={page === 0} onClick={() => setFieldPage(page - 1)}>上一页</Button><Button disabled={(page + 1) * pageSize >= matchingFields.length} onClick={() => setFieldPage(page + 1)}>下一页</Button></div></div> : null}
         {relation ? <details ref={relationSettingsRef} className={styles.relationSettings}><summary>关联与取值设置 <span>{relation.keyBindings.length} 个关联键 · 保留来源记录</span></summary><div><ReportRelationEditor client={client} datasourceId={datasourceId} relation={relation} spec={spec} metadata={metadata} fields={fields} parameters={parameters} tableLocked showTableSelection={false} showFields={false} onChange={(next) => setSpec((current) => ({ ...current, relations: current.relations.map((item) => item.id === aliasId ? next : item) }))} onAppend={(columnId) => { const column = item?.columns.find((field) => String(field.id) === columnId); if (column) toggleFields([column], true) }} /></div></details> : null}
         <section className={styles.selectedStrip} aria-label="当前业务表已选输出字段"><header><strong>当前表已选字段</strong><span>列名与顺序可在报表中继续调整</span></header><div>{outputs.length ? outputs.map((column) => <span className={styles.chip} key={column.fieldId}>{column.source.kind === 'RELATION_DISPLAY' && adding ? `${label}（默认显示）` : column.header || '未命名字段'}<button type="button" aria-label={`移除输出字段 ${column.header || '未命名字段'}`} onClick={() => setSpec((current) => ({ ...current, columns: current.columns.filter((item) => item.fieldId !== column.fieldId) }))}><X aria-hidden="true" /></button></span>) : <span className={styles.emptySelected}>勾选上方字段，加入报表输出。</span>}</div></section>
+        {joinNotice ? <p className={styles.joinNotice} role="status">{joinNotice}</p> : null}
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
       </section>
     </div>

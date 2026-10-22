@@ -132,3 +132,4 @@
   .tableRow.tableRow { min-height: 52px; padding-block: 8px; }
 }
 @media (pointer: coarse) { .checkboxCell label, .flagCell label { min-width: 44px; min-height: 44px; } .selectedStrip > div { max-height: 56px; } }
+.joinNotice { margin: 0; padding: 8px 10px; border-radius: 4px; background: var(--report-accent-soft); color: var(--report-accent); font-size: 12px; }

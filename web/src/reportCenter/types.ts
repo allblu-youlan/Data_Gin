@@ -528,6 +528,7 @@ export type BojunTable = {
   description: string
   resolvedTable: string
   primaryKeys: string[]
+  uniqueKeys?: string[][]
   displayFields: string[]
   searchFields: string[]
   enabled: boolean
