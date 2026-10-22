@@ -182,7 +182,7 @@ func oracleExcelExportClaimBefore(taskID string, jobID uint, now time.Time) time
 }
 
 func excelJobResultFilename(export *model.ExcelMatchJob) string {
-	if excelJobOperationFromConfigJSON(export.ConfigJSON) == excelOperationOracleExport {
+	if operation := excelJobOperationFromConfigJSON(export.ConfigJSON); operation == excelOperationOracleExport || operation == excelOperationWorkflow {
 		extension := filepath.Ext(export.ResultFilePath)
 		if strings.HasSuffix(export.ResultObjectKey, ".zip") {
 			extension = ".zip"

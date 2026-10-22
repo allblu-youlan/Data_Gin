@@ -760,7 +760,10 @@ func (s *ExcelMatchJobService) Download(ctx context.Context, id uint) (*model.Ex
 		return nil, "", "", fmt.Errorf("任务状态为 %s，无法下载", matchJob.Status)
 	}
 	operation := excelJobOperationFromConfigJSON(matchJob.ConfigJSON)
-	if operation != excelOperationExportMatch && operation != excelOperationOracleExport {
+	if operation == excelOperationWorkflow && matchJob.ResultFilePath == "" && matchJob.ResultURL == "" {
+		return nil, "", "", errors.New("该组合操作未生成结果文件")
+	}
+	if operation != excelOperationExportMatch && operation != excelOperationOracleExport && operation != excelOperationWorkflow {
 		return nil, "", "", errors.New("该任务不是匹配导出任务，不会生成结果文件")
 	}
 	if strings.TrimSpace(matchJob.ResultURL) != "" {
@@ -779,7 +782,7 @@ func (s *ExcelMatchJobService) Download(ctx context.Context, id uint) (*model.Ex
 		}
 		return nil, "", "", errors.New("读取结果文件失败，请稍后重试")
 	}
-	if operation == excelOperationOracleExport && !storage.OSSStorageEnabled() {
+	if (operation == excelOperationOracleExport || operation == excelOperationWorkflow) && !storage.OSSStorageEnabled() {
 		return matchJob, matchJob.ResultFilePath, excelJobResultFilename(matchJob), nil
 	}
 	return nil, "", "", errors.New("结果文件尚未上传到OSS，上传成功后才能下载，请稍后刷新任务状态")
@@ -790,8 +793,11 @@ func (s *ExcelMatchJobService) ProcessJob(ctx context.Context, id uint) error {
 	if err != nil {
 		return err
 	}
-	if excelJobOperationFromConfigJSON(matchJob.ConfigJSON) == excelOperationOracleExport {
+	switch excelJobOperationFromConfigJSON(matchJob.ConfigJSON) {
+	case excelOperationOracleExport:
 		return s.processOracleExportJob(ctx, matchJob)
+	case excelOperationWorkflow:
+		return s.processExcelWorkflowJob(ctx, matchJob)
 	}
 
 	var config ExcelMatchConfig
@@ -2125,7 +2131,11 @@ func (s *ExcelMatchJobService) refreshDownloadState(ctx context.Context, matchJo
 		return
 	}
 	operation := excelJobOperationFromConfigJSON(matchJob.ConfigJSON)
-	if operation != excelOperationExportMatch && operation != excelOperationOracleExport {
+	if operation == excelOperationWorkflow && matchJob.ResultFilePath == "" && matchJob.ResultURL == "" {
+		matchJob.DownloadMessage = "该组合操作未生成结果文件"
+		return
+	}
+	if operation != excelOperationExportMatch && operation != excelOperationOracleExport && operation != excelOperationWorkflow {
 		matchJob.DownloadMessage = "该任务不会生成结果文件"
 		return
 	}
@@ -2133,7 +2143,7 @@ func (s *ExcelMatchJobService) refreshDownloadState(ctx context.Context, matchJo
 		matchJob.CanDownload = true
 		return
 	}
-	if operation == excelOperationOracleExport && !storage.OSSStorageEnabled() {
+	if (operation == excelOperationOracleExport || operation == excelOperationWorkflow) && !storage.OSSStorageEnabled() {
 		if isPathInside(excelMatchJobDir(matchJob.ID), matchJob.ResultFilePath) {
 			if _, err := os.Stat(matchJob.ResultFilePath); err == nil {
 				matchJob.CanDownload = true
