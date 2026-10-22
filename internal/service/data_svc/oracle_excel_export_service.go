@@ -17,7 +17,6 @@ import (
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/storage"
 
-	"github.com/godror/godror"
 	"github.com/hibiken/asynq"
 )
 
@@ -35,7 +34,7 @@ func (s *ExcelMatchJobService) CreateOracleExportJob(ctx context.Context, input 
 	}
 	expiresAt := time.Now().Add(excelMatchRetention)
 	export := &model.ExcelMatchJob{
-		SourceFileName: normalized.Owner + "." + normalized.TableName,
+		SourceFileName: oracleExcelExportSourceName(normalized),
 		ConfigJSON:     string(encoded), Status: excelMatchStatusPending,
 		ExpiresAt: &model.TimeNormal{Time: expiresAt},
 	}
@@ -58,11 +57,8 @@ func (s *ExcelMatchJobService) CreateOracleExportJob(ctx context.Context, input 
 func normalizeOracleExcelExportConfig(ctx context.Context, input OracleExcelExportConfig) (OracleExcelExportConfig, error) {
 	var normalized OracleExcelExportConfig
 	err := withOracleExcelConnection(ctx, 30*time.Second, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
-		schema, err := connection.InspectResultTable(queryCtx, reportoracle.ResultTableRef{Owner: input.Owner, Name: input.TableName})
-		if err != nil {
-			return err
-		}
-		normalized, _, _, err = buildOracleExcelExportQuery(input, schema)
+		var err error
+		normalized, err = normalizeOracleExcelExportWithMetadata(queryCtx, input, connection.InspectResultTable)
 		return err
 	})
 	return normalized, err
@@ -116,23 +112,9 @@ func (s *ExcelMatchJobService) processOracleExportJob(ctx context.Context, expor
 	s.logJob(ctx, export.ID, "info", "开始流式导出 Oracle 表数据", nil)
 	var total int
 	err = withOracleExcelConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
-		schema, err := connection.InspectResultTable(queryCtx, reportoracle.ResultTableRef{Owner: config.Owner, Name: config.TableName})
-		if err != nil {
-			return err
-		}
-		normalized, statement, arguments, err := buildOracleExcelExportQuery(config, schema)
-		if err != nil {
-			return err
-		}
-		arguments = append(arguments, godror.NumberAsString())
-		rows, err := connection.QuerySelect(queryCtx, statement, arguments...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
 		return withExcelizeTempDir(filepath.Join(export.WorkDir, excelizeTempDirName), func() error {
 			var err error
-			export.ResultFilePath, total, err = renderOracleExcelExport(queryCtx, rows, normalized, schema, export.WorkDir, oracleExcelRowsPerFile, func(count int) error {
+			export.ResultFilePath, total, err = executeOracleExcelExport(queryCtx, connection, config, export.WorkDir, oracleExcelRowsPerFile, func(count int) error {
 				return s.jobDAO.UpdateProgress(queryCtx, export.ID, ExcelMatchJobStats{ProcessedRows: count})
 			})
 			return err

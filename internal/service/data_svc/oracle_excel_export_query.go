@@ -28,9 +28,13 @@ type OracleExcelExportConfig struct {
 	TableName string                    `json:"tableName"`
 	Columns   []OracleExcelExportColumn `json:"columns"`
 	Filters   []OracleExcelExportFilter `json:"filters"`
+	Sheets    []OracleExcelExportSheet  `json:"sheets,omitempty"`
 }
 
 func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reportoracle.ResultColumn) (OracleExcelExportConfig, string, []interface{}, error) {
+	if len(input.Sheets) > 0 {
+		return input, "", nil, fmt.Errorf("多 Sheet 配置须逐表构建查询")
+	}
 	table, err := reportoracle.NormalizeResultTableRef(reportoracle.ResultTableRef{Owner: input.Owner, Name: input.TableName})
 	if err != nil {
 		return input, "", nil, fmt.Errorf("Oracle 表名无效: %w", err)

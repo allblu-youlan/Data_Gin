@@ -10,7 +10,6 @@ import (
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/storage"
-	"github.com/godror/godror"
 	"github.com/hibiken/asynq"
 	"go.uber.org/zap"
 )
@@ -143,26 +142,14 @@ func (s *ExcelMatchJobService) executeExcelWorkflowStep(ctx context.Context, rec
 		dir := filepath.Join(record.WorkDir, fmt.Sprintf("export_%d", index+1))
 		var output string
 		err := withOracleOperationConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
-			schema, err := connection.InspectResultTable(queryCtx, reportoracle.ResultTableRef{Owner: config.Owner, Name: config.TableName})
-			if err != nil {
-				return err
-			}
-			normalized, statement, arguments, err := buildOracleExcelExportQuery(config, schema)
-			if err != nil {
-				return err
-			}
-			rows, err := connection.QuerySelect(queryCtx, statement, append(arguments, godror.NumberAsString())...)
-			if err != nil {
-				return err
-			}
-			defer rows.Close()
 			return withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
 				var total int
-				output, total, err = renderOracleExcelExport(queryCtx, rows, normalized, schema, dir, oracleExcelRowsPerFile, nil)
-				if err == nil {
+				var renderErr error
+				output, total, renderErr = executeOracleExcelExport(queryCtx, connection, config, dir, oracleExcelRowsPerFile, nil)
+				if renderErr == nil {
 					s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导出 %d 行", total), nil)
 				}
-				return err
+				return renderErr
 			})
 		})
 		return output, err
