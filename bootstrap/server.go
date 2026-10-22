@@ -27,6 +27,7 @@ func RunServer() {
 	defer closeFeishuMentionResources()
 
 	console.Info("run server ...")
+	setupReportSnapshotStore()
 
 	// 设置 gin 框架的运行模式，支持 debug, release, test
 	// release 会屏蔽调试信息，官方建议生产环境中使用
