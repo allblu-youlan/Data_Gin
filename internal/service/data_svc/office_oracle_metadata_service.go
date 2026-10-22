@@ -59,6 +59,7 @@ type OfficeResultTableSummary struct {
 
 type OfficeResultColumn struct {
 	Name     string `json:"name"`
+	Comment  string `json:"comment"`
 	Position int    `json:"position"`
 	DataType string `json:"dataType"`
 	Nullable bool   `json:"nullable"`
@@ -133,7 +134,7 @@ func (service *OfficeOracleMetadataService) ResultTableSchema(ctx context.Contex
 		}
 		result = make([]OfficeResultColumn, 0, len(items))
 		for _, item := range items {
-			result = append(result, OfficeResultColumn{Name: item.Name, Position: item.Position, DataType: item.DataType, Nullable: item.Nullable})
+			result = append(result, OfficeResultColumn{Name: item.Name, Comment: item.Comment, Position: item.Position, DataType: item.DataType, Nullable: item.Nullable})
 		}
 		return nil
 	})

@@ -48,7 +48,7 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 	}
 	if len(input.Columns) == 0 {
 		for _, column := range schema {
-			input.Columns = append(input.Columns, OracleExcelExportColumn{Field: column.Name, Title: column.Name})
+			input.Columns = append(input.Columns, OracleExcelExportColumn{Field: column.Name, Title: oracleExcelDefaultColumnTitle(column)})
 		}
 	}
 	fields := make([]string, len(input.Columns))
@@ -60,7 +60,7 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		}
 		column.Title = strings.TrimSpace(column.Title)
 		if column.Title == "" {
-			column.Title = column.Field
+			column.Title = oracleExcelDefaultColumnTitle(available[column.Field])
 		}
 		if utf8.RuneCountInString(column.Title) > 255 {
 			return input, "", nil, fmt.Errorf("导出列名不得超过 255 字符")
@@ -141,6 +141,13 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		statement += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	return input, statement, arguments, nil
+}
+
+func oracleExcelDefaultColumnTitle(column reportoracle.ResultColumn) string {
+	if comment := strings.TrimSpace(column.Comment); comment != "" {
+		return comment
+	}
+	return column.Name
 }
 
 func oracleExcelValueType(dataType string) string {

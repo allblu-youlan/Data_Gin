@@ -21,6 +21,35 @@ func oracleExcelTestSchema() []reportoracle.ResultColumn {
 	return []reportoracle.ResultColumn{{Name: "CODE", DataType: "VARCHAR2"}, {Name: "AMOUNT", DataType: "NUMBER"}, {Name: "CREATED_AT", DataType: "DATE"}}
 }
 
+func TestOracleExcelExportUsesColumnCommentsAndPreservesCustomTitles(t *testing.T) {
+	schema := []reportoracle.ResultColumn{{Name: "CODE", DataType: "VARCHAR2", Comment: " 订单编号 "}, {Name: "AMOUNT", DataType: "NUMBER", Comment: " "}}
+	config, _, _, err := buildOracleExcelExportQuery(OracleExcelExportConfig{Owner: "DEMO", TableName: "ORDERS"}, schema)
+	if err != nil || config.Columns[0].Title != "订单编号" || config.Columns[1].Title != "AMOUNT" {
+		t.Fatalf("default titles=%+v error=%v", config.Columns, err)
+	}
+	output, _, err := renderOracleExcelExport(t.Context(), &fakeOracleExcelRows{}, config, schema, t.TempDir(), 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := excelize.OpenFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	rows, err := file.GetRows("数据")
+	if err != nil || len(rows) != 1 || strings.Join(rows[0], ",") != "订单编号,AMOUNT" {
+		t.Fatalf("workbook headers=%+v error=%v", rows, err)
+	}
+	for _, test := range []struct{ title, want string }{{"", "订单编号"}, {" ", "订单编号"}, {"自定义编号", "自定义编号"}, {"CODE", "CODE"}} {
+		t.Run("title_"+test.title, func(t *testing.T) {
+			config, _, _, err := buildOracleExcelExportQuery(OracleExcelExportConfig{Owner: "DEMO", TableName: "ORDERS", Columns: []OracleExcelExportColumn{{Field: "CODE", Title: test.title}}}, schema)
+			if err != nil || config.Columns[0].Title != test.want {
+				t.Fatalf("title=%s columns=%+v error=%v", test.title, config.Columns, err)
+			}
+		})
+	}
+}
+
 func TestOracleExcelExportDefaultsAndBoundFilters(t *testing.T) {
 	config, statement, args, err := buildOracleExcelExportQuery(OracleExcelExportConfig{Owner: "demo", TableName: "orders"}, oracleExcelTestSchema())
 	if err != nil || len(config.Columns) != 3 || config.Columns[0].Title != "CODE" || len(args) != 0 || strings.Contains(statement, "WHERE") {

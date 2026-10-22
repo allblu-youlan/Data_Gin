@@ -100,6 +100,7 @@ type ResultTableSummary struct {
 
 type ResultColumn struct {
 	Name          string
+	Comment       string `json:"-"`
 	Position      int
 	DataType      string
 	DataLength    int64
@@ -514,16 +515,18 @@ func (adapter *Adapter) InspectResultTable(ctx context.Context, ref ResultTableR
 	for rows.Next() {
 		var column ResultColumn
 		var precision, scale sql.NullInt64
+		var comment sql.NullString
 		var nullable string
 		if err := rows.Scan(
 			&column.Name, &column.Position, &column.DataType, &column.DataLength,
-			&precision, &scale, &nullable,
+			&precision, &scale, &nullable, &comment,
 		); err != nil {
 			return nil, fmt.Errorf("scan oracle result column: %w", err)
 		}
 		column.DataPrecision = nullableInt64(precision)
 		column.DataScale = nullableInt64(scale)
 		column.Nullable = nullable == "Y"
+		column.Comment = comment.String
 		columns = append(columns, column)
 	}
 	if err := rows.Err(); err != nil {
@@ -963,11 +966,13 @@ FROM page_catalog
 ORDER BY page_catalog.cursor_key`
 
 const resultColumnsSQL = `
-SELECT column_name, column_id, data_type, data_length,
-       data_precision, data_scale, nullable
-FROM all_tab_columns
-WHERE owner = :1 AND table_name = :2
-ORDER BY column_id`
+SELECT c.column_name, c.column_id, c.data_type, c.data_length,
+       c.data_precision, c.data_scale, c.nullable, cc.comments
+FROM all_tab_columns c
+LEFT JOIN all_col_comments cc
+  ON cc.owner = c.owner AND cc.table_name = c.table_name AND cc.column_name = c.column_name
+WHERE c.owner = :1 AND c.table_name = :2
+ORDER BY c.column_id`
 
 const resultTableCatalogSQL = `
 WITH filters AS (
