@@ -10,6 +10,7 @@ import { ReportWorkspaceFields } from './ReportWorkspaceFields'
 import { ReportWorkspaceOutput } from './ReportWorkspaceOutput'
 import { ReportTableConfigDialog } from './ReportTableConfigDialog'
 import { ReportRelationsDialog } from './ReportRelationsDialog'
+import { BojunReferenceDialog, type BojunReferenceSelection } from '../BojunReferenceDialog/BojunReferenceDialog'
 import { newWorkspaceRelation, removeReportTables } from './tableWorkspace'
 import styles from './ReportTablesWorkspace.module.css'
 
@@ -21,6 +22,7 @@ export function ReportTablesWorkspace({ client, datasourceId, spec, metadata, pa
   const [edit, setEdit] = useState<TableEdit | null>(null)
   const [removeAlias, setRemoveAlias] = useState('')
   const [relationsOpen, setRelationsOpen] = useState(false)
+  const [reference, setReference] = useState<BojunReferenceSelection | null>(null)
   const tables = [...(spec.base.tableId ? [{ aliasId: spec.base.aliasId, tableId: spec.base.tableId }] : []), ...spec.relations.map((relation) => ({ aliasId: relation.id, tableId: relation.targetTableId }))]
   const active = tables.find((table) => table.aliasId === selectedAlias) ?? tables[0]
   const item = metadata[active?.tableId ?? '']
@@ -62,12 +64,13 @@ export function ReportTablesWorkspace({ client, datasourceId, spec, metadata, pa
         {active ? <>
           <header className={styles.fieldHeading}><div><h3>{label(active.aliasId)}</h3><code>{item?.table.logicalName || '正在读取字典…'}</code></div><div className={styles.tools}><Button onClick={() => setRelationsOpen(true)}><Network aria-hidden="true" />查看关系</Button><Button aria-label={`配置 ${label(active.aliasId)}`} onClick={() => setEdit({ aliasId: active.aliasId, adding: false, spec })}><Settings2 aria-hidden="true" />配置</Button><Button aria-label={`移除 ${label(active.aliasId)}`} onClick={() => setRemoveAlias(active.aliasId)}><Trash2 aria-hidden="true" /></Button></div></header>
           <div className={styles.connectionLine}><Link2 aria-hidden="true" />{relation ? <span>{label(relation.fromAliasId)}<span aria-hidden="true"> → </span><strong>{label(active.aliasId)}</strong></span> : <span>已加入报表，可继续关联其他业务表</span>}<span className={styles.inherited}>沿用字典定义</span></div>
-          {item ? <ReportWorkspaceFields key={active.aliasId} table={item.table} columns={item.columns} selectedCounts={selectedCounts} onToggle={toggleField} /> : <FeedbackState kind="loading" title="正在读取业务字段…" />}
+          {item ? <ReportWorkspaceFields key={active.aliasId} table={item.table} columns={item.columns} selectedCounts={selectedCounts} onToggle={toggleField} onInspectReference={(column, trigger) => setReference({ tableId: active.tableId, tableName: label(active.aliasId), column, trigger })} /> : <FeedbackState kind="loading" title="正在读取业务字段…" />}
         </> : <div className={styles.emptyWorkspace}><Table2 aria-hidden="true" /><h3>选择业务数据，开始搭建报表</h3><p>从可用表目录中选择表和字段，默认显示与关联定义自动带入。</p><Button variant="primary" disabled={!datasourceId} onClick={() => add()}><Plus aria-hidden="true" />打开可用表目录</Button></div>}
       </section>
       <ReportWorkspaceOutput spec={spec} metadata={metadata} activeAlias={active?.aliasId} label={label} onChange={onChange} />
     </div>
     <ReportWorkspaceOutput spec={spec} metadata={metadata} label={label} onChange={onChange} preview />
+    {reference ? <BojunReferenceDialog client={client} datasourceId={datasourceId} selection={reference} onClose={() => setReference(null)} /> : null}
     {relationsOpen ? <ReportRelationsDialog spec={spec} metadata={metadata} initialAlias={active?.aliasId} onClose={() => setRelationsOpen(false)} /> : null}
     {edit ? <ReportTableConfigDialog client={client} datasourceId={datasourceId} initialSpec={edit.spec} aliasId={edit.aliasId} adding={edit.adding} initialMetadata={metadata} parameters={parameters} onClose={() => setEdit(null)} onSave={(query) => { onChange(query); setSelectedAlias(edit.aliasId); setEdit(null) }} /> : null}
     <Dialog className={reportDesign.surface} open={Boolean(removed)} role="alertdialog" title="移除这张表？" description={removeAlias ? `移除“${label(removeAlias)}”将同时清理依赖它的配置。` : undefined} onClose={() => setRemoveAlias('')} footer={<><Button onClick={() => setRemoveAlias('')}>保留表</Button><Button variant="danger" onClick={() => { if (removed) onChange(removed.query); setSelectedAlias(spec.base.aliasId); setRemoveAlias('') }}>确认移除</Button></>}>

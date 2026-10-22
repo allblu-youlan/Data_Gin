@@ -1,0 +1,49 @@
+.referenceLink.referenceLink { display: inline-flex; align-items: center; justify-content: flex-start; gap: 4px; min-height: 24px; max-width: 100%; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--report-accent, var(--color-brand-active)); font-size: inherit; font-weight: inherit; text-align: left; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
+.referenceLink.referenceLink:hover { background: transparent; text-decoration-color: currentColor; }
+.referenceLink > span { min-width: 0; overflow-wrap: anywhere; }
+.referenceLink > svg { flex: 0 0 auto; width: 12px; height: 12px; }
+.dialog.dialog { width: min(calc(100vw - 96px), 1120px); height: min(calc(100dvh - 96px), 860px); max-height: calc(100dvh - 96px); overflow: hidden; --button-height: 30px; font-size: 12px; }
+.dialog > header { padding: 12px 18px; align-items: center; }
+.dialog > header > div > div { font-size: 11px; }
+.title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; }
+.title > svg { width: 17px; height: 17px; color: var(--report-accent); }
+.title > small { padding: 2px 5px; border-radius: 4px; background: var(--report-muted); color: var(--color-text-secondary); font-size: 10px; font-weight: 400; }
+.dialog > div:nth-child(2) { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.dialog > footer { padding: 10px 18px; }
+.footerNote { margin-right: auto; color: var(--color-text-secondary); font-size: 11px; }
+.path { display: flex; flex-wrap: wrap; align-items: center; flex: 0 0 auto; gap: 6px; min-height: 34px; padding: 8px 18px; border-bottom: 1px solid var(--report-line); background: var(--report-muted); color: var(--color-text-secondary); font-size: 11px; }
+.path > span { display: flex; align-items: center; gap: 6px; }
+.path svg { width: 11px; height: 11px; }
+.path > span:last-child { color: var(--color-text); font-weight: 550; }
+.content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; padding: 12px 18px 0; }
+.tableHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.tableHeading > div { display: flex; align-items: baseline; gap: 10px; }
+.tableHeading h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.tableHeading code, .tableHeading > span { color: var(--color-text-secondary); font-size: 11px; }
+.dictionary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .6fr); gap: 12px; margin-bottom: 10px; border: 1px solid var(--report-line); border-radius: 5px; padding: 8px 10px; background: var(--report-muted); }
+.dictionary > div { gap: 4px; }
+.dictionary p { display: none; }
+.matching { display: flex; flex-wrap: wrap; align-content: center; align-items: center; gap: 8px; font-size: 11px; }
+.matching > span { color: var(--color-text-secondary); }
+.matching strong { font-size: 12px; font-weight: 500; }
+.matching code { color: var(--report-accent); font-size: 11px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.toolbar label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; }
+.toolbar input { width: 240px; min-height: 30px; padding-block: 5px; font-size: 12px; }
+.toolbar > span { color: var(--color-text-secondary); font-size: 11px; }
+.fieldScroll { flex: 1; min-height: 0; overflow: auto; }
+.fieldScroll table { font-size: 12px; }
+.fieldScroll th { position: sticky; top: 0; z-index: 1; font-size: 11px; }
+.fieldScroll td > code { font-size: 11px; }
+.matchedRow { background: var(--report-accent-soft); }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.badges > span { padding: 2px 4px; border-radius: 3px; background: var(--report-muted); color: var(--color-text-secondary); font-size: 11px; }
+.badges .defaultBadge { background: var(--report-accent-soft); color: var(--report-accent); }
+.badges .matchBadge { background: var(--color-success-soft); color: var(--color-success-text); }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-block: 8px; color: var(--color-text-secondary); font-size: 11px; }
+.pagination > div { display: flex; align-items: center; gap: 6px; }
+.pagination button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+.hint { color: var(--color-text-secondary); font-size: 12px; }
+@media (max-width: 760px) { .dialog.dialog { width: calc(100vw - 32px); height: calc(100dvh - 48px); max-height: calc(100dvh - 48px); } .dictionary { grid-template-columns: minmax(0, 1fr); } .toolbar input { width: min(240px, 50vw); } .content { padding-inline: 12px; } .footerNote { flex-basis: 100%; } }
+@media (max-width: 479px) { .dialog.dialog { align-self: center; width: calc(100vw - 20px); height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); border: 1px solid var(--report-line); } }
+@media (pointer: coarse) { .referenceLink.referenceLink { min-height: 44px; } }

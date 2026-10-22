@@ -3,9 +3,10 @@ import { Search } from 'lucide-react'
 import { Button } from '../../../ui'
 import { isBojunColumnAllowed } from '../../bojunQueryConfig'
 import type { BojunColumn, BojunTable } from '../../types'
+import { BojunReferenceField } from '../BojunReferenceDialog/BojunReferenceField'
 import styles from './ReportTablesWorkspace.module.css'
 
-export function ReportWorkspaceFields({ table, columns, selectedCounts, onToggle }: { table: BojunTable; columns: BojunColumn[]; selectedCounts: Record<string, number>; onToggle: (id: string, header: string, checked: boolean) => void }) {
+export function ReportWorkspaceFields({ table, columns, selectedCounts, onToggle, onInspectReference }: { table: BojunTable; columns: BojunColumn[]; selectedCounts: Record<string, number>; onToggle: (id: string, header: string, checked: boolean) => void; onInspectReference: (column: BojunColumn, trigger: HTMLButtonElement) => void }) {
   const [search, setSearch] = useState('')
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [page, setPage] = useState(0)
@@ -20,7 +21,7 @@ export function ReportWorkspaceFields({ table, columns, selectedCounts, onToggle
       const id = String(column.id)
       const allowed = usable && isBojunColumnAllowed(table, column)
       const count = selectedCounts[id] ?? 0
-      return <tr key={id} data-selected={count > 0}><td><input type="checkbox" aria-label={`输出 ${column.description || column.dbName}`} disabled={!allowed && !count} checked={count > 0} onChange={(event) => onToggle(id, column.description || column.dbName, event.currentTarget.checked)} /></td><td><code title={column.dbName}>{column.dbName}</code></td><td>{column.description || column.name || '—'}</td><td><code className={styles.type}>{column.oracleType || column.logicalType || '—'}</code></td><td><div className={styles.badges}>{defaults.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : null}{table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : null}{column.refTableId ? <span className={styles.referenceBadge}>关联</span> : null}{!column.isPhysical ? <span className={styles.keyBadge}>虚拟</span> : null}{!allowed ? <span className={styles.keyBadge}>不可用</span> : null}</div></td></tr>
+      return <tr key={id} data-selected={count > 0}><td><input type="checkbox" aria-label={`输出 ${column.description || column.dbName}`} disabled={!allowed && !count} checked={count > 0} onChange={(event) => onToggle(id, column.description || column.dbName, event.currentTarget.checked)} /></td><td><code title={column.dbName}>{column.dbName}</code></td><td><BojunReferenceField column={column} onInspect={onInspectReference} /></td><td><code className={styles.type}>{column.oracleType || column.logicalType || '—'}</code></td><td><div className={styles.badges}>{defaults.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : null}{table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : null}{column.refTableId ? <span className={styles.referenceBadge}>关联</span> : null}{!column.isPhysical ? <span className={styles.keyBadge}>虚拟</span> : null}{!allowed ? <span className={styles.keyBadge}>不可用</span> : null}</div></td></tr>
     })}</tbody></table>{!shown.length ? <p className={styles.emptyHint}>{selectedOnly ? '当前表没有匹配的已选字段' : '没有匹配的字段，请调整关键词'}</p> : null}</div>
     <footer className={styles.fieldsFooter}><span>{Object.keys(selectedCounts).length} 个已选字段 · 默认显示沿用伯俊字典</span>{shown.length > pageSize ? <div><span>{pageIndex + 1} / {Math.ceil(shown.length / pageSize)}</span><Button disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}>上一页</Button><Button disabled={(pageIndex + 1) * pageSize >= shown.length} onClick={() => setPage(pageIndex + 1)}>下一页</Button></div> : null}</footer>
   </div>

@@ -6,6 +6,8 @@ import type { ReportCenterClient } from '../../api'
 import type { BojunSyncRun, BojunTable, ReportDatasource } from '../../types'
 import { BojunTableSelect } from '../ReportQueryDesigner/BojunMetadata'
 import { useBojunMetadata } from '../ReportQueryDesigner/useBojunMetadata'
+import { BojunReferenceField } from '../BojunReferenceDialog/BojunReferenceField'
+import { BojunReferenceDialog, type BojunReferenceSelection } from '../BojunReferenceDialog/BojunReferenceDialog'
 import styles from './BojunDictionaryPanel.module.css'
 
 const pendingStatuses = ['QUEUED', 'RUNNING', 'PENDING']
@@ -18,6 +20,7 @@ export function BojunDictionaryPanel({ client, datasources }: { client: ReportCe
   const [reload, setReload] = useState(0)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [reference, setReference] = useState<BojunReferenceSelection | null>(null)
   const { metadata, loading, error } = useBojunMetadata(client, datasourceId, [tableId], reload)
   const item = metadata[tableId]
   const [sync, setSync] = useState<BojunSyncRun | null>(null)
@@ -60,6 +63,7 @@ export function BojunDictionaryPanel({ client, datasources }: { client: ReportCe
   const displayColumns = columns.filter((column) => item?.table.displayFields.includes(String(column.id)))
 
   return <div className={styles.workbench}>
+    {reference ? <BojunReferenceDialog client={client} datasourceId={datasourceId} selection={reference} onClose={() => setReference(null)} /> : null}
     <div className={styles.toolbar}>
       <label className={styles.field}>Oracle 数据源<select value={datasourceId || ''} onChange={(event) => { setDatasourceId(Number(event.currentTarget.value)); setTableId(''); setSelected(null); setSync(null); setOperation({ busy: false, error: '', notice: '' }) }}>
         <option value="">请选择数据源</option>{datasources.map((source) => <option value={source.id} key={source.id} disabled={!source.enabled}>{source.name} · {source.code}</option>)}
@@ -91,7 +95,7 @@ export function BojunDictionaryPanel({ client, datasources }: { client: ReportCe
       <div className={styles.fieldToolbar}><label className={styles.field}>查找字段<input type="search" placeholder="输入业务名称或字段名" value={search} onChange={(event) => { setSearch(event.currentTarget.value); setPage(1) }} /></label><span>{matched.length} 个字段 · 默认显示字段已标记</span></div>
       <DataTable density="compact" minWidth={680} scrollLabel="伯俊字段目录">
         <thead><tr><th scope="col">字段</th><th scope="col">业务名称</th><th scope="col">类型</th><th scope="col">字段用途</th><th scope="col">可用状态</th></tr></thead>
-        <tbody>{matched.slice((currentPage - 1) * 15, currentPage * 15).map((column) => <tr key={column.id}><td><code>{column.dbName || column.name}</code></td><td>{column.description || '—'}</td><td>{column.oracleType || '—'}</td><td><div className={styles.badges}>{item.table.displayFields.includes(String(column.id)) ? <StatusTag tone="info" showDot={false}>默认显示</StatusTag> : null}{item.table.primaryKeys.includes(String(column.id)) ? <StatusTag showDot={false}>记录标识</StatusTag> : null}{item.table.searchFields.includes(String(column.id)) ? <StatusTag showDot={false}>可搜索</StatusTag> : null}</div></td><td>{!column.isPhysical ? '虚拟字段，暂不可用' : column.isSelectable ? '物理字段' : '暂不可用'}</td></tr>)}</tbody>
+        <tbody>{matched.slice((currentPage - 1) * 15, currentPage * 15).map((column) => <tr key={column.id}><td><code>{column.dbName || column.name}</code></td><td><BojunReferenceField column={column} onInspect={(field, trigger) => setReference({ tableId, tableName: item.table.description || item.table.logicalName, column: field, trigger })} /></td><td>{column.oracleType || '—'}</td><td><div className={styles.badges}>{item.table.displayFields.includes(String(column.id)) ? <StatusTag tone="info" showDot={false}>默认显示</StatusTag> : null}{item.table.primaryKeys.includes(String(column.id)) ? <StatusTag showDot={false}>记录标识</StatusTag> : null}{item.table.searchFields.includes(String(column.id)) ? <StatusTag showDot={false}>可搜索</StatusTag> : null}</div></td><td>{!column.isPhysical ? '虚拟字段，暂不可用' : column.isSelectable ? '物理字段' : '暂不可用'}</td></tr>)}</tbody>
       </DataTable>
       {!matched.length ? <p className={styles.hint}>没有匹配字段，请调整搜索词。</p> : null}
       {pages > 1 ? <PaginationControls page={currentPage} totalPages={pages} onPrevious={() => setPage(currentPage - 1)} onNext={() => setPage(currentPage + 1)} /> : null}

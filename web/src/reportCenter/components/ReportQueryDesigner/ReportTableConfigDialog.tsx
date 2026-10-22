@@ -10,6 +10,8 @@ import type { QueryFieldOption } from './ReportConditionEditor'
 import { ReportRelationEditor } from './ReportRelationEditor'
 import { useBojunMetadata } from './useBojunMetadata'
 import { appendDictionaryDefaultColumns } from './tableWorkspace'
+import { BojunReferenceField } from '../BojunReferenceDialog/BojunReferenceField'
+import { BojunReferenceDialog, type BojunReferenceSelection } from '../BojunReferenceDialog/BojunReferenceDialog'
 import reportDesign from '../../reportDesign.module.css'
 import styles from './ReportTableConfigDialog.module.css'
 
@@ -35,6 +37,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   const [metadataReload, setMetadataReload] = useState(0)
   const [fieldSearch, setFieldSearch] = useState('')
   const [fieldPage, setFieldPage] = useState(0)
+  const [reference, setReference] = useState<BojunReferenceSelection | null>(null)
   const catalogRequest = useRef<AbortController | null>(null)
   const syncTimer = useRef<number | undefined>(undefined)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -137,6 +140,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
   }
   const fieldNames = (ids: string[]) => ids.map((id) => item?.columns.find((column) => String(column.id) === id)?.dbName || `#${id}`).join('、') || '未定义'
   return <Dialog open className={`${reportDesign.surface} ${styles.dialog}`} title={<span className={styles.dialogTitle}><Table2 aria-hidden="true" />{adding ? '选择业务表与字段' : `配置业务表 · ${label}`}</span>} description="可用表直接展示；主键、默认显示与关联定义沿用伯俊字典，确认后应用到当前报表。" closeLabel="关闭表配置" initialFocusRef={searchRef} onClose={onClose} footer={<><div className={styles.footerSummary} aria-live="polite"><strong>{item ? label : '正在读取业务表'}</strong><span>当前表 {outputs.length} 个输出字段 · 报表共 {spec.columns.length} 列</span></div><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!usable} onClick={save}>{adding ? '确认加入报表' : '应用配置'}</Button></>}>
+    {reference ? <BojunReferenceDialog client={client} datasourceId={datasourceId} selection={reference} onClose={() => setReference(null)} /> : null}
     <div className={styles.contextBar}><ol><li className={styles.current}><span>1</span>选择业务表</li><li><span>2</span>确认字段与关联</li><li><span>3</span>应用到报表</li></ol><span><Database aria-hidden="true" />沿用报表 Oracle 连接</span></div>
     <div className={styles.layout}>
       <aside className={styles.catalog} aria-label="可用业务表目录">
@@ -162,7 +166,7 @@ export function ReportTableConfigDialog({ client, datasourceId, initialSpec, ali
             const id = String(column.id)
             const allowed = Boolean(item && isBojunColumnAllowed(item.table, column))
             const detailAllowed = Boolean(item && isBojunColumnAllowed(item.table, column, true))
-            return <tr key={id}><td className={styles.checkboxCell}><label><input type="checkbox" aria-label={`选择输出字段 ${column.description || column.dbName}`} checked={selectedIds.has(id)} disabled={!usable || (!allowed && !selectedIds.has(id))} onChange={(event) => toggleFields([column], event.currentTarget.checked)} /></label></td><td>{column.description || column.dbName}</td><td><code>{column.dbName}</code></td><td><span className={styles.oracleType}>{column.oracleType || '—'}</span>{defaultIds.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : item?.table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : !column.isPhysical ? <span className={styles.keyBadge}>虚拟字段</span> : null}</td>{relation ? <><td className={styles.flagCell}><label><input type="checkbox" aria-label={`显示字段 ${column.description || column.dbName}`} checked={displayIds.includes(id)} disabled={!usable || (!allowed && !displayIds.includes(id))} onChange={(event) => updateRelationFields('displayColumnIds', id, event.currentTarget.checked)} /></label></td><td className={styles.flagCell}><label><input type="checkbox" aria-label={`详情字段 ${column.description || column.dbName}`} checked={relation.detailColumnIds.includes(id)} disabled={!usable || (!detailAllowed && !relation.detailColumnIds.includes(id))} onChange={(event) => updateRelationFields('detailColumnIds', id, event.currentTarget.checked)} /></label></td></> : null}</tr>
+            return <tr key={id}><td className={styles.checkboxCell}><label><input type="checkbox" aria-label={`选择输出字段 ${column.description || column.dbName}`} checked={selectedIds.has(id)} disabled={!usable || (!allowed && !selectedIds.has(id))} onChange={(event) => toggleFields([column], event.currentTarget.checked)} /></label></td><td><BojunReferenceField column={column} onInspect={(field, trigger) => setReference({ tableId, tableName: label, column: field, trigger })} /></td><td><code>{column.dbName}</code></td><td><span className={styles.oracleType}>{column.oracleType || '—'}</span>{defaultIds.includes(id) ? <span className={styles.defaultBadge}>默认显示</span> : item?.table.primaryKeys.includes(id) ? <span className={styles.keyBadge}>主键</span> : !column.isPhysical ? <span className={styles.keyBadge}>虚拟字段</span> : null}</td>{relation ? <><td className={styles.flagCell}><label><input type="checkbox" aria-label={`显示字段 ${column.description || column.dbName}`} checked={displayIds.includes(id)} disabled={!usable || (!allowed && !displayIds.includes(id))} onChange={(event) => updateRelationFields('displayColumnIds', id, event.currentTarget.checked)} /></label></td><td className={styles.flagCell}><label><input type="checkbox" aria-label={`详情字段 ${column.description || column.dbName}`} checked={relation.detailColumnIds.includes(id)} disabled={!usable || (!detailAllowed && !relation.detailColumnIds.includes(id))} onChange={(event) => updateRelationFields('detailColumnIds', id, event.currentTarget.checked)} /></label></td></> : null}</tr>
           })}</tbody></table>
           {lookup.loading && !visibleFields.length ? <FeedbackState kind="loading" title="正在读取与核验表字段…" /> : null}
           {!lookup.loading && !lookup.error && item && !matchingFields.length ? <FeedbackState kind="empty" title="没有匹配的字段" description="试试字段编码或业务名称。" /> : null}
