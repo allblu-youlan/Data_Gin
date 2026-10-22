@@ -23,6 +23,16 @@ test('restores exactly saved selection and titles without selecting newly added 
   assert.deepEqual(restored.issues, [])
 })
 
+test('restores blank saved titles from comments while preserving every nonempty custom title', () => {
+  const commented = metadata.map((column) => ({ ...column, comment: column.name === 'DOCNO' ? ' Oracle订单注释 ' : ' ' }))
+  const saved = { ...config, columns: [{ field: 'DOCNO', title: ' ' }, { field: 'CREATED_AT', title: '' }] }
+  const restored = restoreOracleExportConfig(saved, commented)
+  assert.equal(restored.columns[0].title, 'Oracle订单注释')
+  assert.equal(restored.columns[1].title, 'CREATED_AT')
+  assert.equal(restoreOracleExportConfig(config, commented).columns[0].title, '订单号')
+  assert.equal(restoreOracleExportConfig({ ...saved, columns: [{ field: 'DOCNO', title: 'DOCNO' }] }, commented).columns[0].title, 'DOCNO')
+})
+
 test('reports vanished selected and filter fields rather than widening saved exports', () => {
   const missing = { ...config, columns: [{ field: 'REMOVED', title: '已移除' }], filters: [{ field: 'OLD_DATE', op: 'gte', value: '2026-10-01' }] }
   const restored = restoreOracleExportConfig(missing, metadata)

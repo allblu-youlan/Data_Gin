@@ -1,5 +1,5 @@
 export type OracleExportTable = { owner: string; name: string; columnCount: number }
-export type OracleExportColumn = { name: string; position: number; dataType: string; nullable: boolean }
+export type OracleExportColumn = { name: string; position: number; dataType: string; nullable: boolean; comment?: string }
 export type OracleExportColumnDraft = OracleExportColumn & { selected: boolean; title: string }
 export type OracleExportFilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'empty' | 'not_empty'
 export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string }
@@ -35,8 +35,13 @@ export function parseOracleExportColumns(payload: unknown): OracleExportColumnDr
   return list(payload, 'columns').map((value) => {
     const item = record(value)
     if (!item || typeof item.name !== 'string' || !item.name || typeof item.position !== 'number' || typeof item.dataType !== 'string' || typeof item.nullable !== 'boolean') throw new Error('Oracle 字段目录格式不完整，请重试。')
-    return { name: item.name, position: item.position, dataType: item.dataType, nullable: item.nullable, selected: true, title: item.name }
+    const column = { name: item.name, position: item.position, dataType: item.dataType, nullable: item.nullable, comment: typeof item.comment === 'string' ? item.comment : '' }
+    return { ...column, selected: true, title: oracleExportDefaultColumnTitle(column) }
   }).sort((left, right) => left.position - right.position)
+}
+
+export function oracleExportDefaultColumnTitle(column: Pick<OracleExportColumn, 'name' | 'comment'>) {
+  return column.comment?.trim() || column.name
 }
 
 export function oracleExportFilterNeedsValue(op: OracleExportFilterOperator) {
@@ -76,7 +81,7 @@ export function buildOracleExportRequest(table: OracleExportTable, columns: Orac
   return {
     owner: table.owner,
     tableName: table.name,
-    columns: selected.map((column) => ({ field: column.name, title: column.title.trim() || column.name })),
+    columns: selected.map((column) => ({ field: column.name, title: column.title.trim() || oracleExportDefaultColumnTitle(column) })),
     filters: filters.map(({ field, op, value }) => ({ field, op, value: oracleExportFilterNeedsValue(op) ? normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '' })),
   }
 }

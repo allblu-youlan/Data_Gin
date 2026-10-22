@@ -32,6 +32,18 @@ test('restores blank column titles and retains zero-prefixed text filter values'
   assert.equal(request.filters[0].value, '00123')
 })
 
+test('defaults titles to trimmed Oracle comments and falls back for blank or absent comments', () => {
+  const columns = parseOracleExportColumns({ columns: [
+    { ...rawColumns[1], comment: ' 订单编号 ' },
+    { ...rawColumns[0], comment: ' \n ' },
+    { name: 'LEGACY', position: 3, dataType: 'VARCHAR2', nullable: true },
+  ] })
+  assert.deepEqual(columns.map(({ title }) => title), ['订单编号', 'TOTAL', 'LEGACY'])
+  const cleared = columns.map((column) => ({ ...column, title: ' ' }))
+  assert.deepEqual(buildOracleExportRequest(table, cleared, []).columns, [{ field: 'DOCNO', title: '订单编号' }, { field: 'TOTAL', title: 'TOTAL' }, { field: 'LEGACY', title: 'LEGACY' }])
+  assert.equal(buildOracleExportRequest(table, [{ ...columns[0], title: '自定义订单号' }], []).columns[0].title, '自定义订单号')
+})
+
 test('drops stale comparison text when changing a filter to empty or not empty', () => {
   const columns = parseOracleExportColumns({ columns: rawColumns })
   const request = buildOracleExportRequest(table, columns, [{ id: 1, field: 'TOTAL', op: 'empty', value: '100' }, { id: 2, field: 'DOCNO', op: 'not_empty', value: 'old' }])

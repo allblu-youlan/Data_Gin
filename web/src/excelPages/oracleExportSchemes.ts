@@ -1,5 +1,5 @@
 import type { ExcelPageClient } from './useExcelUploads'
-import { oracleExportDateInputValue, oracleExportFilterInputType, oracleExportFilterOperators, type OracleExportColumnDraft, type OracleExportFilter, type OracleExportFilterDraft } from './oracleExportConfig.js'
+import { oracleExportDateInputValue, oracleExportDefaultColumnTitle, oracleExportFilterInputType, oracleExportFilterOperators, type OracleExportColumnDraft, type OracleExportFilter, type OracleExportFilterDraft } from './oracleExportConfig.js'
 
 export type OracleExportConfig = { owner: string; tableName: string; columns: Array<{ field: string; title: string }>; filters: OracleExportFilter[] }
 export type OracleExportScheme = { id: number; name: string; operation: 'oracle_export'; config: OracleExportConfig; updatedAt: number }
@@ -62,7 +62,7 @@ export function restoreOracleExportConfig(config: OracleExportConfig, metadata: 
   const available = new Set(metadata.map((column) => column.name))
   const missingColumns = config.columns.filter((column) => !available.has(column.field)).map((column) => column.field)
   const missingFilters = config.filters.filter((filter) => !available.has(filter.field)).map((filter) => filter.field)
-  const columns = metadata.map((column) => ({ ...column, selected: config.columns.length === 0 || selected.has(column.name), title: selected.get(column.name)?.trim() || column.name }))
+  const columns = metadata.map((column) => ({ ...column, selected: config.columns.length === 0 || selected.has(column.name), title: selected.get(column.name)?.trim() || oracleExportDefaultColumnTitle(column) }))
   const filters: OracleExportFilterDraft[] = config.filters.map((filter, index) => ({ ...filter, id: index + 1, value: oracleExportFilterInputType(metadata.find((column) => column.name === filter.field)?.dataType ?? '') === 'datetime-local' ? oracleExportDateInputValue(filter.value) : filter.value }))
   const issues = [...(missingColumns.length ? [`导出字段已失效：${missingColumns.join('、')}`] : []), ...(missingFilters.length ? [`筛选字段已失效：${[...new Set(missingFilters)].join('、')}`] : [])]
   return { columns, filters, issues }
