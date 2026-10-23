@@ -85,8 +85,8 @@ func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndFixedIdentif
 		if len(arguments) > oracleExcelImportMaxBinds || len(arguments) > oracleExcelImportMaxBatchColumns {
 			t.Fatalf("unbounded batch: binds=%d", len(arguments))
 		}
-		if !strings.HasPrefix(state.statements[batchIndex], "INSERT ALL ") || strings.Contains(state.statements[batchIndex], "'001'") {
-			t.Fatalf("batch did not use bound INSERT ALL: %s", state.statements[batchIndex])
+		if !strings.HasPrefix(state.statements[batchIndex], "BEGIN INSERT INTO ") || strings.Contains(state.statements[batchIndex], "'001'") {
+			t.Fatalf("batch did not use bound independent inserts: %s", state.statements[batchIndex])
 		}
 		for index := 0; index < len(arguments); index += 3 {
 			if arguments[index].Value != fmt.Sprintf("%03d", next) || arguments[index+2].Value != "001" {

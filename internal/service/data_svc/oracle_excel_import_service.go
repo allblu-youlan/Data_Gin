@@ -146,8 +146,7 @@ func executeOracleExcelImportOnConnection(ctx context.Context, connection oracle
 const (
 	oracleExcelImportBatchRows = 200
 	oracleExcelImportMaxBinds  = 5000
-	// Traditional Oracle INSERT ALL statements allow at most 999 target
-	// columns across all INTO clauses, including repetitions of one table.
+	// Keep batches within the existing conservative 999-column budget.
 	oracleExcelImportMaxBatchColumns = 999
 )
 
@@ -156,13 +155,15 @@ func oracleExcelImportBatchSize(width int) int {
 }
 
 func oracleExcelImportBatchStatement(single string, width, rows int) string {
-	into := strings.TrimPrefix(single[:strings.LastIndex(single, " VALUES (")], "INSERT ")
+	insert := single[:strings.LastIndex(single, " VALUES (")]
 	var statement strings.Builder
-	statement.Grow(32 + rows*(len(into)+width*8+12))
-	statement.WriteString("INSERT ALL")
+	statement.Grow(32 + rows*(len(insert)+width*8+12))
+	// Separate INSERT statements evaluate identity/sequence defaults per row.
+	// INSERT ALL ... SELECT 1 FROM DUAL can reuse one sequence value.
+	statement.WriteString("BEGIN")
 	for row := 0; row < rows; row++ {
 		statement.WriteByte(' ')
-		statement.WriteString(into)
+		statement.WriteString(insert)
 		statement.WriteString(" VALUES (")
 		for column := 0; column < width; column++ {
 			if column > 0 {
@@ -170,9 +171,9 @@ func oracleExcelImportBatchStatement(single string, width, rows int) string {
 			}
 			fmt.Fprintf(&statement, ":%d", row*width+column+1)
 		}
-		statement.WriteByte(')')
+		statement.WriteString(");")
 	}
-	statement.WriteString(" SELECT 1 FROM DUAL")
+	statement.WriteString(" END;")
 	return statement.String()
 }
 
