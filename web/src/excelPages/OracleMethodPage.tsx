@@ -14,10 +14,11 @@ import { ExcelEditor, ExcelEditorSection, ExcelWorkspace, ExcelWorkspacePage } f
 import { useExcelJobs } from './useExcelJobs'
 import { useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { readList, readObject } from './excelPageSupport'
-import { emptyImportConfig, emptyProcedureConfig, operationLabels, operationPaths, type OracleMethodConfig, type OracleMethodOperation, type OperationScheme } from './excelOperations'
+import { emptyImportConfig, emptyProcedureConfig, normalizeOracleImportConfig, operationLabels, operationPaths, type OracleMethodConfig, type OracleMethodOperation, type OperationScheme } from './excelOperations'
 import styles from './ExcelOperations.module.css'
 
 type Props = { operation: OracleMethodOperation; client: ExcelPageClient; token: string; permissions: string[]; refreshVersion: number; setLoading: (value: boolean) => void; setResult: (value: ClientResponse | null) => void; onNavigateToJobs: () => void }
+function normalizeMethodConfig(config: OracleMethodConfig): OracleMethodConfig { return config.operation === 'oracle_import' ? normalizeOracleImportConfig(config) : config }
 export function OracleMethodPage({ operation, client, token, permissions, refreshVersion, setLoading, setResult, onNavigateToJobs }: Props) {
  const [schemes, setSchemes] = useState<OperationScheme<OracleMethodConfig>[]>([])
  const [selected, setSelected] = useState(0)
@@ -37,13 +38,13 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
  const load = useCallback(async (signal?: AbortSignal) => {
   setReading(true)
   const response = await client(operationPaths[operation], { method: 'GET', signal, showResult: false, silentLoading: true })
-  if (!signal?.aborted) { if (response.ok) { setSchemes(readList<OperationScheme<OracleMethodConfig>>(response, 'schemes')); setError('') } else setError(response.error?.message || '方法读取失败'); setReading(false) }
+  if (!signal?.aborted) { if (response.ok) { setSchemes(readList<OperationScheme<OracleMethodConfig>>(response, 'schemes').map(item => ({ ...item, config: normalizeMethodConfig(item.config) }))); setError('') } else setError(response.error?.message || '方法读取失败'); setReading(false) }
  }, [client, operation])
  useEffect(() => { const request = new AbortController(); void load(request.signal); return () => request.abort() }, [load, refreshVersion])
  const running = Boolean(jobs.job && ['pending', 'running'].includes(jobs.job.status))
  const saved = schemes.find(item => item.id === selected)
  const unchanged = saved?.name === name && JSON.stringify(saved.config) === JSON.stringify(config)
- function select(item: OperationScheme<OracleMethodConfig>) { setSelected(item.id); setName(item.name); setConfig(structuredClone(item.config)); setError(''); setMessage('') }
+ function select(item: OperationScheme<OracleMethodConfig>) { setSelected(item.id); setName(item.name); setConfig(normalizeMethodConfig(structuredClone(item.config))); setError(''); setMessage('') }
  function reset() { setSelected(0); setName(''); setConfig(operation === 'oracle_import' ? emptyImportConfig() : emptyProcedureConfig()); setError(''); setMessage('') }
  async function save(event: FormEvent) {
   event.preventDefault()
@@ -51,7 +52,7 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
   if (existing && !window.confirm(`覆盖已保存的方法「${existing.name}」？`)) return
   setBusy(true); setError(''); setMessage('')
   try {
-   const response = await client(operationPaths[operation], { method: 'POST', body: { name, config }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 60_000 })
+   const response = await client(operationPaths[operation], { method: 'POST', body: { name, config: normalizeMethodConfig(config) }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 60_000 })
    if (!response.ok) throw new Error(response.error?.message || '保存方法失败')
    const item = readObject<OperationScheme<OracleMethodConfig>>(response, 'scheme')
    if (!item) throw new Error('服务未返回保存后的方法')

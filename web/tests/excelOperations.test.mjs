@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { defaultWorkflowSteps, emptyImportConfig, newWorkflowStep, operationLabels, operationPaths, prepareWorkflowSteps, workflowIssues, workflowNeedsUploads, workflowSourceIssue, workflowUploadIssues } from '../.test-dist/excelPages/excelOperations.js'
+import { defaultWorkflowSteps, emptyImportConfig, newWorkflowStep, normalizeOracleImportConfig, operationLabels, operationPaths, prepareWorkflowSteps, workflowIssues, workflowNeedsUploads, workflowSourceIssue, workflowUploadIssues } from '../.test-dist/excelPages/excelOperations.js'
 import { applyOracleProcedureSignature, oracleProcedureIdentity, oracleProcedureQualifiedName, oracleProcedureResultLimit, parseOracleProcedureArguments, parseOracleProcedures } from '../.test-dist/excelPages/oracleProcedureConfig.js'
 
 test('four operation workflow can pass matched workbook to Oracle import', () => {
@@ -34,6 +34,17 @@ test('new Oracle import methods retain specified-sheet behavior until all sheets
  assert.equal(config.sheetName, 'Sheet1')
  assert.equal(config.allSheets, false)
  assert.deepEqual(config.fixedIdentifier, { enabled: false, field: '', value: '' })
+})
+
+test('Oracle import configuration retains only automatic identifier settings and ignores legacy or runtime values', () => {
+ const legacy = { ...emptyImportConfig(), allSheets: true, fixedIdentifier: { enabled: true, field: 'BATCH_NO', value: '001' } }
+ const normalized = normalizeOracleImportConfig(legacy)
+ assert.deepEqual(normalized.fixedIdentifier, { enabled: true, field: 'BATCH_NO', value: '' })
+ assert.equal(normalized.allSheets, true)
+ assert.equal(legacy.fixedIdentifier.value, '001')
+ assert.deepEqual(normalizeOracleImportConfig({ ...normalized, fixedIdentifier: { ...normalized.fixedIdentifier, value: '42' } }).fixedIdentifier, normalized.fixedIdentifier)
+ assert.deepEqual(normalizeOracleImportConfig({ ...legacy, fixedIdentifier: { enabled: false, field: 'BATCH_NO', value: 'old' } }).fixedIdentifier, { enabled: false, field: 'BATCH_NO', value: '' })
+ assert.deepEqual(normalizeOracleImportConfig({ ...legacy, fixedIdentifier: undefined }).fixedIdentifier, { enabled: false, field: '', value: '' })
 })
 
 test('Excel write methods use their existing scheme endpoint and independent upload source', () => {

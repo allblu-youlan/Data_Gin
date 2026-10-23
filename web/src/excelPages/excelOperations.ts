@@ -18,6 +18,9 @@ export const operationPaths: Record<ExcelOperation, string> = {
  oracle_export: '/v1/excel-match-jobs/oracle-export-schemes',
 }
 export const emptyImportConfig = (): OracleImportConfig => ({ operation: 'oracle_import', owner: '', tableName: '', sheetName: 'Sheet1', allSheets: false, headerRow: 1, mappings: [{ excelColumn: '', field: '' }], fixedIdentifier: { enabled: false, field: '', value: '' } })
+export function normalizeOracleImportConfig(config: OracleImportConfig) {
+ return { ...config, fixedIdentifier: { enabled: config.fixedIdentifier?.enabled ?? false, field: config.fixedIdentifier?.field ?? '', value: '' } }
+}
 export const emptyProcedureConfig = (): ProcedureConfig => ({ operation: 'oracle_procedure', owner: '', packageName: '', procedureName: '', parameters: [], success: { parameter: '', operator: 'eq', value: '' } })
 export const defaultWorkflowSteps = (): WorkflowEditorStep[] => prepareWorkflowSteps([
  { operation: 'export_match', schemeId: 0, source: 'upload' },
