@@ -3,6 +3,15 @@ import type { ProcedureConfig, ProcedureParameter } from './excelOperations'
 export type OracleProcedureSummary = { owner: string; packageName: string; name: string; overload: string; argumentCount: number }
 export type OracleProcedureArgument = { name: string; position: number; direction: ProcedureParameter['direction']; dataType: string; defaulted: boolean }
 export type OracleProcedureRef = Pick<OracleProcedureSummary, 'owner' | 'packageName' | 'name'>
+export const oracleProcedureResultLimit = 100
+
+export function oracleProcedureIdentity(procedure: OracleProcedureRef): string {
+ return [procedure.owner, procedure.packageName, procedure.name].map(value => value.trim().toUpperCase()).join('\u001f')
+}
+
+export function oracleProcedureQualifiedName(procedure: OracleProcedureRef): string {
+ return [procedure.owner, procedure.packageName, procedure.name].map(value => value.trim()).filter(Boolean).join('.')
+}
 
 function record(value: unknown): Record<string, unknown> | null {
  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -33,7 +42,7 @@ export function parseOracleProcedureArguments(payload: unknown): OracleProcedure
 }
 
 export function applyOracleProcedureSignature(config: ProcedureConfig, procedure: OracleProcedureRef, argumentsList: readonly OracleProcedureArgument[]): ProcedureConfig {
- const sameProcedure = config.owner.trim().toUpperCase() === procedure.owner.toUpperCase() && config.packageName.trim().toUpperCase() === procedure.packageName.toUpperCase() && config.procedureName.trim().toUpperCase() === procedure.name.toUpperCase()
+ const sameProcedure = oracleProcedureIdentity({ owner: config.owner, packageName: config.packageName, name: config.procedureName }) === oracleProcedureIdentity(procedure)
  const existing = new Map((sameProcedure ? config.parameters : []).map(parameter => [parameter.name.trim().toUpperCase(), parameter]))
  const parameters = argumentsList.flatMap(argument => {
   const previous = existing.get(argument.name.toUpperCase())

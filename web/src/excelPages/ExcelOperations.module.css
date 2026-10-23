@@ -15,6 +15,14 @@
 .methodList { display: grid; gap: var(--space-2); }
 .method { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-canvas); }
 .method button:first-child { flex: 1; justify-content: start; min-width: 0; overflow-wrap: anywhere; text-align: left; white-space: normal; }
+.procedureSelection { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-4); border: 1px solid var(--color-border-strong); border-left: 3px solid var(--color-brand); border-radius: var(--radius-panel); background: var(--color-surface-subtle); }
+.procedureResults { display: flex; flex-direction: column; gap: var(--space-2); max-height: 480px; overflow-y: auto; padding: var(--space-1); margin: 0; list-style: none; scrollbar-gutter: stable; }
+.procedureResult { width: 100%; height: auto; min-height: 76px; justify-content: start; align-items: start; padding: var(--space-3); white-space: normal; text-align: left; }
+.procedureResult[aria-pressed='true'] { outline: 2px solid var(--color-brand); outline-offset: -2px; }
+.procedureResult > svg { margin-top: var(--space-1); }
+.procedureResultContent { display: flex; flex: 1; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.procedureName { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.procedureMeta { color: var(--color-text-secondary); font-size: 12px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere; }
 .table { width: 100%; overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
 .table table { min-width: 600px; }
 .table input, .table select { min-width: 120px; }

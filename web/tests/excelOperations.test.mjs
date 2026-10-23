@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultWorkflowSteps, emptyImportConfig, newWorkflowStep, operationLabels, operationPaths, prepareWorkflowSteps, workflowIssues, workflowNeedsUploads, workflowSourceIssue, workflowUploadIssues } from '../.test-dist/excelPages/excelOperations.js'
-import { applyOracleProcedureSignature, parseOracleProcedureArguments, parseOracleProcedures } from '../.test-dist/excelPages/oracleProcedureConfig.js'
+import { applyOracleProcedureSignature, oracleProcedureIdentity, oracleProcedureQualifiedName, oracleProcedureResultLimit, parseOracleProcedureArguments, parseOracleProcedures } from '../.test-dist/excelPages/oracleProcedureConfig.js'
 
 test('four operation workflow can pass matched workbook to Oracle import', () => {
  const steps = defaultWorkflowSteps().map((step, index) => ({ ...step, schemeId: index + 1 }))
@@ -150,4 +150,14 @@ test('switching to a packaged procedure clears the previous procedure input and 
  assert.equal(restored.procedureName, 'BUILD_WEEKLY')
  assert.equal(restored.parameters[0].value, '')
  assert.deepEqual(restored.success, { parameter: '', operator: 'eq', value: '' })
+})
+
+test('Oracle selection identity distinguishes owners and packages and keeps long qualified names intact', () => {
+ assert.equal(oracleProcedureResultLimit, 100)
+ assert.equal(oracleProcedureIdentity(procedure), oracleProcedureIdentity({ ...procedure, owner: ' yl_dbs ', name: procedure.name.toLowerCase() }))
+ assert.notEqual(oracleProcedureIdentity(procedure), oracleProcedureIdentity({ ...procedure, packageName: 'PKG_REPORT' }))
+ assert.notEqual(oracleProcedureIdentity(procedure), oracleProcedureIdentity({ ...procedure, owner: 'OTHER' }))
+ assert.equal(oracleProcedureQualifiedName(procedure), 'YL_DBS.ADS_SALES_PRODUCT_REPORT_UPDATE_V3')
+ const name = 'VERY_LONG_PROCEDURE_NAME_'.repeat(5)
+ assert.equal(oracleProcedureQualifiedName({ owner: 'YL_DBS', packageName: 'PKG_REPORT', name }), `YL_DBS.PKG_REPORT.${name}`)
 })

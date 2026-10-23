@@ -2,9 +2,11 @@ package data_ctrl
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"gin-biz-web-api/internal/msg"
+	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/model"
@@ -34,7 +36,11 @@ func (ctrl *ExcelMatchJobController) SaveOperationScheme(c *gin.Context) {
 	scheme, err := data_svc.NewExcelOperationSchemeService().Save(c.Request.Context(), input.Name, c.Param("operation"), input.Config)
 	if err != nil {
 		zap.L().Error("Oracle operation scheme save failed", zap.Error(err))
-		c.JSON(400, msg.ErrResponseStr("保存失败，请检查名称、Oracle 表字段、过程参数和成功标志配置"))
+		message := "保存失败，请检查名称、Oracle 表字段、过程参数和成功标志配置"
+		if c.Param("operation") == data_svc.ExcelOperationOracleProcedure && errors.Is(err, reportoracle.ErrMetadataMismatch) {
+			message = "当前 Oracle 连接中未找到该存储过程，请从查询结果重新选择并读取参数，核对 Oracle 用户、包名和账号访问权限"
+		}
+		c.JSON(400, msg.ErrResponseStr(message))
 		return
 	}
 	c.JSON(200, msg.SuccessResponse("方法已保存", &map[string]any{"scheme": scheme}))
