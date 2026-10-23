@@ -100,8 +100,8 @@ export function OracleExportPage({ client, token, loading, refreshVersion, canEx
         {sheets.map((sheet) => <OracleExportSheetEditor key={sheet.id} id={sheet.id} active={activeID === sheet.id} client={client} initial={sheet.initial} sheetName={sheet.sheetName} disabled={busy} refreshVersion={refreshVersion} onNameChange={onNameChange} onTableSelected={onTableSelected} onSnapshot={onSnapshot} />)}
       </ExcelEditor>
     </ExcelWorkspace>
-    <Section title="多文件拆分规则" description="每个 Sheet 每份文件最多 100 万行；有多份时以 ZIP 下载，结果保留 24 小时。">
-      <div className={styles.stack}><p className={styles.hint}>超过 100 万行的表按相同片序号写入各份 Excel；不超过 100 万行的表会在每份 Excel 中完整复制。大表后续无数据时，该 Sheet 保留表头。总文件数取各表分片数的最大值。</p><p className={styles.hint}>例如：A 表 150 万行、B 表 20 万行，将生成 2 份 Excel。A Sheet 分别为 100 万行和 50 万行，B Sheet 两份均为完整 20 万行。</p></div>
+    <Section title="Sheet 均分规则" description="所有数据写入同一个 XLSX 文件，每个 Sheet 最多 100 万行，结果保留 24 小时。">
+      <div className={styles.stack}><p className={styles.hint}>每张表独立处理：超过 100 万行时，按“行数 ÷ 100 万，向上取整”确定 Sheet 数，再均分数据；有余数时，前几个 Sheet 各多 1 行。不超过 100 万行的表只保留一个 Sheet。</p><p className={styles.hint}>例如：120 万行均分为 2 个各 60 万行的 Sheet；A 表 150 万行、B 表 20 万行，会在同一个文件中生成 A_1、A_2（各 75 万行）和 B（20 万行）。拆分后的名称使用原 Sheet 名加序号，并自动截断和避开重名。</p></div>
     </Section>
     {submitError && <FeedbackState kind="error" title="导出任务未创建" description={submitError} />}
     <div className={styles.submit}><p>共 {sheets.length} 个 Sheet。{configIssue || '全部 Sheet 已就绪，可保存配置或创建导出任务。'}</p><button type="button" disabled={!canExecute || busy || Boolean(configIssue)} onClick={() => void createExport()}><Download aria-hidden="true" />{submitting ? '正在创建…' : '创建导出任务'}</button></div>
