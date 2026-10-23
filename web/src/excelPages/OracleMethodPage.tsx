@@ -87,7 +87,7 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
       <TextField label="方法名称" required maxLength={100} value={name} disabled={busy || !canManage} onChange={e => setName(e.target.value)} placeholder="例如：订单暂存表导入…" />
       <div className={styles.actions}><Button type="button" variant="outline" disabled={busy} onClick={reset}><Plus aria-hidden="true" />新建方法</Button><Button type="submit" disabled={busy || !canManage}><Save aria-hidden="true" />{busy ? '处理中…' : '保存方法'}</Button></div>
      </div>
-     {config.operation === 'oracle_import' ? <OracleImportEditor config={config} onChange={setConfig} disabled={busy || !canManage} client={client} /> : <OracleProcedureEditor config={config} onChange={setConfig} disabled={busy || !canManage} />}
+     {config.operation === 'oracle_import' ? <OracleImportEditor config={config} onChange={setConfig} disabled={busy || !canManage} client={client} /> : <OracleProcedureEditor config={config} onChange={setConfig} disabled={busy || !canManage} client={client} />}
     </FieldGroup>
     <p className={styles.note}>{canManage ? '同名方法保存时将覆盖原配置。' : '当前账号可查看，配置保存需要 Excel 管理权限。'}</p>
    </form>

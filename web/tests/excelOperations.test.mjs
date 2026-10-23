@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultWorkflowSteps, emptyImportConfig, newWorkflowStep, operationLabels, operationPaths, prepareWorkflowSteps, workflowIssues, workflowNeedsUploads, workflowSourceIssue, workflowUploadIssues } from '../.test-dist/excelPages/excelOperations.js'
+import { applyOracleProcedureSignature, parseOracleProcedureArguments, parseOracleProcedures } from '../.test-dist/excelPages/oracleProcedureConfig.js'
 
 test('four operation workflow can pass matched workbook to Oracle import', () => {
  const steps = defaultWorkflowSteps().map((step, index) => ({ ...step, schemeId: index + 1 }))
@@ -99,4 +100,54 @@ test('each upload step needs its own files and keeps ownership after reordering'
  assert.match(workflowUploadIssues(reordered, files).join(' '), /第 1 步.*Excel 写入/)
  assert.deepEqual(workflowUploadIssues(reordered, { ...files, write: [{ size: 20 }, { size: 30 }] }), [])
  assert.match(workflowUploadIssues(steps, { ...files, write: [{ size: 0 }] }).join(' '), /第 2 步/)
+})
+
+const procedure = { owner: 'YL_DBS', packageName: '', name: 'ADS_SALES_PRODUCT_REPORT_UPDATE_V3', overload: '', argumentCount: 4 }
+const procedureConfig = { operation: 'oracle_procedure', owner: procedure.owner, packageName: '', procedureName: procedure.name, parameters: [], success: { operator: 'eq', parameter: '', value: '' } }
+const procedureArguments = [
+ { name: 'R_MESSAGE', position: 3, direction: 'OUT', dataType: 'VARCHAR2', defaulted: false },
+ { name: 'P_COUNT', position: 1, direction: 'IN', dataType: 'NUMBER', defaulted: false },
+ { name: 'P_TEXT', position: 2, direction: 'IN/OUT', dataType: 'VARCHAR2', defaulted: false },
+ { name: 'P_DEFAULT', position: 4, direction: 'IN', dataType: 'VARCHAR2', defaulted: true },
+]
+
+test('Oracle procedure metadata parses the Excel endpoints and normalizes argument direction and order', () => {
+ assert.deepEqual(parseOracleProcedures({ data: { items: [procedure] } }), [procedure])
+ const argumentsList = parseOracleProcedureArguments({ data: { items: procedureArguments } })
+ assert.deepEqual(argumentsList.map(argument => [argument.name, argument.direction]), [['P_COUNT', 'IN'], ['P_TEXT', 'IN OUT'], ['R_MESSAGE', 'OUT'], ['P_DEFAULT', 'IN']])
+ assert.deepEqual(parseOracleProcedureArguments({ items: [] }), [])
+ assert.throws(() => parseOracleProcedures({ data: {} }), /响应不完整/)
+ assert.throws(() => parseOracleProcedureArguments({ items: [{ name: 'R_MESSAGE' }] }), /参数格式/)
+})
+
+test('reported empty procedure config receives R_MESSAGE output and nullable required inputs while retaining Oracle defaults', () => {
+ const config = applyOracleProcedureSignature(procedureConfig, procedure, parseOracleProcedureArguments({ items: procedureArguments }))
+ assert.deepEqual(config.parameters, [
+  { name: 'P_COUNT', direction: 'IN', dataType: 'NUMBER', value: '' },
+  { name: 'P_TEXT', direction: 'IN OUT', dataType: 'VARCHAR2', value: '' },
+  { name: 'R_MESSAGE', direction: 'OUT', dataType: 'VARCHAR2', value: '' },
+ ])
+ assert.deepEqual(JSON.parse(JSON.stringify(config)).parameters.map(parameter => parameter.value), ['', '', ''])
+ assert.deepEqual(procedureConfig.parameters, [])
+})
+
+test('rereading the same procedure retains compatible input values, explicit optional nulls and valid success conditions', () => {
+ const config = { ...procedureConfig, parameters: [
+  { name: 'p_count', direction: 'IN', dataType: 'NUMBER', value: '00123' },
+  { name: 'P_TEXT', direction: 'IN OUT', dataType: 'VARCHAR2', value: '' },
+  { name: 'P_DEFAULT', direction: 'IN', dataType: 'VARCHAR2', value: '' },
+ ], success: { parameter: 'R_MESSAGE', operator: 'eq', value: '' } }
+ const restored = applyOracleProcedureSignature(config, procedure, parseOracleProcedureArguments({ items: procedureArguments }))
+ assert.equal(restored.parameters[0].value, '00123')
+ assert.equal(restored.parameters.find(parameter => parameter.name === 'P_DEFAULT').value, '')
+ assert.deepEqual(restored.success, config.success)
+})
+
+test('switching to a packaged procedure clears the previous procedure input and success condition', () => {
+ const config = { ...procedureConfig, parameters: [{ name: 'P_COUNT', direction: 'IN', dataType: 'NUMBER', value: '9' }], success: { parameter: 'R_MESSAGE', operator: 'contains', value: 'OK' } }
+ const restored = applyOracleProcedureSignature(config, { ...procedure, packageName: 'PKG_REPORT', name: 'BUILD_WEEKLY' }, parseOracleProcedureArguments({ items: procedureArguments }))
+ assert.equal(restored.packageName, 'PKG_REPORT')
+ assert.equal(restored.procedureName, 'BUILD_WEEKLY')
+ assert.equal(restored.parameters[0].value, '')
+ assert.deepEqual(restored.success, { parameter: '', operator: 'eq', value: '' })
 })

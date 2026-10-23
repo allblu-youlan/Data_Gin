@@ -165,6 +165,8 @@ func apiData(api *gin.RouterGroup) {
 		excelMatchJobGroup.GET("/models", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListModels)
 		excelMatchJobGroup.GET("/oracle-tables", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListOracleTables)
 		excelMatchJobGroup.GET("/oracle-columns", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListOracleColumns)
+		excelMatchJobGroup.GET("/oracle-procedures", middleware.RequirePermission(model.PermissionExcelRead), middleware.LimitRoute("120-M"), excelMatchJobCtrl.ListOracleProcedures)
+		excelMatchJobGroup.GET("/oracle-procedure-signature", middleware.RequirePermission(model.PermissionExcelRead), middleware.LimitRoute("120-M"), excelMatchJobCtrl.GetOracleProcedureSignature)
 		excelMatchJobGroup.POST("/oracle-exports", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.CreateOracleExport)
 		excelMatchJobGroup.GET("/oracle-export-schemes", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListOracleExportSchemes)
 		excelMatchJobGroup.POST("/oracle-export-schemes", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.SaveOracleExportScheme)
