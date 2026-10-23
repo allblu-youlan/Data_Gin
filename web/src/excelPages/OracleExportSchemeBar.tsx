@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { Dialog, FeedbackState, Section } from '../ui'
+import { Dialog, FeedbackState } from '../ui'
+import { ExcelWorkspace } from './ExcelWorkspace'
 import { deleteOracleExportScheme, getOracleExportSchemes, saveOracleExportScheme, type OracleExportConfig, type OracleExportScheme } from './oracleExportSchemes'
 import type { ExcelPageClient } from './useExcelUploads'
 import styles from './OracleExportPage.module.css'
@@ -103,7 +104,7 @@ export function OracleExportSchemeBar({ client, canManage, disabled, canSave, re
   }
 
   const blocked = disabled || busy || listLoading
-  return <Section title="导出配置" description={active ? `当前配置：${active.name}。修改表单后可更新当前配置，或另存为新配置。` : '保存各 Sheet 的名称、数据表、导出字段、Excel 列名和筛选条件，便于下次直接加载。'}>
+  return <ExcelWorkspace className={styles.configuration} title="导出配置" description={active ? `当前配置：${active.name}。修改表单后可更新当前配置，或另存为新配置。` : '保存各 Sheet 的名称、数据表、导出字段、Excel 列名和筛选条件，便于下次直接加载。'}>
     <div className={styles.stack}>
       <div className={styles.schemeBar}>
         <label>已保存配置<select aria-label="已保存导出配置" value={selectedID} disabled={blocked || listLoading} onChange={(event) => setSelectedID(event.currentTarget.value)}><option value="">{listLoading ? '正在读取配置…' : '选择已保存配置'}</option>{schemes.map((scheme) => <option key={scheme.id} value={scheme.id}>{scheme.name} · {scheme.config.sheets.length} 个 Sheet</option>)}</select></label>
@@ -113,12 +114,12 @@ export function OracleExportSchemeBar({ client, canManage, disabled, canSave, re
       {error && !saveOpen && !pendingDelete && <FeedbackState kind="error" title="导出配置操作未完成" description={error} action={<button type="button" disabled={blocked || listLoading} onClick={() => setRevision((value) => value + 1)}>刷新配置列表</button>} />}
       {!canManage && <p className={styles.hint}>当前账号可加载配置，保存和删除需要 Excel 配置管理权限。</p>}
     </div>
-    <Dialog open={saveOpen} className={styles.page} title={overwrite ? '确认覆盖已有配置' : '保存导出配置'} closeDisabled={busy} onClose={() => { setSaveOpen(false); setOverwrite(null); setError('') }}>
+    <Dialog open={saveOpen} className={`${styles.page} ${styles.configuration}`} title={overwrite ? '确认覆盖已有配置' : '保存导出配置'} closeDisabled={busy} onClose={() => { setSaveOpen(false); setOverwrite(null); setError('') }}>
       {overwrite ? <div className={styles.stack}><p>已存在同名配置“{overwrite.name}”。确认后将覆盖该配置全部 Sheet 的名称、数据表、字段、列名和筛选条件。</p><div className={styles.actions}><button type="button" disabled={busy} onClick={() => setOverwrite(null)}>返回修改名称</button><button type="button" disabled={busy} onClick={() => void save(overwrite.name, overwrite.config)}>确认覆盖配置</button></div></div> : <form className={styles.stack} onSubmit={submitSave}><label>配置名称<input aria-label="导出配置名称" value={name} maxLength={100} required onChange={(event) => setName(event.currentTarget.value)} disabled={busy} /></label><p className={styles.hint}>只保存当前配置，不执行导出。</p><div className={styles.actions}><button type="submit" disabled={busy}>{busy ? '保存中…' : '保存配置'}</button></div></form>}
       {error && <FeedbackState kind="error" title="配置未保存" description={error} />}
     </Dialog>
-    <Dialog open={Boolean(pendingDelete)} className={styles.page} title="删除导出配置" closeDisabled={busy} onClose={() => { setPendingDelete(null); setError('') }}>
+    <Dialog open={Boolean(pendingDelete)} className={`${styles.page} ${styles.configuration}`} title="删除导出配置" closeDisabled={busy} onClose={() => { setPendingDelete(null); setError('') }}>
       <div className={styles.stack}><p>确认删除配置“{pendingDelete?.name}”？已有导出任务和当前表单内容会保留。</p>{error && <FeedbackState kind="error" title="配置未删除" description={error} />}<div className={styles.actions}><button type="button" disabled={busy} onClick={() => setPendingDelete(null)}>取消</button><button type="button" disabled={busy} onClick={() => void confirmDelete()}>{busy ? '删除中…' : '确认删除配置'}</button></div></div>
     </Dialog>
-  </Section>
+  </ExcelWorkspace>
 }

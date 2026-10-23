@@ -3,6 +3,7 @@ import { Download, Plus, Trash2 } from 'lucide-react'
 import type { ClientResponse } from '../api/client'
 import { FeedbackState, PageCanvas, PageHeader, Section } from '../ui'
 import { ExcelJobDetailContent } from './ExcelMatchPageParts'
+import { ExcelEditor, ExcelEditorSection, ExcelWorkspace } from './ExcelWorkspace'
 import { excelJobProgressPercent } from './excelPageSupport'
 import { buildOracleExportWorkbookRequest, defaultOracleExportSheetName, oracleExportSheetLimit, type OracleExportSheetConfig } from './oracleExportConfig'
 import { OracleExportSchemeBar } from './OracleExportSchemeBar'
@@ -88,13 +89,17 @@ export function OracleExportPage({ client, token, loading, refreshVersion, canEx
       setSubmitError('')
       return true
     }} />
-    <Section title={`工作表（${sheets.length} / ${oracleExportSheetLimit}）`} description="切换 Sheet 会保留当前编辑内容。每个 Sheet 对应一张 Oracle 表。">
-      <div className={styles.stack}>
-        <div className={styles.sheetBar}><label>当前编辑的 Sheet<select aria-label="当前编辑的 Sheet" value={activeID} disabled={busy} onChange={(event) => setActiveID(Number(event.currentTarget.value))}>{sheets.map((sheet, index) => <option key={sheet.id} value={sheet.id}>{index + 1}. {sheet.sheetName || '未命名 Sheet'}{snapshots[sheet.id]?.issue ? ` · ${snapshots[sheet.id].loading ? '读取中' : '待配置'}` : ''}</option>)}</select></label><div className={styles.actions}><button type="button" disabled={busy || sheets.length >= oracleExportSheetLimit} onClick={addSheet}><Plus aria-hidden="true" />添加 Sheet</button><button type="button" disabled={busy || sheets.length <= 1} onClick={removeSheet}><Trash2 aria-hidden="true" />移除当前 Sheet</button></div></div>
-        {configIssue && <p className={styles.hint} role="status">{configIssue}</p>}
-      </div>
-    </Section>
-    {sheets.map((sheet) => <OracleExportSheetEditor key={sheet.id} id={sheet.id} active={activeID === sheet.id} client={client} initial={sheet.initial} sheetName={sheet.sheetName} disabled={busy} refreshVersion={refreshVersion} onNameChange={onNameChange} onTableSelected={onTableSelected} onSnapshot={onSnapshot} />)}
+    <ExcelWorkspace className={styles.configuration} title={`工作表（${sheets.length} / ${oracleExportSheetLimit}）`} description="切换 Sheet 会保留当前编辑内容。每个 Sheet 对应一张 Oracle 表。">
+      <ExcelEditor>
+        <ExcelEditorSection title="Sheet 目录" description="选择要编辑的工作表，独立设置数据表、导出字段和筛选条件。">
+          <div className={styles.stack}>
+            <div className={styles.sheetBar}><label>当前编辑的 Sheet<select aria-label="当前编辑的 Sheet" value={activeID} disabled={busy} onChange={(event) => setActiveID(Number(event.currentTarget.value))}>{sheets.map((sheet, index) => <option key={sheet.id} value={sheet.id}>{index + 1}. {sheet.sheetName || '未命名 Sheet'}{snapshots[sheet.id]?.issue ? ` · ${snapshots[sheet.id].loading ? '读取中' : '待配置'}` : ''}</option>)}</select></label><div className={styles.actions}><button type="button" disabled={busy || sheets.length >= oracleExportSheetLimit} onClick={addSheet}><Plus aria-hidden="true" />添加 Sheet</button><button type="button" disabled={busy || sheets.length <= 1} onClick={removeSheet}><Trash2 aria-hidden="true" />移除当前 Sheet</button></div></div>
+            {configIssue && <p className={styles.hint} role="status">{configIssue}</p>}
+          </div>
+        </ExcelEditorSection>
+        {sheets.map((sheet) => <OracleExportSheetEditor key={sheet.id} id={sheet.id} active={activeID === sheet.id} client={client} initial={sheet.initial} sheetName={sheet.sheetName} disabled={busy} refreshVersion={refreshVersion} onNameChange={onNameChange} onTableSelected={onTableSelected} onSnapshot={onSnapshot} />)}
+      </ExcelEditor>
+    </ExcelWorkspace>
     <Section title="多文件拆分规则" description="每个 Sheet 每份文件最多 100 万行；有多份时以 ZIP 下载，结果保留 24 小时。">
       <div className={styles.stack}><p className={styles.hint}>超过 100 万行的表按相同片序号写入各份 Excel；不超过 100 万行的表会在每份 Excel 中完整复制。大表后续无数据时，该 Sheet 保留表头。总文件数取各表分片数的最大值。</p><p className={styles.hint}>例如：A 表 150 万行、B 表 20 万行，将生成 2 份 Excel。A Sheet 分别为 100 万行和 50 万行，B Sheet 两份均为完整 20 万行。</p></div>
     </Section>

@@ -29,3 +29,29 @@
   .actions { justify-content: flex-start; }
   .submit > button { width: 100%; }
 }
+
+.configuration { min-width: 0; }
+.configuration .stack, .configuration .sheetEditor { gap: var(--space-3); }
+.configuration .sheetEditor > section { padding: var(--space-4); border-radius: var(--radius-control); box-shadow: none; }
+.configuration .schemeBar, .configuration .sheetBar { gap: var(--space-3); }
+.configuration .schemeBar { grid-template-columns: minmax(240px, 1fr) auto; }
+.configuration .tablePicker { padding-top: 0; }
+.configuration .filterRow { align-items: start; gap: var(--space-2); border-radius: 0; background: transparent; padding: 0; }
+.configuration .filterRow > button { margin-top: var(--space-6); }
+.configuration .fieldsTable { table-layout: fixed; font-size: 12px; }
+.configuration .fieldsTable th:first-child { width: 64px; }
+.configuration .fieldsTable th:nth-child(2) { width: 28%; }
+.configuration .fieldsTable th:nth-child(3) { width: 20%; }
+.configuration .fieldsTable td:nth-child(2), .configuration .fieldsTable td:nth-child(3) { overflow-wrap: anywhere; }
+.configuration .fieldsTable input[type='checkbox'] { display: block; margin: 0; }
+
+@media (max-width: 1100px) {
+  .configuration .schemeBar { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 767px) {
+  .configuration .sheetEditor > section { padding: var(--space-3); }
+  .configuration .schemeBar, .configuration .sheetBar { grid-template-columns: minmax(0, 1fr); }
+  .configuration .filterRow > button { margin-top: 0; }
+  .configuration .titleInput { min-width: 0; }
+}
