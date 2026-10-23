@@ -59,6 +59,7 @@ func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
 		wantFormatted string
 	}{
 		{name: "default keeps available decimal places", value: "12.3456", wantFormatted: "12.3456"},
+		{name: "default keeps negative decimal places", value: "-12.3456", wantFormatted: "-12.3456"},
 		{name: "requested format displays two decimal places", value: "12.5", numberFormat: "0.00", wantFormatted: "12.50"},
 		{name: "requested format rounds displayed decimal places", value: "12.345", numberFormat: "0.00", wantFormatted: "12.35"},
 	}
@@ -93,6 +94,71 @@ func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
 			cellType, err := workbook.GetCellType("数据", "A2")
 			if numericCell := cellType == excelize.CellTypeUnset || cellType == excelize.CellTypeNumber; err != nil || !numericCell {
 				t.Fatalf("GetCellType()=%v error=%v, want numeric or unmarked numeric cell", cellType, err)
+			}
+		})
+	}
+}
+
+func TestReportExportRendererIntegralNumbersOmitDecimalPoint(t *testing.T) {
+	for _, test := range []struct {
+		name, valueType, numberFormat, want string
+		value                               interface{}
+		wantText                            bool
+	}{
+		{name: "integer with trailing decimal point", valueType: "integer", value: "12.", want: "12"},
+		{name: "integer with zero fractional digits", valueType: "integer", value: []byte("12.0"), want: "12"},
+		{name: "negative integer", valueType: "integer", value: "-12.000", want: "-12"},
+		{name: "decimal integer", valueType: "decimal", value: "12", want: "12"},
+		{name: "number integer", valueType: "number", value: "12.0", want: "12"},
+		{name: "floating point integer", valueType: "number", value: float64(12), want: "12"},
+		{name: "scientific integer", valueType: "number", value: "1.2e3", want: "1200"},
+		{name: "requested decimal format keeps integers whole", valueType: "decimal", value: "12.0", numberFormat: "0.00", want: "12"},
+		{name: "zero", valueType: "number", value: "0.00", want: "0"},
+		{name: "long integer remains exact text", valueType: "integer", value: "9007199254740993.0", want: "9007199254740993", wantText: true},
+		{name: "long decimal integer remains exact text", valueType: "decimal", value: "9007199254740993.0", want: "9007199254740993", wantText: true},
+		{name: "fraction is not rounded to integer", valueType: "integer", value: "12.5", want: "12.5", wantText: true},
+		{name: "precise decimal remains exact text", valueType: "decimal", value: "1234567890123456.12345", want: "1234567890123456.12345", wantText: true},
+		{name: "text code keeps fractional suffix", valueType: "string", value: "12.0", want: "12.0", wantText: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			pager := &fakeReportExportPager{pages: []reportoracle.ResultPage{{
+				Columns: []string{"VALUE"},
+				Rows:    []reportoracle.ResultRow{{Key: "ROW-A", Values: []interface{}{test.value}}},
+				NextKey: "ROW-A",
+			}}}
+			output := filepath.Join(t.TempDir(), "numbers.xlsx")
+			_, err := NewReportExportRenderer(pager).Render(t.Context(), ReportExportRenderRequest{
+				OutputPath: output, decimalNumberFormat: test.numberFormat,
+				Columns: []frozenResultColumn{{DatabaseColumn: "VALUE", ExcelHeader: "数值", ValueType: test.valueType}},
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			workbook, err := excelize.OpenFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer workbook.Close()
+			formatted, err := workbook.GetCellValue("数据", "A2")
+			if err != nil || formatted != test.want {
+				t.Fatalf("formatted=%q err=%v want=%q", formatted, err, test.want)
+			}
+			cellType, err := workbook.GetCellType("数据", "A2")
+			if err != nil || (cellType == excelize.CellTypeInlineString || cellType == excelize.CellTypeSharedString) != test.wantText {
+				t.Fatalf("cell type=%v err=%v wantText=%v", cellType, err, test.wantText)
+			}
+			if !test.wantText {
+				styleID, err := workbook.GetCellStyle("数据", "A2")
+				if err != nil {
+					t.Fatal(err)
+				}
+				style, err := workbook.GetStyle(styleID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if style.NumFmt != 1 && (style.CustomNumFmt == nil || *style.CustomNumFmt != "0") {
+					t.Fatalf("integral value has non-integer Excel format: %#v", style)
+				}
 			}
 		})
 	}

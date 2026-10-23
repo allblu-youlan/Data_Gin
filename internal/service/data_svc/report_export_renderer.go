@@ -356,22 +356,51 @@ func reportExportCell(value interface{}, column frozenResultColumn, styles repor
 			style = styles.date
 		}
 		return excelize.Cell{StyleID: style, Value: parsed}, false, nil
-	case "integer":
+	case "integer", "decimal", "number":
 		text := strings.TrimSpace(fmt.Sprint(value))
-		if integer, err := strconv.ParseInt(text, 10, 64); err == nil && len(strings.TrimLeft(text, "-+0")) <= 15 {
-			return excelize.Cell{StyleID: styles.integer, Value: integer}, false, nil
+		if integerText, ok := reportExportIntegerText(text); ok {
+			if integer, err := strconv.ParseInt(integerText, 10, 64); err == nil && len(strings.TrimLeft(integerText, "-+0")) <= 15 {
+				return excelize.Cell{StyleID: styles.integer, Value: integer}, false, nil
+			}
+			return reportExportTextCell(integerText, styles.text)
 		}
-		return reportExportTextCell(text, styles.text)
-	case "decimal", "number":
-		text := strings.TrimSpace(fmt.Sprint(value))
+		if valueType == "integer" {
+			return reportExportTextCell(text, styles.text)
+		}
 		if reportExportSignificantDigits(text) <= 15 {
 			if number, err := strconv.ParseFloat(text, 64); err == nil && !math.IsNaN(number) && !math.IsInf(number, 0) {
-				return excelize.Cell{StyleID: styles.decimal, Value: number}, false, nil
+				style := styles.decimal
+				if math.Trunc(number) == number {
+					style = styles.integer
+				}
+				return excelize.Cell{StyleID: style, Value: number}, false, nil
 			}
 		}
 		return reportExportTextCell(text, styles.text)
 	}
 	return reportExportTextCell(fmt.Sprint(value), styles.text)
+}
+
+// Normalize integral decimal strings before any float conversion so values
+// beyond Excel's numeric precision remain exact when exported as text.
+func reportExportIntegerText(value string) (string, bool) {
+	integer, fraction, _ := strings.Cut(value, ".")
+	if strings.Trim(fraction, "0") != "" {
+		return "", false
+	}
+	digits := integer
+	if strings.HasPrefix(digits, "+") || strings.HasPrefix(digits, "-") {
+		digits = digits[1:]
+	}
+	if digits == "" {
+		return "", false
+	}
+	for _, digit := range digits {
+		if digit < '0' || digit > '9' {
+			return "", false
+		}
+	}
+	return integer, true
 }
 
 func reportExportTextCell(value string, style int) (excelize.Cell, bool, error) {
