@@ -5,7 +5,10 @@ import (
 	"net/http"
 
 	"gin-biz-web-api/internal/msg"
+	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/internal/service/data_svc"
+	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -90,18 +93,29 @@ func (ctrl *ExcelMatchJobController) DeleteWorkflow(c *gin.Context) {
 
 func (ctrl *ExcelMatchJobController) CreateWorkflow(c *gin.Context) {
 	var input struct {
-		Config    data_svc.ExcelWorkflowConfig `json:"config"`
-		UploadID  string                       `json:"uploadId"`
-		UploadIDs []string                     `json:"uploadIds"`
+		Config       data_svc.ExcelWorkflowConfig `json:"config"`
+		UploadID     string                       `json:"uploadId"`
+		UploadIDs    []string                     `json:"uploadIds"`
+		StepUploads  map[string][]string          `json:"stepUploads"`
+		ConfirmWrite bool                         `json:"confirmWrite"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(400, msg.ErrResponseStr("执行参数格式无效"))
 		return
 	}
+	if !authorizeExcelWorkflowWrite(c, input.Config, input.ConfirmWrite, auth_svc.NewAuthorizer(database.DB)) {
+		return
+	}
 	if len(input.UploadIDs) == 0 && input.UploadID != "" {
 		input.UploadIDs = []string{input.UploadID}
 	}
-	record, err := ctrl.service.CreateWorkflowJobFromUploads(c.Request.Context(), input.Config, input.UploadIDs)
+	var record *model.ExcelMatchJob
+	var err error
+	if input.StepUploads != nil {
+		record, err = ctrl.service.CreateWorkflowJobFromStepUploads(c.Request.Context(), input.Config, input.StepUploads)
+	} else {
+		record, err = ctrl.service.CreateWorkflowJobFromUploads(c.Request.Context(), input.Config, input.UploadIDs)
+	}
 	if err != nil {
 		zap.L().Error("Excel workflow creation failed", zap.Error(err))
 		c.JSON(400, msg.ErrResponseStr("创建任务失败，请检查已上传文件、步骤及方法是否有效"))

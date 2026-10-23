@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gin-biz-web-api/model"
 	"github.com/xuri/excelize/v2"
@@ -16,15 +17,16 @@ type excelWorkflowFilesExecutor func(context.Context, int, ExcelWorkflowStep, []
 
 func runExcelWorkflowFiles(ctx context.Context, config ExcelWorkflowConfig, uploads []string, execute excelWorkflowFilesExecutor, completed func(int) error) ([]string, error) {
 	var previous, result []string
+	matchedByID := make(map[string][]string)
 	for index, step := range config.Steps {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		sources := uploads
-		if step.Source == "previous" {
-			sources = previous
+		sources, err := excelWorkflowStepSources(step, uploads, previous, matchedByID)
+		if err != nil {
+			return result, fmt.Errorf("第 %d 步「%s」来源无效: %w", index+1, step.Name, err)
 		}
-		next, err := execute(ctx, index, step, append([]string(nil), sources...))
+		next, err := execute(ctx, index, step, sources)
 		if err != nil {
 			return result, fmt.Errorf("第 %d 步「%s」失败: %w", index+1, step.Name, err)
 		}
@@ -33,12 +35,128 @@ func runExcelWorkflowFiles(ctx context.Context, config ExcelWorkflowConfig, uplo
 		}
 		if step.Operation == excelOperationExportMatch {
 			previous = next
+			if step.ID != "" {
+				matchedByID[step.ID] = append([]string(nil), next...)
+			}
 		}
 		if err := completed(index + 1); err != nil {
 			return result, err
 		}
 	}
 	return result, nil
+}
+
+func excelWorkflowStepSources(step ExcelWorkflowStep, uploads, previous []string, matchedByID map[string][]string) ([]string, error) {
+	if step.Source == "previous" {
+		sources := previous
+		if step.SourceStepID != "" {
+			var exists bool
+			sources, exists = matchedByID[step.SourceStepID]
+			if !exists {
+				return nil, fmt.Errorf("找不到此前匹配步骤 %s 的结果", step.SourceStepID)
+			}
+		}
+		if len(sources) == 0 {
+			return nil, errors.New("引用的匹配步骤没有可用的 Excel 结果")
+		}
+		return append([]string(nil), sources...), nil
+	}
+	if len(step.SourceFiles) == 0 {
+		return append([]string(nil), uploads...), nil
+	}
+	byName := make(map[string]string, len(uploads))
+	ambiguous := make(map[string]bool)
+	for _, path := range uploads {
+		name := filepath.Base(path)
+		if existing, ok := byName[name]; ok && existing != path {
+			ambiguous[name] = true
+		}
+		byName[name] = path
+	}
+	selected := make([]string, 0, len(step.SourceFiles))
+	seen := make(map[string]bool, len(step.SourceFiles))
+	for _, name := range step.SourceFiles {
+		path, exists := byName[name]
+		if !exists {
+			return nil, fmt.Errorf("缺少本步骤指定的 Excel 文件: %s", name)
+		}
+		if ambiguous[name] {
+			return nil, fmt.Errorf("本步骤的 Excel 文件名不唯一: %s", name)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("本步骤重复指定 Excel 文件: %s", name)
+		}
+		seen[name] = true
+		selected = append(selected, path)
+	}
+	return selected, nil
+}
+
+type excelWorkflowWriteProgress func(index, total int, path, sheet string, stats ExcelMatchJobStats, complete bool)
+
+// The existing updater owns the non-overwrite rules. A workflow changes only
+// file/sheet selection and confirms the write already authorized at submission.
+func processExcelWorkflowWriteFiles(ctx context.Context, paths []string, config ExcelMatchConfig, fromPrevious bool, updater ExcelImportUpdater, onProgress excelWorkflowWriteProgress) (ExcelMatchJobStats, error) {
+	var total ExcelMatchJobStats
+	if len(paths) == 0 {
+		return total, errors.New("请选择本写入步骤要处理的 Excel 文件")
+	}
+	config.Operation, config.ConfirmWrite, config.DryRun = excelOperationImportUpdate, true, false
+	normalized, err := normalizeExcelMatchExecutionConfig(config)
+	if err != nil {
+		return total, err
+	}
+	for index, path := range paths {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		sheets := []string{normalized.SheetName}
+		if fromPrevious {
+			file, err := excelize.OpenFile(path)
+			if err != nil {
+				return total, fmt.Errorf("打开写入文件 %s 失败: %w", filepath.Base(path), err)
+			}
+			sheets = nil
+			for _, sheet := range file.GetSheetList() {
+				if strings.HasPrefix(sheet, "Result_") {
+					sheets = append(sheets, sheet)
+				}
+			}
+			if err := file.Close(); err != nil {
+				return total, fmt.Errorf("关闭写入文件 %s 失败: %w", filepath.Base(path), err)
+			}
+			if len(sheets) == 0 {
+				return total, fmt.Errorf("文件 %s 缺少 Result_* 匹配结果工作表", filepath.Base(path))
+			}
+		}
+		for _, sheet := range sheets {
+			if err := ctx.Err(); err != nil {
+				return total, err
+			}
+			current := normalized
+			current.SheetName = sheet
+			if onProgress != nil {
+				onProgress(index, len(paths), path, sheet, ExcelMatchJobStats{}, false)
+			}
+			stats, err := processExcelImportUpdateFileWithProgress(ctx, path, current, updater, func(stats ExcelMatchJobStats) {
+				if onProgress != nil {
+					onProgress(index, len(paths), path, sheet, stats, false)
+				}
+			})
+			total.TotalRows += stats.TotalRows
+			total.ProcessedRows += stats.ProcessedRows
+			total.FilteredRows += stats.FilteredRows
+			total.MatchedRows += stats.MatchedRows
+			total.UnmatchedRows += stats.UnmatchedRows
+			if err != nil {
+				return total, fmt.Errorf("写入文件 %s，工作表 %s 失败: %w", filepath.Base(path), sheet, err)
+			}
+			if onProgress != nil {
+				onProgress(index, len(paths), path, sheet, stats, true)
+			}
+		}
+	}
+	return total, nil
 }
 
 func excelWorkflowSourcePaths(record *model.ExcelMatchJob, config ExcelWorkflowConfig) ([]string, error) {

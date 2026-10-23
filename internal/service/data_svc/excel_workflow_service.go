@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gin-biz-web-api/global"
@@ -29,6 +30,14 @@ func (s *ExcelMatchJobService) CreateWorkflowJobFromUploads(ctx context.Context,
 		return nil, err
 	}
 	return s.createResolvedWorkflowJob(ctx, config, uploadIDs)
+}
+
+func (s *ExcelMatchJobService) CreateWorkflowJobFromStepUploads(ctx context.Context, input ExcelWorkflowConfig, uploads map[string][]string) (*model.ExcelMatchJob, error) {
+	config, err := s.resolveWorkflow(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return s.createResolvedWorkflowJobWithStepUploads(ctx, config, nil, uploads)
 }
 
 // The standalone match page uses the same multi-file worker as the workbench.
@@ -57,32 +66,22 @@ func (s *ExcelMatchJobService) CreateMatchJobFromUploads(ctx context.Context, up
 }
 
 func (s *ExcelMatchJobService) createResolvedWorkflowJob(ctx context.Context, config ExcelWorkflowConfig, uploadIDs []string) (*model.ExcelMatchJob, error) {
+	return s.createResolvedWorkflowJobWithStepUploads(ctx, config, uploadIDs, nil)
+}
+
+func (s *ExcelMatchJobService) createResolvedWorkflowJobWithStepUploads(ctx context.Context, config ExcelWorkflowConfig, uploadIDs []string, uploads map[string][]string) (*model.ExcelMatchJob, error) {
 	if global.QueueJobClient == nil {
 		return nil, errors.New("异步任务客户端未初始化")
 	}
-	sources := make([]excelJobSource, 0, len(uploadIDs))
-	config.SourceFiles = nil
-	for _, step := range config.Steps {
-		if step.Source != "upload" {
-			continue
+	config, sources, err := prepareExcelWorkflowUploads(config, uploadIDs, uploads, func(id string) (excelJobSource, error) {
+		meta, path, err := s.requireCompletedUpload(id)
+		if err != nil {
+			return excelJobSource{}, err
 		}
-		if len(uploadIDs) == 0 {
-			return nil, errors.New("请选择要处理的 Excel 文件")
-		}
-		seen := make(map[string]bool, len(uploadIDs))
-		for index, id := range uploadIDs {
-			if seen[id] {
-				return nil, errors.New("同一个上传文件不能重复导入")
-			}
-			seen[id] = true
-			meta, path, err := s.requireCompletedUpload(id)
-			if err != nil {
-				return nil, fmt.Errorf("第 %d 个文件无效: %w", index+1, err)
-			}
-			sources = append(sources, excelJobSource{fileName: meta.FileName, save: func(dst string) error { return copyFile(path, dst) }})
-			config.SourceFiles = append(config.SourceFiles, fmt.Sprintf("source_%03d.xlsx", index+1))
-		}
-		break
+		return excelJobSource{fileName: meta.FileName, save: func(dst string) error { return copyFile(path, dst) }}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	encoded, err := json.Marshal(config)
 	if err != nil {
@@ -126,5 +125,29 @@ func (s *ExcelMatchJobService) createResolvedWorkflowJob(ctx context.Context, co
 		return nil, err
 	}
 	s.logJob(ctx, record.ID, "info", fmt.Sprintf("组合操作已创建，共 %d 个 Excel 文件；文件和步骤均按顺序执行，任一步失败即停止", len(sources)), nil)
+	stepDescriptions := make(map[string]string, len(config.Steps))
+	fileDescriptions := make(map[string]string, len(sources))
+	for index, step := range config.Steps {
+		stepDescriptions[step.ID] = fmt.Sprintf("第 %d 步「%s」", index+1, step.Name)
+	}
+	for index, source := range sources {
+		fileDescriptions[config.SourceFiles[index]] = source.fileName
+	}
+	for index, step := range config.Steps {
+		if !excelWorkflowNeedsExcel(step.Operation) {
+			continue
+		}
+		message := fmt.Sprintf("第 %d 步「%s」使用其单独选择的 %d 个 Excel 文件", index+1, step.Name, len(step.SourceFiles))
+		if step.Source == "previous" {
+			message = fmt.Sprintf("第 %d 步「%s」使用 %s 的全部匹配结果文件", index+1, step.Name, stepDescriptions[step.SourceStepID])
+		} else {
+			names := make([]string, 0, len(step.SourceFiles))
+			for _, name := range step.SourceFiles {
+				names = append(names, fileDescriptions[name])
+			}
+			message += "：" + strings.Join(names, "、")
+		}
+		s.logJob(ctx, record.ID, "info", message, nil)
+	}
 	return s.jobDAO.FindByID(ctx, record.ID)
 }

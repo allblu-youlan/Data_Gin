@@ -14,11 +14,14 @@ import (
 const excelOperationWorkflow = "excel_workflow"
 
 type ExcelWorkflowStep struct {
-	Operation string          `json:"operation"`
-	SchemeID  uint            `json:"schemeId"`
-	Source    string          `json:"source,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	Config    json.RawMessage `json:"config,omitempty"`
+	Operation    string          `json:"operation"`
+	SchemeID     uint            `json:"schemeId"`
+	ID           string          `json:"id,omitempty"`
+	Source       string          `json:"source,omitempty"`
+	SourceStepID string          `json:"sourceStepId,omitempty"`
+	SourceFiles  []string        `json:"sourceFiles,omitempty"`
+	Name         string          `json:"name,omitempty"`
+	Config       json.RawMessage `json:"config,omitempty"`
 }
 
 type ExcelWorkflowConfig struct {
@@ -40,32 +43,46 @@ func validateExcelWorkflow(input ExcelWorkflowConfig) (ExcelWorkflowConfig, erro
 	if len(input.Steps) == 0 || len(input.Steps) > 20 {
 		return input, errors.New("组合操作需配置 1 至 20 个步骤")
 	}
-	hasPrevious := false
+	if err := normalizeExcelWorkflowStepIDs(input.Steps); err != nil {
+		return input, err
+	}
+	previousID := ""
+	matchingSteps := make(map[string]bool)
 	for i := range input.Steps {
 		step := &input.Steps[i]
+		step.SourceFiles = nil
 		switch step.Operation {
-		case excelOperationExportMatch, "oracle_import", "oracle_procedure", excelOperationOracleExport:
+		case excelOperationExportMatch, excelOperationImportUpdate, "oracle_import", "oracle_procedure", excelOperationOracleExport:
 		default:
 			return input, fmt.Errorf("第 %d 步操作类型无效", i+1)
 		}
 		if step.SchemeID == 0 {
 			return input, fmt.Errorf("第 %d 步请选择已保存的方法", i+1)
 		}
-		if step.Operation == excelOperationExportMatch || step.Operation == "oracle_import" {
+		if excelWorkflowNeedsExcel(step.Operation) {
 			if step.Source == "" {
 				step.Source = "upload"
 			}
 			if step.Source != "upload" && step.Source != "previous" {
 				return input, errors.New("Excel 来源无效")
 			}
-			if step.Source == "previous" && !hasPrevious {
-				return input, fmt.Errorf("第 %d 步之前没有可用的匹配结果", i+1)
+			if step.Source == "previous" {
+				if step.SourceStepID == "" {
+					step.SourceStepID = previousID
+				}
+				if !matchingSteps[step.SourceStepID] {
+					return input, fmt.Errorf("第 %d 步引用的匹配结果不存在或未在此前执行", i+1)
+				}
+			} else {
+				step.SourceStepID = ""
 			}
 		} else {
 			step.Source = ""
+			step.SourceStepID = ""
 		}
 		if step.Operation == excelOperationExportMatch {
-			hasPrevious = true
+			previousID = step.ID
+			matchingSteps[step.ID] = true
 		}
 	}
 	return input, nil
@@ -138,6 +155,18 @@ func (s *ExcelMatchJobService) resolveWorkflow(ctx context.Context, input ExcelW
 		}
 		step.Name, step.Config = found.Name, json.RawMessage(found.ConfigJSON)
 		switch step.Operation {
+		case excelOperationImportUpdate:
+			var c ExcelMatchConfig
+			if err := json.Unmarshal(step.Config, &c); err != nil {
+				return config, err
+			}
+			c.Operation = excelOperationImportUpdate
+			// Keep saved methods in preview mode. A run separately confirms writes.
+			c.ConfirmWrite = false
+			c, err = normalizeExcelMatchExecutionConfig(c)
+			if err == nil {
+				step.Config, err = json.Marshal(c)
+			}
 		case excelOperationExportMatch:
 			var c ExcelMatchConfig
 			if err := json.Unmarshal(step.Config, &c); err != nil {

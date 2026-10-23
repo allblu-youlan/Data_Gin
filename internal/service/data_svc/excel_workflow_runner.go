@@ -182,6 +182,29 @@ func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context
 			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导入 %d 个文件，共 %d 行", len(sources), count), nil)
 		}
 		return nil, err
+	case excelOperationImportUpdate:
+		var config ExcelMatchConfig
+		if err := json.Unmarshal(step.Config, &config); err != nil {
+			return nil, err
+		}
+		var stats ExcelMatchJobStats
+		lastFile, lastSheet, lastRows := -1, "", 0
+		err := withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
+			var err error
+			stats, err = processExcelWorkflowWriteFiles(ctx, sources, config, step.Source == "previous", bojunExcelImportUpdater{dao: s.jobDAO}, func(fileIndex, total int, path, sheet string, stats ExcelMatchJobStats, complete bool) {
+				if complete {
+					s.logJob(ctx, record.ID, "info", fmt.Sprintf("Excel 写入完成：文件 %d/%d %s，工作表 %s，已处理 %d 行，可写入 %d 行", fileIndex+1, total, filepath.Base(path), sheet, stats.ProcessedRows, stats.MatchedRows), nil)
+				} else if fileIndex != lastFile || sheet != lastSheet || stats.ProcessedRows-lastRows >= 250000 {
+					s.logJob(ctx, record.ID, "info", fmt.Sprintf("Excel 写入进度：文件 %d/%d %s，工作表 %s，已处理 %d 行", fileIndex+1, total, filepath.Base(path), sheet, stats.ProcessedRows), nil)
+					lastFile, lastSheet, lastRows = fileIndex, sheet, stats.ProcessedRows
+				}
+			})
+			return err
+		})
+		if err == nil {
+			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Excel 写入已完成 %d 个文件，共处理 %d 行；沿用已有字段为空才写入规则", len(sources), stats.ProcessedRows), nil)
+		}
+		return nil, err
 	default:
 		result, err := s.executeExcelWorkflowDatabaseStep(ctx, record, index, step)
 		if result == "" {
