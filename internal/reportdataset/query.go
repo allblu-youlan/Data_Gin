@@ -3,6 +3,8 @@ package reportdataset
 import "encoding/json"
 
 type Value struct {
+	// TIME is a scalar calendar value, TIME_RANGE is a whole calendar month,
+	// and COLUMN_MAX compares this condition's column after other WHERE filters.
 	Kind     string          `json:"kind"`
 	Value    json.RawMessage `json:"value,omitempty"`
 	Code     string          `json:"code,omitempty"`

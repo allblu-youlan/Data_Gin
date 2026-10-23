@@ -99,13 +99,13 @@ func (s *ReportDatasetService) Preview(ctx context.Context, actor, id uint, lock
 	if e != nil {
 		return ReportQueryPreview{}, e
 	}
-	parameters, e := normalizeSelectConditions(d.Version.InputSchemaJSON, conditions)
+	parameters, e := normalizeSelectConditionsAt(d.Version.InputSchemaJSON, conditions, start)
 	if e != nil {
 		return ReportQueryPreview{}, e
 	}
 	var values map[string]json.RawMessage
 	_ = json.Unmarshal(parameters, &values)
-	plan, e := c.Build(values, inputs, strconv.FormatUint(uint64(actor), 10), false)
+	plan, e := c.BuildAt(values, inputs, strconv.FormatUint(uint64(actor), 10), false, start)
 	if e != nil {
 		return ReportQueryPreview{}, invalidReport(e.Error())
 	}

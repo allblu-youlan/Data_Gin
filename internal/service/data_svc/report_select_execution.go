@@ -36,15 +36,7 @@ func executeSelectReport(ctx context.Context, req reportProcedureExecutionReques
 	if hash != runtime.Run.DataScopeHash {
 		return 0, fmt.Errorf("REPORT_METADATA_CHANGED: data authorization changed")
 	}
-	var params map[string]json.RawMessage
-	if e = json.Unmarshal([]byte(runtime.Run.NormalizedParametersJSON), &params); e != nil {
-		return 0, e
-	}
-	inputs, e := reportdataset.Decode[reportdataset.QueryInputs]([]byte(runtime.Run.QueryInputsJSON))
-	if e != nil {
-		return 0, e
-	}
-	plan, e := c.Build(params, inputs, strconv.FormatUint(uint64(runtime.Run.RequestedBy), 10), false)
+	plan, e := buildSelectRunPlan(c, runtime.Run)
 	if e != nil {
 		return 0, e
 	}
@@ -64,4 +56,16 @@ func executeSelectReport(ctx context.Context, req reportProcedureExecutionReques
 	}
 	snapshot, e := a.ExecuteSelectSnapshot(queryCtx, runtime.Run.RunUUID, c, plan, 100000, 200*1024*1024)
 	return snapshot.RowCount, e
+}
+
+func buildSelectRunPlan(compiled reportdataset.Compiled, run model.ReportRun) (reportdataset.Plan, error) {
+	var parameters map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(run.NormalizedParametersJSON), &parameters); err != nil {
+		return reportdataset.Plan{}, err
+	}
+	inputs, err := reportdataset.Decode[reportdataset.QueryInputs]([]byte(run.QueryInputsJSON))
+	if err != nil {
+		return reportdataset.Plan{}, err
+	}
+	return compiled.BuildAt(parameters, inputs, strconv.FormatUint(uint64(run.RequestedBy), 10), false, run.CreatedAt)
 }

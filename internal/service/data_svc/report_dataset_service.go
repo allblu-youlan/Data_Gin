@@ -224,22 +224,29 @@ func (service *ReportRunService) createSelectRun(ctx context.Context, actor, def
 	}
 	var values map[string]json.RawMessage
 	_ = json.Unmarshal(parameters, &values)
-	if _, e = dataset.Build(values, inputs, strconv.FormatUint(uint64(actor), 10), false); e != nil {
+	plan, e := dataset.BuildAt(values, inputs, strconv.FormatUint(uint64(actor), 10), false, now)
+	if e != nil {
 		return nil, fmt.Errorf("%w: %v", ErrReportRunInvalid, e)
 	}
 	inputJSON, _ := json.Marshal(inputs)
 	runUUID := uuid.NewString()
-	fingerprint := reportdataset.Hash(struct {
-		Parameters json.RawMessage
-		Inputs     reportdataset.QueryInputs
-		Scope      string
-		Policy     reportdataset.Policy
-	}{parameters, inputs, scope, dataset.Policy})
+	fingerprint := selectRunFingerprint(parameters, inputs, scope, dataset.Policy, plan)
 	command := &reportrepo.CreateRunCommand{Run: model.ReportRun{RunUUID: runUUID, DefinitionID: definitionID, VersionID: published.Version.ID, RequestedBy: actor, Status: model.ReportRunStatusQueued, ExecutionFingerprint: executionFingerprint(published.Version.ContractHash, fingerprint, req.RefreshNonce), RefreshNonce: req.RefreshNonce, NormalizedParametersJSON: model.JSONText(parameters), QueryInputsJSON: model.JSONText(inputJSON), DataScopeHash: scope, ExecutionPolicyJSON: published.Version.ExecutionPolicyJSON, ContractHash: published.Version.ContractHash, ProcedureSignatureHash: published.Version.ProcedureSignatureHash, ResultSchemaHash: published.Version.ResultSchemaHash}, Outbox: reportrepo.NewReportRunOutbox(runUUID, now)}
+	command.Run.CreatedAt = now
 	if e = service.store.CreateRun(ctx, actor, definitionID, command); e != nil {
 		return nil, classifyReportRunStoreError(e)
 	}
 	return &ReportRunDTO{ID: command.Run.ID, RunUUID: command.Run.RunUUID, DefinitionID: definitionID, VersionID: command.Run.VersionID, Status: command.Run.Status, CreatedAt: command.Run.CreatedAt}, nil
+}
+
+func selectRunFingerprint(parameters json.RawMessage, inputs reportdataset.QueryInputs, scope string, policy reportdataset.Policy, plan reportdataset.Plan) string {
+	return reportdataset.Hash(struct {
+		Parameters json.RawMessage
+		Inputs     reportdataset.QueryInputs
+		Scope      string
+		Policy     reportdataset.Policy
+		Arguments  []any
+	}{parameters, inputs, scope, policy, plan.Args})
 }
 
 type SelectGrantContract struct {

@@ -104,7 +104,7 @@ func (s *ReportDatasetService) RecordDetail(ctx context.Context, actor, runID ui
 		for i, binding := range relation.Relation.KeyBindings {
 			keys[binding.TargetColumnID], _ = json.Marshal(values[relation.TargetKeys[i]])
 		}
-		plan, e := c.BuildRelationPlan(relationID, params, c.SnapshotFieldValues(values), keys, "", nil, strconv.FormatUint(uint64(actor), 10), true)
+		plan, e := c.BuildRelationPlanAt(relationID, params, c.SnapshotFieldValues(values), keys, "", nil, strconv.FormatUint(uint64(actor), 10), true, contract.Run.CreatedAt)
 		if e != nil {
 			return ReportRecordDetail{}, ErrReportRunQueryNotFound
 		}

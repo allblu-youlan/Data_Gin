@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type RelationPlan struct {
@@ -16,12 +17,16 @@ type RelationPlan struct {
 }
 
 func (c Compiled) BuildRelationPlan(relationID string, parameters map[string]json.RawMessage, source map[string]map[string]json.RawMessage, keys map[string]json.RawMessage, search string, after map[string]json.RawMessage, actor string, detail bool) (RelationPlan, error) {
+	return c.BuildRelationPlanAt(relationID, parameters, source, keys, search, after, actor, detail, time.Now())
+}
+
+func (c Compiled) BuildRelationPlanAt(relationID string, parameters map[string]json.RawMessage, source map[string]map[string]json.RawMessage, keys map[string]json.RawMessage, search string, after map[string]json.RawMessage, actor string, detail bool, now time.Time) (RelationPlan, error) {
 	relation, ok := c.Relations[relationID]
 	if !ok {
 		return RelationPlan{}, queryError("unknown relation")
 	}
 	target := c.Tables[relation.Relation.TargetTableID]
-	b := sqlBuilder{compiled: c, aliases: map[string]Table{"base": c.Tables[c.Query.Base.TableID]}, sqlAliases: map[string]string{relationID: "T0"}, parameters: parameters, boundColumns: source}
+	b := sqlBuilder{compiled: c, aliases: map[string]Table{"base": c.Tables[c.Query.Base.TableID]}, sqlAliases: map[string]string{relationID: "T0"}, parameters: parameters, boundColumns: source, now: now}
 	for _, r := range c.Query.Relations {
 		b.aliases[r.ID] = c.Tables[r.TargetTableID]
 	}

@@ -12,18 +12,26 @@ import (
 )
 
 type sqlBuilder struct {
-	boundColumns map[string]map[string]json.RawMessage
-	compiled     Compiled
-	aliases      map[string]Table
-	sqlAliases   map[string]string
-	parameters   map[string]json.RawMessage
-	args         []any
-	validate     bool
-	leaves       int
+	boundColumns        map[string]map[string]json.RawMessage
+	compiled            Compiled
+	aliases             map[string]Table
+	sqlAliases          map[string]string
+	parameters          map[string]json.RawMessage
+	args                []any
+	validate            bool
+	leaves              int
+	now                 time.Time
+	allowColumnMax      bool
+	columnMaxExpression string
 }
 
 func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInputs, actor string, validate bool) (Plan, error) {
-	b := sqlBuilder{compiled: c, aliases: map[string]Table{"base": c.Tables[c.Query.Base.TableID]}, sqlAliases: map[string]string{"base": "B0"}, parameters: parameters, validate: validate}
+	return c.BuildAt(parameters, inputs, actor, validate, time.Now())
+}
+
+// BuildAt evaluates all dynamic time predicates against one snapshot time.
+func (c Compiled) BuildAt(parameters map[string]json.RawMessage, inputs QueryInputs, actor string, validate bool, now time.Time) (Plan, error) {
+	b := sqlBuilder{compiled: c, aliases: map[string]Table{"base": c.Tables[c.Query.Base.TableID]}, sqlAliases: map[string]string{"base": "B0"}, parameters: parameters, validate: validate, now: now}
 	for i, r := range c.Query.Relations {
 		b.aliases[r.ID] = c.Tables[r.TargetTableID]
 		b.sqlAliases[r.ID] = fmt.Sprintf("R%d", i+1)
@@ -47,7 +55,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 	if e != nil {
 		return Plan{}, e
 	}
-	statement := "SELECT " + strings.Join(selects, ", ") + " FROM " + from + " B0"
+	fromSQL := " FROM " + from + " B0"
 	seen := map[string]bool{"base": true}
 	for _, r := range c.Query.Relations {
 		seen[r.ID] = true
@@ -94,7 +102,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 		if fixed != "" {
 			on = append(on, fixed)
 		}
-		statement += " LEFT JOIN " + target + " " + b.sqlAliases[r.ID] + " ON (" + strings.Join(on, " AND ") + ")"
+		fromSQL += " LEFT JOIN " + target + " " + b.sqlAliases[r.ID] + " ON (" + strings.Join(on, " AND ") + ")"
 	}
 	where := []string{}
 	scope, e := b.scope("base", actor)
@@ -109,6 +117,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 	if fixed != "" {
 		where = append(where, fixed)
 	}
+	b.allowColumnMax = true
 	for _, condition := range []struct {
 		value   *Condition
 		runtime bool
@@ -121,6 +130,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 			where = append(where, pred)
 		}
 	}
+	b.allowColumnMax = false
 	for alias, t := range b.aliases {
 		for _, id := range t.Config.RequiredFilterColumns {
 			found := false
@@ -145,6 +155,14 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 		return Plan{}, queryError("at most 3 sort fields are allowed")
 	}
 	orderSQL := []string{}
+	maxSortSelects := []string{}
+	maxOrderSQL := []string{}
+	addOrder := func(column, direction string) {
+		orderSQL = append(orderSQL, column+" "+direction+" NULLS LAST")
+		name := fmt.Sprintf("REPORT_SORT_%d", len(maxSortSelects)+1)
+		maxSortSelects = append(maxSortSelects, column+" AS "+name)
+		maxOrderSQL = append(maxOrderSQL, name+" "+direction+" NULLS LAST")
+	}
 	used := map[string]bool{}
 	for _, o := range orders {
 		if len(inputs.OrderBy) > 0 {
@@ -172,7 +190,7 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 			return Plan{}, queryError("duplicate sort field")
 		}
 		used[col] = true
-		orderSQL = append(orderSQL, col+" "+o.Direction+" NULLS LAST")
+		addOrder(col, o.Direction)
 	}
 	for _, id := range b.aliases["base"].PrimaryKeys {
 		col, _, e := b.column("base", id)
@@ -180,10 +198,16 @@ func (c Compiled) Build(parameters map[string]json.RawMessage, inputs QueryInput
 			return Plan{}, e
 		}
 		if !used[col] {
-			orderSQL = append(orderSQL, col+" ASC NULLS LAST")
+			addOrder(col, "ASC")
 		}
 	}
-	statement += " WHERE (" + strings.Join(where, ") AND (") + ") ORDER BY " + strings.Join(orderSQL, ", ")
+	whereSQL := " WHERE (" + strings.Join(where, ") AND (") + ")"
+	statement := "SELECT " + strings.Join(selects, ", ") + fromSQL + whereSQL + " ORDER BY " + strings.Join(orderSQL, ", ")
+	if b.columnMaxExpression != "" {
+		innerSelects := append(append([]string{}, selects...), b.columnMaxExpression+" AS REPORT_MAX_VALUE", "MAX("+b.columnMaxExpression+") OVER () AS REPORT_MAXIMUM")
+		innerSelects = append(innerSelects, maxSortSelects...)
+		statement = "SELECT " + strings.Join(names, ", ") + " FROM (SELECT " + strings.Join(innerSelects, ", ") + fromSQL + whereSQL + ") REPORT_FILTERED WHERE REPORT_MAX_VALUE = REPORT_MAXIMUM ORDER BY " + strings.Join(maxOrderSQL, ", ")
+	}
 	return Plan{SQL: statement, Args: b.args, Columns: names}, nil
 }
 func objectName(t Table) (string, error) {
@@ -304,6 +328,9 @@ func (b *sqlBuilder) condition(c *Condition, depth int, runtime bool) (string, e
 		if c.Logic != "AND" && c.Logic != "OR" || c.ColumnID != "" || c.Operator != "" {
 			return "", queryError("invalid condition group")
 		}
+		if c.Logic == "OR" && containsColumnMax(c) {
+			return "", queryError("本列最大值仅支持 AND 筛选组合")
+		}
 		parts := []string{}
 		for _, item := range c.Items {
 			pred, e := b.condition(&item, depth+1, runtime)
@@ -354,6 +381,22 @@ func (b *sqlBuilder) condition(c *Condition, depth int, runtime bool) (string, e
 		return "", queryError("condition value is required")
 	}
 	v := c.Value
+	if v.Kind == "COLUMN_MAX" {
+		if v.Code != "" || len(v.Value) != 0 || v.AliasID != "" || v.ColumnID != "" {
+			return "", queryError("本列最大值必须使用当前筛选列，不能指定其他值或字段")
+		}
+		if !b.allowColumnMax || c.Operator != "EQ" || !SortableColumn(col) {
+			return "", queryError("本列最大值仅支持报表 WHERE 中的等于比较，不能用于关联匹配条件")
+		}
+		if b.columnMaxExpression != "" {
+			return "", queryError("每次查询最多配置一个本列最大值筛选")
+		}
+		b.columnMaxExpression = expr
+		return "1=1", nil
+	}
+	if v.Kind == "TIME" || v.Kind == "TIME_RANGE" {
+		return b.timeCondition(expr, col, c.Operator, *v)
+	}
 	if v.Kind == "FIELD" {
 		if runtime || !contains([]string{"EQ", "NE", "GT", "GTE", "LT", "LTE"}, c.Operator) {
 			return "", queryError("field comparison is not supported here")
