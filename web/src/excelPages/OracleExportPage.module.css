@@ -43,8 +43,9 @@
 .configuration .filterRow > button { margin-top: var(--space-6); }
 .configuration .fieldsTable { table-layout: fixed; font-size: 12px; }
 .configuration .fieldsTable th:first-child { width: 64px; }
-.configuration .fieldsTable th:nth-child(2) { width: 28%; }
-.configuration .fieldsTable th:nth-child(3) { width: 20%; }
+.configuration .fieldsTable th:nth-child(2) { width: 24%; }
+.configuration .fieldsTable th:nth-child(3) { width: 16%; }
+.configuration .fieldsTable th:last-child { width: 140px; }
 .configuration .fieldsTable td:nth-child(2), .configuration .fieldsTable td:nth-child(3) { overflow-wrap: anywhere; }
 .configuration .fieldsTable input[type='checkbox'] { display: block; margin: 0; }
 

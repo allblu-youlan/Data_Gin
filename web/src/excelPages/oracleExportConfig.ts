@@ -79,6 +79,18 @@ export function oracleExportDefaultColumnTitle(column: Pick<OracleExportColumn, 
   return column.comment?.trim() || column.name
 }
 
+export function moveOracleExportColumn(columns: OracleExportColumnDraft[], field: string, position: number) {
+  const selected = columns.filter((column) => column.selected)
+  const source = columns.findIndex((column) => column.name === field && column.selected)
+  const target = selected[position - 1]
+  if (source < 0 || !Number.isInteger(position) || !target || target.name === field) return columns
+  const targetIndex = columns.findIndex((column) => column.name === target.name)
+  const next = [...columns]
+  const [column] = next.splice(source, 1)
+  next.splice(targetIndex, 0, column)
+  return next
+}
+
 export function oracleExportFilterNeedsValue(op: OracleExportFilterOperator) {
   return op !== 'empty' && op !== 'not_empty'
 }

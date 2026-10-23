@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildOracleExportRequest, buildOracleExportWorkbookRequest, defaultOracleExportSheetName, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
+import { buildOracleExportRequest, buildOracleExportWorkbookRequest, defaultOracleExportSheetName, moveOracleExportColumn, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
 
 const table = { owner: 'ERP', name: 'ORDERS', columnCount: 2 }
 const rawColumns = [
@@ -128,4 +128,16 @@ test('rejects empty, illegal, overlong or case-insensitive duplicate sheet names
   assert.throws(() => buildOracleExportWorkbookRequest([]), /1 至 20/)
   assert.throws(() => buildOracleExportWorkbookRequest(Array.from({ length: 21 }, (_, index) => ({ ...sheet, sheetName: `Sheet${index}` }))), /1 至 20/)
   assert.equal(buildOracleExportWorkbookRequest(Array.from({ length: 20 }, (_, index) => ({ ...sheet, sheetName: `Sheet${index}` }))).sheets.length, 20)
+})
+
+
+test('dropdown column positions reorder selected exports without changing titles or unselected fields', () => {
+  const columns = parseOracleExportColumns({ columns: [...rawColumns, { name: 'LAST', position: 3, dataType: 'VARCHAR2', nullable: true }] })
+  const reordered = moveOracleExportColumn(columns, 'LAST', 1)
+  assert.deepEqual(reordered.map((column) => column.name), ['LAST', 'DOCNO', 'TOTAL'])
+  assert.deepEqual(columns.map((column) => column.name), ['DOCNO', 'TOTAL', 'LAST'])
+  const subset = reordered.map((column) => ({ ...column, selected: column.name !== 'TOTAL' }))
+  const moved = moveOracleExportColumn(subset, 'LAST', 2)
+  assert.deepEqual(buildOracleExportRequest(table, moved, []).columns.map((column) => column.field), ['DOCNO', 'LAST'])
+  assert.equal(moved.find((column) => column.name === 'TOTAL').selected, false)
 })

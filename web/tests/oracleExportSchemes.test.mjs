@@ -61,9 +61,7 @@ test('parses all sheets from saved workbooks and keeps their independent titles 
   assert.deepEqual(parsed.config.sheets, sheets)
   assert.equal(restoreOracleExportConfig(parsed.config.sheets[0], metadata).columns[0].selected, true)
   const summary = restoreOracleExportConfig(parsed.config.sheets[1], metadata)
-  assert.equal(summary.columns[0].selected, false)
-  assert.equal(summary.columns[2].selected, true)
-  assert.equal(summary.columns[2].title, '合计')
+  assert.deepEqual(summary.columns.filter((column) => column.selected).map((column) => [column.name, column.title]), [['ADDED_LATER', '合计']])
   assert.deepEqual(summary.filters, [])
   assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, sheets: [] } }] }), /1 至 20/)
 })
@@ -81,4 +79,12 @@ test('Oracle export schemes save, load and restore computed filter sources for t
   assert.deepEqual(saved.config.sheets[0].filters, filters)
   assert.deepEqual(restoreOracleExportConfig(saved.config.sheets[0], metadata).filters, filters.map((filter, index) => ({ ...filter, id: index + 1 })))
   assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, filters: [{ field: 'CREATED_AT', op: 'gte', value: '', valueSource: { kind: 'TIME', code: 'unknown' } }] } }] }), /来源无效/)
+})
+
+
+test('restoring an export scheme follows its saved column order rather than Oracle metadata order', () => {
+  const saved = { ...config, columns: [{ field: 'ADDED_LATER', title: '第三字段放第一列' }, { field: 'DOCNO', title: '订单号' }] }
+  const restored = restoreOracleExportConfig(saved, metadata)
+  assert.deepEqual(restored.columns.map((column) => column.name), ['ADDED_LATER', 'DOCNO', 'CREATED_AT'])
+  assert.deepEqual(restored.columns.filter((column) => column.selected).map((column) => column.title), ['第三字段放第一列', '订单号'])
 })

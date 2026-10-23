@@ -71,7 +71,8 @@ export function restoreOracleExportConfig(config: OracleExportTableConfig, metad
   const available = new Set(metadata.map((column) => column.name))
   const missingColumns = config.columns.filter((column) => !available.has(column.field)).map((column) => column.field)
   const missingFilters = config.filters.filter((filter) => !available.has(filter.field)).map((filter) => filter.field)
-  const columns = metadata.map((column) => ({ ...column, selected: config.columns.length === 0 || selected.has(column.name), title: selected.get(column.name)?.trim() || oracleExportDefaultColumnTitle(column) }))
+  const ordered = config.columns.length ? [...config.columns.flatMap((saved) => metadata.filter((column) => column.name === saved.field)), ...metadata.filter((column) => !selected.has(column.name))] : metadata
+  const columns = ordered.map((column) => ({ ...column, selected: config.columns.length === 0 || selected.has(column.name), title: selected.get(column.name)?.trim() || oracleExportDefaultColumnTitle(column) }))
   const filters: OracleExportFilterDraft[] = config.filters.map((filter, index) => ({ ...filter, id: index + 1, value: filter.valueSource ? '' : oracleExportFilterInputType(metadata.find((column) => column.name === filter.field)?.dataType ?? '') === 'datetime-local' ? oracleExportDateInputValue(filter.value) : filter.value }))
   const issues = [...(missingColumns.length ? [`导出字段已失效：${missingColumns.join('、')}`] : []), ...(missingFilters.length ? [`筛选字段已失效：${[...new Set(missingFilters)].join('、')}`] : [])]
   return { columns, filters, issues }
