@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -19,15 +20,20 @@ type OracleExcelExportSheet struct {
 	TableName string                    `json:"tableName"`
 	Columns   []OracleExcelExportColumn `json:"columns"`
 	Filters   []OracleExcelExportFilter `json:"filters"`
+	queryTime time.Time
 }
 
 func (sheet OracleExcelExportSheet) tableConfig() OracleExcelExportConfig {
-	return OracleExcelExportConfig{Operation: excelOperationOracleExport, Owner: sheet.Owner, TableName: sheet.TableName, Columns: sheet.Columns, Filters: sheet.Filters}
+	return OracleExcelExportConfig{Operation: excelOperationOracleExport, Owner: sheet.Owner, TableName: sheet.TableName, Columns: sheet.Columns, Filters: sheet.Filters, queryTime: sheet.queryTime}
 }
 
 func oracleExcelExportSheets(input OracleExcelExportConfig) ([]OracleExcelExportSheet, bool, error) {
+	queryTime := input.queryTime
+	if queryTime.IsZero() {
+		queryTime = time.Now()
+	}
 	if input.Sheets == nil {
-		return []OracleExcelExportSheet{{SheetName: "数据", Owner: input.Owner, TableName: input.TableName, Columns: input.Columns, Filters: input.Filters}}, true, nil
+		return []OracleExcelExportSheet{{SheetName: "数据", Owner: input.Owner, TableName: input.TableName, Columns: input.Columns, Filters: input.Filters, queryTime: queryTime}}, true, nil
 	}
 	if len(input.Sheets) == 0 || len(input.Sheets) > oracleExcelMaxSheets {
 		return nil, false, fmt.Errorf("导出须包含 1 至 %d 个 Sheet", oracleExcelMaxSheets)
@@ -36,6 +42,7 @@ func oracleExcelExportSheets(input OracleExcelExportConfig) ([]OracleExcelExport
 	seen := make(map[string]bool, len(sheets))
 	for index := range sheets {
 		sheet := &sheets[index]
+		sheet.queryTime = queryTime
 		name := strings.TrimSpace(sheet.SheetName)
 		if name == "" {
 			base := sanitizeMallWeatherExportSheetName(sheet.TableName)

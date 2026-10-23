@@ -102,6 +102,7 @@ func (s *ExcelMatchJobService) processOracleExportJob(ctx context.Context, expor
 	if err := json.Unmarshal([]byte(export.ConfigJSON), &config); err != nil {
 		return err
 	}
+	config.queryTime = time.Unix(int64(export.CreatedAt), 0)
 	export.WorkDir = excelMatchJobDir(export.ID)
 	if err := os.MkdirAll(export.WorkDir, 0700); err != nil {
 		return err

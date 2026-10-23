@@ -114,6 +114,7 @@ func (s *ExcelMatchJobService) executeExcelWorkflowDatabaseStep(ctx context.Cont
 		if err := json.Unmarshal(step.Config, &config); err != nil {
 			return "", err
 		}
+		config.queryTime = time.Unix(int64(record.CreatedAt), 0)
 		dir := filepath.Join(record.WorkDir, fmt.Sprintf("export_%d", index+1))
 		var output string
 		err := withOracleOperationConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {

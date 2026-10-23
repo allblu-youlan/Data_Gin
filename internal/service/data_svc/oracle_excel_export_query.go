@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"gin-biz-web-api/internal/reportoracle"
@@ -17,9 +18,15 @@ type OracleExcelExportColumn struct {
 }
 
 type OracleExcelExportFilter struct {
-	Field string `json:"field"`
-	Op    string `json:"op"`
-	Value string `json:"value"`
+	Field       string                        `json:"field"`
+	Op          string                        `json:"op"`
+	Value       string                        `json:"value"`
+	ValueSource *OracleExcelExportValueSource `json:"valueSource,omitempty"`
+}
+
+type OracleExcelExportValueSource struct {
+	Kind string `json:"kind"`
+	Code string `json:"code,omitempty"`
 }
 
 type OracleExcelExportConfig struct {
@@ -29,9 +36,18 @@ type OracleExcelExportConfig struct {
 	Columns   []OracleExcelExportColumn `json:"columns"`
 	Filters   []OracleExcelExportFilter `json:"filters"`
 	Sheets    []OracleExcelExportSheet  `json:"sheets,omitempty"`
+	queryTime time.Time
 }
 
 func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reportoracle.ResultColumn) (OracleExcelExportConfig, string, []interface{}, error) {
+	now := input.queryTime
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return buildOracleExcelExportQueryAt(input, schema, now)
+}
+
+func buildOracleExcelExportQueryAt(input OracleExcelExportConfig, schema []reportoracle.ResultColumn, now time.Time) (OracleExcelExportConfig, string, []interface{}, error) {
 	if len(input.Sheets) > 0 {
 		return input, "", nil, fmt.Errorf("多 Sheet 配置须逐表构建查询")
 	}
@@ -40,6 +56,8 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		return input, "", nil, fmt.Errorf("Oracle 表名无效: %w", err)
 	}
 	input.Operation, input.Owner, input.TableName = excelOperationOracleExport, table.Owner, table.Name
+	input.Columns = append([]OracleExcelExportColumn(nil), input.Columns...)
+	input.Filters = append([]OracleExcelExportFilter(nil), input.Filters...)
 	if input.Filters == nil {
 		input.Filters = make([]OracleExcelExportFilter, 0)
 	}
@@ -79,9 +97,10 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 	for index, field := range fields {
 		quoted[index] = `"` + field + `"`
 	}
-	statement := `SELECT ` + strings.Join(quoted, ", ") + ` FROM "` + table.Owner + `"."` + table.Name + `"`
+	from := ` FROM "` + table.Owner + `"."` + table.Name + `"`
 	conditions := make([]string, 0, len(input.Filters))
 	arguments := make([]interface{}, 0, len(input.Filters))
+	maximumField := ""
 	for index := range input.Filters {
 		filter := &input.Filters[index]
 		filter.Field = strings.ToUpper(strings.TrimSpace(filter.Field))
@@ -94,6 +113,29 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		}
 		field := `"` + filter.Field + `"`
 		filter.Op = strings.TrimSpace(filter.Op)
+		if filter.ValueSource != nil {
+			source := *filter.ValueSource
+			source.Kind = strings.ToUpper(strings.TrimSpace(source.Kind))
+			source.Code = strings.ToUpper(strings.TrimSpace(source.Code))
+			filter.ValueSource, filter.Value = &source, ""
+			if source.Kind == "COLUMN_MAX" {
+				if filter.Op != "eq" || source.Code != "" || !oracleExcelCanFilterMaximum(column.DataType) {
+					return input, "", nil, fmt.Errorf("本列最大值仅支持可比较字段的等于筛选")
+				}
+				if maximumField != "" {
+					return input, "", nil, fmt.Errorf("每个 Sheet 最多配置一个本列最大值筛选")
+				}
+				maximumField = field
+				continue
+			}
+			condition, bound, err := oracleExcelDynamicFilter(*filter, column, now, index)
+			if err != nil {
+				return input, "", nil, fmt.Errorf("字段 %s 的动态筛选无效: %w", filter.Field, err)
+			}
+			conditions = append(conditions, condition)
+			arguments = append(arguments, bound...)
+			continue
+		}
 		if filter.Op == "empty" || filter.Op == "not_empty" {
 			filter.Value = ""
 			condition := field + " IS NULL"
@@ -142,7 +184,11 @@ func buildOracleExcelExportQuery(input OracleExcelExportConfig, schema []reporto
 		arguments = append(arguments, sql.Named(bindName, value))
 	}
 	if len(conditions) > 0 {
-		statement += " WHERE " + strings.Join(conditions, " AND ")
+		from += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	statement := `SELECT ` + strings.Join(quoted, ", ") + from
+	if maximumField != "" {
+		statement = oracleExcelMaximumQuery(quoted, maximumField, from)
 	}
 	return input, statement, arguments, nil
 }
