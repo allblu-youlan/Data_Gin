@@ -31,12 +31,15 @@
 }
 
 .configuration { min-width: 0; }
+.filterPresets { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+.filterPresets > span { color: var(--color-text-secondary); font-size: 12px; margin-right: var(--space-1); }
+.filterPresets button { min-height: 32px; font-size: 12px; }
 .configuration .stack, .configuration .sheetEditor { gap: var(--space-3); }
 .configuration .sheetEditor > section { padding: var(--space-4); border-radius: var(--radius-control); box-shadow: none; }
 .configuration .schemeBar, .configuration .sheetBar { gap: var(--space-3); }
 .configuration .schemeBar { grid-template-columns: minmax(240px, 1fr) auto; }
 .configuration .tablePicker { padding-top: 0; }
-.configuration .filterRow { align-items: start; gap: var(--space-2); border-radius: 0; background: transparent; padding: 0; }
+.configuration .filterRow { grid-template-columns: minmax(140px, 1fr) minmax(100px, .6fr) minmax(130px, .8fr) minmax(200px, 1.5fr) auto; align-items: start; gap: var(--space-2); border-radius: 0; background: transparent; padding: 0; }
 .configuration .filterRow > button { margin-top: var(--space-6); }
 .configuration .fieldsTable { table-layout: fixed; font-size: 12px; }
 .configuration .fieldsTable th:first-child { width: 64px; }
@@ -47,9 +50,11 @@
 
 @media (max-width: 1100px) {
   .configuration .schemeBar { grid-template-columns: minmax(0, 1fr); }
+  .configuration .filterRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {
+  .configuration .filterRow { grid-template-columns: minmax(0, 1fr); }
   .configuration .sheetEditor > section { padding: var(--space-3); }
   .configuration .schemeBar, .configuration .sheetBar { grid-template-columns: minmax(0, 1fr); }
   .configuration .filterRow > button { margin-top: 0; }

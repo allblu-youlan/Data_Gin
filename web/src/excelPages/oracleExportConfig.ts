@@ -1,8 +1,11 @@
+import type { ComputedReportValue } from '../reportCenter/components/ReportQueryDesigner/computedValues'
+import { oracleExportComputedFilterError } from './oracleExportFilterSources.js'
+
 export type OracleExportTable = { owner: string; name: string; columnCount: number }
 export type OracleExportColumn = { name: string; position: number; dataType: string; nullable: boolean; comment?: string }
 export type OracleExportColumnDraft = OracleExportColumn & { selected: boolean; title: string }
-export type OracleExportFilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'empty' | 'not_empty'
-export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string }
+export type OracleExportFilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'empty' | 'not_empty' | 'between'
+export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string; valueSource?: ComputedReportValue }
 export type OracleExportFilterDraft = OracleExportFilter & { id: number }
 export type OracleExportTableConfig = { owner: string; tableName: string; columns: Array<{ field: string; title: string }>; filters: OracleExportFilter[] }
 export type OracleExportSheetConfig = OracleExportTableConfig & { sheetName: string }
@@ -40,6 +43,7 @@ export const oracleExportFilterOperators: Array<{ value: OracleExportFilterOpera
   { value: 'eq', label: '等于' }, { value: 'neq', label: '不等于' }, { value: 'contains', label: '包含' },
   { value: 'gt', label: '大于' }, { value: 'gte', label: '大于等于' }, { value: 'lt', label: '小于' },
   { value: 'lte', label: '小于等于' }, { value: 'empty', label: '为空' }, { value: 'not_empty', label: '不为空' },
+  { value: 'between', label: '月份区间' },
 ]
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -107,12 +111,15 @@ export function buildOracleExportRequest(table: OracleExportTable, columns: Orac
   for (const filter of filters) {
     if (!fieldNames.has(filter.field)) throw new Error('请选择有效的筛选字段。')
     if (oracleExportFilterOperatorForType(filter.op, columns.find((column) => column.name === filter.field)?.dataType ?? '') !== filter.op) throw new Error('“包含”筛选仅支持文本字段，请调整比较方式。')
-    if (oracleExportFilterNeedsValue(filter.op) && !filter.value.trim()) throw new Error('请填写筛选值，空值请使用“为空”或“不为空”。')
+    const issue = oracleExportComputedFilterError(filter, columns.find((column) => column.name === filter.field)?.dataType ?? '')
+    if (issue) throw new Error(issue)
+    if (!filter.valueSource && oracleExportFilterNeedsValue(filter.op) && !filter.value.trim()) throw new Error('请填写筛选值，空值请使用“为空”或“不为空”。')
   }
+  if (filters.filter((filter) => filter.valueSource?.kind === 'COLUMN_MAX').length > 1) throw new Error('每个 Sheet 最多配置一项本列最大值筛选。')
   return {
     owner: table.owner,
     tableName: table.name,
     columns: selected.map((column) => ({ field: column.name, title: column.title.trim() || oracleExportDefaultColumnTitle(column) })),
-    filters: filters.map(({ field, op, value }) => ({ field, op, value: oracleExportFilterNeedsValue(op) ? normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '' })),
+    filters: filters.map(({ field, op, value, valueSource }) => ({ field, op, value: !valueSource && oracleExportFilterNeedsValue(op) ? normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '', ...(valueSource ? { valueSource: { ...valueSource } } : {}) })),
   }
 }

@@ -67,3 +67,18 @@ test('parses all sheets from saved workbooks and keeps their independent titles 
   assert.deepEqual(summary.filters, [])
   assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, sheets: [] } }] }), /1 至 20/)
 })
+
+test('Oracle export schemes save, load and restore computed filter sources for the actual Excel export page', async () => {
+  const filters = [
+    { field: 'CREATED_AT', op: 'between', value: '', valueSource: { kind: 'TIME_RANGE', code: 'PREVIOUS_MONTH' } },
+    { field: 'DOCNO', op: 'eq', value: '', valueSource: { kind: 'COLUMN_MAX' } },
+  ]
+  const workbook = { sheets: [{ sheetName: '动态订单', ...config, filters }] }
+  const calls = []
+  const client = async (path, options) => { calls.push({ path, body: options.body }); return { ok: true, data: { data: { scheme: { ...scheme, config: workbook } } } } }
+  const saved = await saveOracleExportScheme(client, '动态订单', workbook)
+  assert.deepEqual(calls[0].body.config.sheets[0].filters, filters)
+  assert.deepEqual(saved.config.sheets[0].filters, filters)
+  assert.deepEqual(restoreOracleExportConfig(saved.config.sheets[0], metadata).filters, filters.map((filter, index) => ({ ...filter, id: index + 1 })))
+  assert.throws(() => parseOracleExportSchemes({ schemes: [{ ...scheme, config: { ...config, filters: [{ field: 'CREATED_AT', op: 'gte', value: '', valueSource: { kind: 'TIME', code: 'unknown' } }] } }] }), /来源无效/)
+})

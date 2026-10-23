@@ -85,6 +85,24 @@ test('keeps contains for text and switches it to equality when choosing number o
   assert.equal(oracleExportFilterOperatorForType('gte', 'TIMESTAMP(6)'), 'gte')
 })
 
+test('Oracle Excel export submits dynamic dates, month ranges and filtered column maximum without fixing a literal value', () => {
+  const columns = parseOracleExportColumns({ columns: [
+    ...rawColumns,
+    { name: 'BUSINESS_DATE', position: 3, dataType: 'DATE', nullable: false },
+  ] })
+  const filters = [
+    { id: 1, field: 'TOTAL', op: 'between', value: 'old', valueSource: { kind: 'TIME_RANGE', code: 'CURRENT_MONTH' } },
+    { id: 2, field: 'BUSINESS_DATE', op: 'lte', value: 'old', valueSource: { kind: 'TIME', code: 'MONTH_END' } },
+    { id: 3, field: 'DOCNO', op: 'eq', value: 'old', valueSource: { kind: 'COLUMN_MAX' } },
+  ]
+  const request = buildOracleExportRequest(table, columns, filters)
+  assert.deepEqual(request.filters, filters.map(({ id, ...filter }) => ({ ...filter, value: '' })))
+  assert.throws(() => buildOracleExportRequest(table, columns, [{ ...filters[0], valueSource: undefined }]), /动态月份范围/)
+  assert.throws(() => buildOracleExportRequest(table, columns, [{ ...filters[2], op: 'gte' }]), /等于/)
+  assert.throws(() => buildOracleExportRequest(table, columns, [filters[2], { ...filters[2], id: 4, field: 'TOTAL' }]), /最多.*一项/)
+  assert.throws(() => buildOracleExportRequest(table, columns, [{ ...filters[0], field: 'DOCNO' }]), /动态时间仅支持/)
+})
+
 test('builds independent table columns and date filters for each workbook sheet', () => {
   const columns = parseOracleExportColumns({ columns: rawColumns })
   const first = { sheetName: ' 订单 ', ...buildOracleExportRequest(table, columns, [{ id: 1, field: 'TOTAL', op: 'gte', value: '100' }]) }

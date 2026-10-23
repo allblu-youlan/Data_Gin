@@ -58,7 +58,10 @@ export function useOracleExportSelection(client: ExcelPageClient) {
   return {
     table, columns, setColumns, filters, setFilters, loading, error, issues, load,
     retry: () => load(table, retryConfig.current),
-    addFilter: () => setFilters((current) => [...current, { id: ++filterID.current, field: '', op: 'eq', value: '' }]),
+    addFilter: (defaults: Partial<Pick<OracleExportFilterDraft, 'op' | 'valueSource'>> = {}) => {
+      const id = ++filterID.current
+      setFilters((current) => [...current, { id, field: '', op: 'eq', value: '', ...defaults }])
+    },
     removeInvalidReferences,
   }
 }
