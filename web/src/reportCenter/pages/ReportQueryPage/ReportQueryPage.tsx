@@ -6,6 +6,7 @@ import { Button, Dialog, FeedbackState, FilterToolbar, PageCanvas, PageHeader, S
 import { cancelReportRun, createReportExport, createReportRun, getReportDownloads, getReportExport, getReportExportDownload, isRetryableReportPollFailure, queryReportResults, getReportRun, getReportRunContract, reportPollRetryDelay, type ReportCenterClient } from '../../api'
 import { buildNewReportRunState, canBindReportExport, canRetryReportExportBinding, canStartNewReportRun, initialReportParameterValues, isReportExportSettled, terminalReportRunStatuses, visibleReportParameters } from '../../queryParameters'
 import { buildReportConditions, editableReportConditionValue, initialReportConditionValues, isReportInputListType, orderedReportInputEntries } from '../../refCursorConfig'
+import { previewReportTimeDefault, reportTimeDefaultLabel } from '../../timeDefaults'
 import type { ReportExport, ReportFilterOperator, ReportInputField, ReportParameter, ReportResultColumn, ReportResultFilter, ReportResultPage, ReportResultQuery, ReportRun, ReportRunContract, ReportSummary, ReportQueryInputs } from '../../types'
 import { ReportResultTable } from '../../components/ReportResultTable/ReportResultTable'
 import { ReportRecordDetailDrawer, type RecordDetailSelection } from '../../components/ReportRecordDetailDrawer/ReportRecordDetailDrawer'
@@ -386,7 +387,7 @@ function ConditionField({ client, reportId, versionId, code, field, dependencyVa
   const id = `report-condition-${code}`
   const label = `${field.displayName}${field.required ? ' *' : ''}`
   const list = isReportInputListType(field.type)
-  const hint = [code, field.type, field.format, field.required ? '必填' : '选填'].filter(Boolean).join(' · ')
+  const hint = field.defaultTime ? `留空自动使用${reportTimeDefaultLabel(field.defaultTime)}：${previewReportTimeDefault(field)}（北京时间）；填写可覆盖。` : [code, field.type, field.format, field.required ? '必填' : '选填'].filter(Boolean).join(' · ')
   if (field.relationId) return <label className={styles.field} htmlFor={id}><span>{label}</span><ReportRelationSelect client={client} reportId={reportId} versionId={versionId} relationId={field.relationId} keyColumnId={field.relationKeyColumnId} dependencyValues={dependencyValues} inputId={id} value={value} onChange={onChange} disabled={disabled} required={field.required} multiple={list} /><small>{hint}</small></label>
 	if (field.queryName) return <label className={styles.field} htmlFor={id}><span>{label}</span><ReportInputQuerySelect client={client} reportId={reportId} conditionCode={code} inputId={id} value={value} required={field.required} disabled={disabled} multiple={list} numeric={field.type === 'number' || field.type === 'list[number]'} onChange={onChange} /><small>{hint} · 显示 name，提交 id{list ? ' 列表' : ''}</small></label>
   if (field.allowedValues?.length) {
@@ -396,8 +397,8 @@ function ConditionField({ client, reportId, versionId, code, field, dependencyVa
   }
   if (list || field.type === 'json') return <label className={styles.field} htmlFor={id}><span>{label}</span><textarea id={id} rows={3} required={field.required} disabled={disabled} value={Array.isArray(value) || (field.type === 'json' && value && typeof value === 'object') ? JSON.stringify(value) : String(value ?? '')} placeholder={list ? '["a","b"]' : '{"key":"value"}'} onChange={(event) => onChange(event.currentTarget.value)} /><small>{hint}</small></label>
   if (field.type === 'bool' || field.control === 'CHECKBOX') return <label className={styles.field} htmlFor={id}><span>{label}</span><select id={id} required={field.required} disabled={disabled} value={value === true ? 'true' : value === false ? 'false' : ''} onChange={(event) => onChange(event.currentTarget.value === '' ? '' : event.currentTarget.value === 'true')}><option value="">请选择</option><option value="true">是</option><option value="false">否</option></select><small>{hint}</small></label>
-	if (field.control === 'DATE' || field.control === 'DATETIME') return <ReportDateField id={id} label={label} hint={hint} value={value} disabled={disabled} required={field.required} dateTime={field.control === 'DATETIME'} onChange={onChange} />
-  const common = { id, required: field.required, disabled, value: String(value ?? ''), placeholder: field.example === undefined ? undefined : String(field.example), onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.currentTarget.value) }
+	if (field.control === 'DATE' || field.control === 'DATETIME') return <ReportDateField id={id} label={label} hint={hint} value={value} disabled={disabled} required={field.required && !field.defaultTime} dateTime={field.control === 'DATETIME'} onChange={onChange} />
+  const common = { id, required: field.required && !field.defaultTime, disabled, value: String(value ?? ''), placeholder: field.defaultTime ? `自动：${previewReportTimeDefault(field)}` : field.example === undefined ? undefined : String(field.example), onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.currentTarget.value) }
   return <label className={styles.field} htmlFor={id}><span>{label}</span>{field.control === 'TEXTAREA' ? <textarea {...common} rows={3} /> : <input {...common} type="text" inputMode={field.type === 'number' || field.control === 'NUMBER' ? 'decimal' : undefined} />}<small>{hint}</small></label>
 }
 

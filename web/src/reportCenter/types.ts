@@ -166,11 +166,14 @@ export type ReportInputField = {
   format?: ReportInputFormat
   example?: unknown
   default?: unknown
+  defaultTime?: ReportTimeDefault
   allowedValues?: unknown[]
 	queryName?: string
   relationId?: string
   relationKeyColumnId?: string
 }
+
+export type ReportTimeDefault = 'CURRENT_MONTH' | 'PREVIOUS_MONTH' | 'NEXT_MONTH' | 'CURRENT_YEAR' | 'TODAY' | 'YESTERDAY' | 'MONTH_START' | 'MONTH_END' | 'YEAR_START' | 'YEAR_END' | 'NOW'
 
 export type ReportInputOption = {
 	id: string

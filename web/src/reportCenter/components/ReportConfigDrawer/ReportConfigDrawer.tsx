@@ -218,7 +218,7 @@ function Editor({ dirty, tab, client, draft, datasources, datasourcesLoading, da
   }
   if (draft.executionMode === 'SELECT_SNAPSHOT') {
     if (tab === 'validation') return <ReportQueryValidationPanel client={client} draft={draft} dirty={dirty} />
-    if (tab === 'conditions') return <><ReportQueryDesigner client={client} draft={draft} section="conditions" onChange={onChange} />{Object.keys(draft.inputSchema).length ? <details className={styles.savedRules}><summary>已有输入参数（{Object.keys(draft.inputSchema).length}）</summary><p>已保存的参数继续用于原有固定条件。</p><ReportInputSchemaEditor allowEmpty relations={draft.querySpec?.relations} client={client} schema={draft.inputSchema} onChange={(inputSchema) => set('inputSchema', inputSchema)} /></details> : null}</>
+    if (tab === 'conditions') return <><details className={styles.savedRules}><summary>输入参数与动态时间（{Object.keys(draft.inputSchema).length}）</summary><p>可配置当月、当天等动态默认值，再在固定条件中选择“参数”并引用对应字段。每次查询按北京时间计算。</p><ReportInputSchemaEditor allowEmpty relations={draft.querySpec?.relations} client={client} schema={draft.inputSchema} onChange={(inputSchema) => set('inputSchema', inputSchema)} /></details><ReportQueryDesigner client={client} draft={draft} section="conditions" onChange={onChange} /></>
     return <ReportQueryDesigner client={client} draft={draft} section={tab === 'procedure' ? 'sources' : 'columns'} onChange={onChange} />
   }
   if (tab === 'procedure') return <ReportProcedureEditor client={client} draft={draft} onChange={onChange} />

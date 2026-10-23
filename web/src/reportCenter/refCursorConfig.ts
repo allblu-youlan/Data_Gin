@@ -1,5 +1,6 @@
 import type { ReportColumn, ReportInputControl, ReportInputField, ReportInputFormat, ReportInputSchema, ReportInputType, ReportResultTableColumn } from './types'
 import { isReportInputQueryName } from './inputQueryName.js'
+import { isReportTimeDefault, reportTimeDefaultOptions } from './timeDefaults.js'
 
 const conditionCodePattern = /^[A-Za-z][A-Za-z0-9_]{0,63}$/
 const oracleFieldPattern = /^[A-Za-z][A-Za-z0-9_$#]{0,127}$/
@@ -36,7 +37,7 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
   for (const [code, rawField] of Object.entries(value)) {
     if (!conditionCodePattern.test(code)) throw new Error(`筛选字段 ${code || '（空）'} 的编码不合法。`)
     if (!isRecord(rawField)) throw new Error(`筛选字段 ${code} 必须使用 JSON 对象配置。`)
-    const unknownKeys = Object.keys(rawField).filter((key) => !['type', 'displayName', 'displayOrder', 'control', 'format', 'required', 'multiple', 'example', 'default', 'allowedValues', 'queryName', 'relationId', 'relationKeyColumnId'].includes(key))
+    const unknownKeys = Object.keys(rawField).filter((key) => !['type', 'displayName', 'displayOrder', 'control', 'format', 'required', 'multiple', 'example', 'default', 'defaultTime', 'allowedValues', 'queryName', 'relationId', 'relationKeyColumnId'].includes(key))
     if (unknownKeys.length) throw new Error(`筛选字段 ${code} 含有未知配置：${unknownKeys.join('、')}。`)
     if (rawField.multiple !== undefined && typeof rawField.multiple !== 'boolean') throw new Error(`筛选字段 ${code} 的 multiple 必须是布尔值。`)
     const normalizedType = normalizeReportInputType(rawField.type, rawField.multiple === true)
@@ -60,6 +61,9 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
 		if (queryName && rawField.allowedValues !== undefined) throw new Error(`筛选字段 ${code} 的 queryName 不能与 allowedValues 同时配置。`)
     const relationId = normalizedString(rawField.relationId)
     const relationKeyColumnId = normalizedString(rawField.relationKeyColumnId)
+    const defaultTime = normalizedString(rawField.defaultTime).toUpperCase()
+    if (rawField.defaultTime !== undefined && (!isReportTimeDefault(defaultTime) || !reportTimeDefaultOptions({ type: normalizedType.type, control }).some((option) => option.value === defaultTime))) throw new Error(`筛选字段 ${code} 的动态时间默认值与类型或控件不匹配。`)
+    if (defaultTime && (Object.hasOwnProperty.call(rawField, 'default') || rawField.allowedValues !== undefined || queryName || relationId)) throw new Error(`筛选字段 ${code} 的动态时间不能与固定默认值或选项同时配置。`)
     if (rawField.relationId !== undefined && (!relationId || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(relationId) || control !== 'SELECT' || !['str', 'list[str]'].includes(normalizedType.type))) throw new Error(`筛选字段 ${code} 的关联查询必须使用文本 SELECT 控件，以保留主键精度。`)
     if (relationId && (queryName || rawField.allowedValues !== undefined)) throw new Error(`筛选字段 ${code} 的关联查询不能与 Oracle 查询或固定允许值同时配置。`)
     if (relationKeyColumnId && (!relationId || !/^[1-9]\d*$/.test(relationKeyColumnId))) throw new Error(`筛选字段 ${code} 的关联键字段不合法。`)
@@ -72,6 +76,7 @@ export function parseReportInputSchemaDocument(value: unknown, allowEmpty = fals
       ...(format ? { format } : {}),
       ...(Object.prototype.hasOwnProperty.call(rawField, 'example') ? { example: rawField.example } : {}),
       ...(Object.prototype.hasOwnProperty.call(rawField, 'default') ? { default: rawField.default } : {}),
+      ...(isReportTimeDefault(defaultTime) ? { defaultTime } : {}),
       ...(Array.isArray(rawField.allowedValues) ? { allowedValues: [...rawField.allowedValues] } : {}),
 			...(queryName ? { queryName } : {}),
       ...(relationId ? { relationId } : {}),
@@ -315,6 +320,7 @@ export function buildReportConditions(schema: ReportInputSchema, values: Record<
   for (const [code, field] of orderedReportInputEntries(schema)) {
     const rawValue = values[code]
     if (rawValue === '' || rawValue === undefined || rawValue === null || (Array.isArray(rawValue) && rawValue.length === 0)) {
+      if (field.defaultTime) continue
       if (field.required && !Object.prototype.hasOwnProperty.call(field, 'default')) return { ok: false, error: `${field.displayName} 为必填筛选条件。` }
       conditions[code] = Object.prototype.hasOwnProperty.call(field, 'default') ? field.default : emptyReportConditionValue(field)
       continue
@@ -525,6 +531,7 @@ function compactInputField(field: ReportInputField): ReportInputField {
     ...(field.format ? { format: field.format } : {}),
     ...(Object.prototype.hasOwnProperty.call(field, 'example') ? { example: field.example } : {}),
     ...(Object.prototype.hasOwnProperty.call(field, 'default') ? { default: field.default } : {}),
+    ...(field.defaultTime ? { defaultTime: field.defaultTime } : {}),
     ...(field.allowedValues ? { allowedValues: [...field.allowedValues] } : {}),
 		...(field.queryName ? { queryName: field.queryName } : {}),
     ...(field.relationId ? { relationId: field.relationId } : {}),

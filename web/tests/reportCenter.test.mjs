@@ -13,6 +13,41 @@ import { createLatestRequestGuard } from '../.test-dist/reportCenter/components/
 import { normalizeDatasourceCode, validateDatasourceConnection, validateDatasourceSave } from '../.test-dist/reportCenter/datasourceValidation.js'
 import { mergeReportInputOptions, reportInputOptionMatches, reportInputSelectionKeys, reportInputSelectionValue } from '../.test-dist/reportCenter/inputOptions.js'
 import { isReportInputQueryName } from '../.test-dist/reportCenter/inputQueryName.js'
+import { previewReportTimeDefault, reportTimeDefaultOptions } from '../.test-dist/reportCenter/timeDefaults.js'
+
+test('dynamic time defaults survive configuration and resolve at execution instead of page load', () => {
+  const schema = parseReportInputSchemaDocument({
+    month: { type: 'str', displayName: '月份', control: 'TEXT', required: true, defaultTime: 'CURRENT_MONTH' },
+    day: { type: 'str', displayName: '日期', control: 'DATE', format: 'YYYY-MM-DD', defaultTime: 'YESTERDAY' },
+    numericMonth: { type: 'number', displayName: '数字月份', defaultTime: 'PREVIOUS_MONTH' },
+  })
+  assert.equal(schema.month.defaultTime, 'CURRENT_MONTH')
+  assert.equal(Object.hasOwnProperty.call(schema.month, 'default'), false)
+  assert.deepEqual(initialReportConditionValues(schema), { month: '', day: '', numericMonth: '' })
+  assert.deepEqual(buildReportConditions(schema, initialReportConditionValues(schema)), { ok: true, conditions: {} })
+  assert.deepEqual(buildReportConditions(schema, { month: '202601', numericMonth: '202602', day: '2026-01-31' }), { ok: true, conditions: { month: '202601', day: '2026-01-31', numericMonth: 202602 } })
+  const now = new Date('2026-10-31T16:30:45Z')
+  assert.equal(previewReportTimeDefault(schema.month, now), '202611')
+  assert.equal(previewReportTimeDefault(schema.day, now), '2026-10-31')
+  assert.equal(previewReportTimeDefault(schema.numericMonth, now), '202610')
+  assert.equal(previewReportTimeDefault({ type: 'str', control: 'TEXT', defaultTime: 'NEXT_MONTH' }, new Date('2026-12-31T00:00:00Z')), '202701')
+  assert.equal(previewReportTimeDefault({ type: 'str', control: 'TEXT', defaultTime: 'PREVIOUS_MONTH' }, new Date('2026-01-31T00:00:00Z')), '202512')
+  assert.equal(previewReportTimeDefault({ type: 'str', control: 'TEXT', defaultTime: 'MONTH_END' }, new Date('2028-02-15T00:00:00Z')), '20280229')
+  assert.equal(previewReportTimeDefault({ type: 'str', control: 'DATETIME', format: 'YYYY-MM-DD HH:mm:ss', defaultTime: 'NOW' }, now), '2026-11-01 00:30:45')
+  assert.equal(previewReportTimeDefault({ type: 'str', control: 'DATETIME', format: 'YYYYMMDDHHmmss', defaultTime: 'TODAY' }, now), '20261101000000')
+  assert.equal(reportTimeDefaultOptions({ type: 'str', control: 'DATE' }).some((option) => option.value === 'CURRENT_MONTH'), false)
+  assert.deepEqual(reportTimeDefaultOptions({ type: 'list[str]', control: 'TEXTAREA' }), [])
+})
+
+test('dynamic time configuration rejects unsupported types and conflicting defaults', () => {
+  for (const field of [
+    { type: 'bool', defaultTime: 'TODAY' },
+    { type: 'str', defaultTime: 'UNKNOWN' },
+    { type: 'str', defaultTime: 'TODAY', default: '20261023' },
+    { type: 'str', defaultTime: 'CURRENT_MONTH', control: 'DATE', format: 'YYYYMMDD' },
+    { type: 'str', defaultTime: 'TODAY', allowedValues: ['20261023'] },
+  ]) assert.throws(() => parseReportInputSchemaDocument({ value: { displayName: '测试', ...field } }), /动态时间/)
+})
 
 test('functional state updates do not retain React DOM events', () => {
   const sourceRoot = new URL('../src/', import.meta.url)
