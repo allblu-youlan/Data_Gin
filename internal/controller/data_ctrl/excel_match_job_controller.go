@@ -3,6 +3,7 @@ package data_ctrl
 import (
 	"encoding/json"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 
@@ -55,11 +56,29 @@ type excelMatchJobResponse struct {
 }
 
 type excelMatchJobLogResponse struct {
-	ID        uint   `json:"id"`
-	JobID     uint   `json:"job_id"`
-	Level     string `json:"level"`
-	Message   string `json:"message"`
-	CreatedAt int    `json:"created_at"`
+	ID             uint                               `json:"id"`
+	JobID          uint                               `json:"job_id"`
+	Level          string                             `json:"level"`
+	Message        string                             `json:"message"`
+	CreatedAt      int                                `json:"created_at"`
+	ImportProgress *oracleExcelImportProgressResponse `json:"import_progress,omitempty"`
+}
+
+// Keep the response allowlist separate from stored details and service types.
+type oracleExcelImportProgressResponse struct {
+	StepIndex     int    `json:"stepIndex"`
+	StepName      string `json:"stepName"`
+	Stage         string `json:"stage"`
+	ProcessedRows int    `json:"processedRows"`
+	TotalRows     int    `json:"totalRows"`
+	TotalKnown    bool   `json:"totalKnown"`
+	ScannedRows   int    `json:"scannedRows"`
+	FileIndex     int    `json:"fileIndex"`
+	FileCount     int    `json:"fileCount"`
+	FileName      string `json:"fileName"`
+	SheetName     string `json:"sheetName"`
+	RowNumber     int    `json:"rowNumber"`
+	Identifier    string `json:"identifier"`
 }
 
 func NewExcelMatchJobController() *ExcelMatchJobController {
@@ -372,9 +391,41 @@ func safeExcelMatchJobs(jobs []model.ExcelMatchJob) []excelMatchJobResponse {
 func safeExcelMatchJobLogs(logs []model.ExcelMatchJobLog) []excelMatchJobLogResponse {
 	result := make([]excelMatchJobLogResponse, 0, len(logs))
 	for _, log := range logs {
-		result = append(result, excelMatchJobLogResponse{ID: log.ID, JobID: log.JobID, Level: log.Level, Message: safeExcelMatchJobLogMessage(log.Message), CreatedAt: log.CreatedAt})
+		result = append(result, excelMatchJobLogResponse{
+			ID: log.ID, JobID: log.JobID, Level: log.Level,
+			Message: safeExcelMatchJobLogMessage(log.Message), CreatedAt: log.CreatedAt,
+			ImportProgress: safeOracleExcelImportProgress(log.DetailJSON),
+		})
 	}
 	return result
+}
+
+func safeOracleExcelImportProgress(raw string) *oracleExcelImportProgressResponse {
+	var details struct {
+		Progress *oracleExcelImportProgressResponse `json:"oracleImportProgress"`
+	}
+	if err := json.Unmarshal([]byte(raw), &details); err != nil || details.Progress == nil {
+		return nil
+	}
+	progress := details.Progress
+	switch progress.Stage {
+	case "counting", "importing", "committing", "completed", "failed":
+	default:
+		return nil
+	}
+	if progress.StepIndex < 0 || progress.ProcessedRows < 0 || progress.TotalRows < 0 || progress.ScannedRows < 0 ||
+		progress.FileIndex < 0 || progress.FileCount < 0 || progress.RowNumber < 0 {
+		return nil
+	}
+	if name := strings.TrimSpace(progress.FileName); name != "" {
+		progress.FileName = path.Base(strings.ReplaceAll(name, `\`, "/"))
+	}
+	for _, text := range []*string{&progress.StepName, &progress.FileName, &progress.SheetName, &progress.Identifier} {
+		if *text = strings.TrimSpace(*text); *text != "" {
+			*text = safeExcelMatchJobLogMessage(*text)
+		}
+	}
+	return progress
 }
 
 func safeExcelMatchJobLogMessage(message string) string {

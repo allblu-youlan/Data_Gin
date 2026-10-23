@@ -126,10 +126,14 @@ func ExecuteOracleExcelImport(ctx context.Context, path string, config OracleExc
 }
 
 func ExecuteOracleExcelImportFiles(ctx context.Context, paths []string, config OracleExcelImportConfig) (int, error) {
+	return ExecuteOracleExcelImportFilesWithProgress(ctx, paths, config, nil)
+}
+
+func ExecuteOracleExcelImportFilesWithProgress(ctx context.Context, paths []string, config OracleExcelImportConfig, progress func(OracleExcelImportProgress)) (int, error) {
 	count := 0
 	err := withOracleOperationConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
 		var err error
-		count, err = executeOracleExcelImportFilesOnConnection(queryCtx, connection, paths, config, nextOracleExcelImportIdentifier)
+		count, err = executeOracleExcelImportFilesWithProgressOnConnection(queryCtx, connection, paths, config, nextOracleExcelImportIdentifier, progress)
 		return err
 	})
 	if err != nil {
@@ -177,9 +181,21 @@ func oracleExcelImportBatchStatement(single string, width, rows int) string {
 }
 
 func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection oracleOperationConnection, paths []string, config OracleExcelImportConfig, nextIdentifier func(context.Context) (string, error)) (int, error) {
+	return executeOracleExcelImportFilesWithProgressOnConnection(ctx, connection, paths, config, nextIdentifier, nil)
+}
+
+func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, connection oracleOperationConnection, paths []string, config OracleExcelImportConfig, nextIdentifier func(context.Context) (string, error), progress func(OracleExcelImportProgress)) (imported int, importErr error) {
 	if len(paths) == 0 {
 		return 0, errors.New("请选择至少一个 Excel 文件")
 	}
+	reporter := oracleExcelImportProgressReporter{callback: progress, state: OracleExcelImportProgress{Stage: "counting", FileCount: len(paths)}}
+	reporter.emit(true)
+	defer func() {
+		if importErr != nil {
+			reporter.state.Stage = "failed"
+			reporter.emit(true)
+		}
+	}()
 	schema, err := connection.InspectResultTable(ctx, reportoracle.ResultTableRef{Owner: config.Owner, Name: config.TableName})
 	if err != nil {
 		return 0, err
@@ -188,6 +204,28 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 	if err != nil {
 		return 0, err
 	}
+	if progress != nil {
+		// Count with the same reader used for writing, so blank rows, selected
+		// sheets and header mappings have identical semantics in the percentage.
+		for index, path := range paths {
+			reporter.state.FileIndex, reporter.state.FileName = index+1, filepath.Base(path)
+			reporter.state.SheetName, reporter.state.RowNumber = "", 0
+			reporter.emit(true)
+			_, err := readOracleExcelImportLocated(ctx, path, normalized, columns, func(_ []interface{}, location oracleExcelImportLocation) error {
+				reporter.state.ScannedRows++
+				reporter.state.SheetName, reporter.state.RowNumber = location.sheet, location.row
+				if reporter.state.ScannedRows%1000 == 0 {
+					reporter.emit(false)
+				}
+				return nil
+			})
+			if err != nil {
+				return 0, err
+			}
+			reporter.emit(true)
+		}
+		reporter.state.TotalRows, reporter.state.TotalKnown = reporter.state.ScannedRows, true
+	}
 	if fixed := normalized.FixedIdentifier; fixed != nil && fixed.Enabled {
 		// Allocate once per execution, before any Oracle insert. All files,
 		// sheets and rows in this execution receive this same new number.
@@ -195,7 +233,12 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 		if err != nil {
 			return 0, fmt.Errorf("生成导入标号失败: %w", err)
 		}
+		reporter.state.Identifier = fixed.Value
 	}
+	reporter.state.Stage = "importing"
+	reporter.state.FileIndex, reporter.state.FileName = 1, filepath.Base(paths[0])
+	reporter.state.SheetName, reporter.state.RowNumber = "", 0
+	reporter.emit(true)
 	tx, err := connection.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return 0, err
@@ -215,6 +258,7 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 		if len(batch) == 0 {
 			return nil
 		}
+		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
 		var err error
 		if len(batch) == 1 {
 			_, err = prepared.ExecContext(ctx, batch[0]...)
@@ -233,12 +277,18 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 		if err != nil {
 			return fmt.Errorf("批量写入失败（%s 至 %s）: %w", first, last, err)
 		}
+		reporter.state.ProcessedRows += len(batch)
+		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
+		reporter.emit(false)
 		clear(batch)
 		batch = batch[:0]
 		return nil
 	}
 	count := 0
-	for _, path := range paths {
+	for index, path := range paths {
+		reporter.state.FileIndex, reporter.state.FileName = index+1, filepath.Base(path)
+		reporter.state.SheetName, reporter.state.RowNumber = "", 0
+		reporter.emit(true)
 		read, err := readOracleExcelImportLocated(ctx, path, normalized, columns, func(values []interface{}, location oracleExcelImportLocation) error {
 			if len(batch) == 0 {
 				first = location
@@ -258,9 +308,13 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 	if err := flush(); err != nil {
 		return 0, err
 	}
+	reporter.state.Stage = "committing"
+	reporter.emit(true)
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit Oracle Excel import: %w", err)
 	}
+	reporter.state.Stage = "completed"
+	reporter.emit(true)
 	return count, nil
 }
 

@@ -10,9 +10,10 @@ import {
   type ExcelMatchStepConfig,
 } from '../excelMatchConfig'
 import type { ClientResponse } from '../api/client'
+import type { OracleImportProgress } from './oracleImportProgress'
 
 export type ExcelMatchJob = { id: number; source_file_name: string; config_json?: string; status: string; total_rows: number; processed_rows: number; filtered_rows: number; matched_rows: number; unmatched_rows: number; error_message?: string; started_at: string | null; finished_at: string | null; expires_at: string | null; result_url?: string; can_download?: boolean; download_message?: string; operation?: string; created_at: number }
-export type ExcelMatchJobLog = { id: number; job_id: number; level: string; message: string; detail_json: string; created_at: number }
+export type ExcelMatchJobLog = { id: number; job_id: number; level: string; message: string; detail_json: string; created_at: number; import_progress?: OracleImportProgress }
 export type ExcelDialogMode = 'export' | 'import' | 'clear' | 'query'
 export type ExcelUploadSlot = 'export' | 'import' | 'clear'
 export type ExcelUploadSession = { uploadId: string; fileName: string; totalChunks: number; uploadedChunks: number; complete: boolean; expiresAt: string }

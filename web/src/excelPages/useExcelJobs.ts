@@ -15,6 +15,7 @@ import {
   type ExcelMatchJobLog,
 } from './excelPageSupport'
 import type { ExcelPageClient } from './useExcelUploads'
+import { nextExcelJobPollState } from './excelJobPolling'
 
 type UseExcelJobsOptions = {
   section: 'jobs' | 'schemes' | 'write'
@@ -115,6 +116,7 @@ export function useExcelJobs({ section, client, token, refreshVersion, setLoadin
     if (!options.silent) setLoading(true)
     try {
       const nextResult = await client(`/v1/excel-match-jobs/${id}`, { method: 'GET', signal: options.signal, showResult: false, silentLoading: true })
+      if (options.signal?.aborted) return null
       if (!options.silent && !nextResult.ok) setResult(nextResult)
       if (nextResult.ok) {
         applyJobResult(nextResult, { track: options.track })
@@ -142,7 +144,6 @@ export function useExcelJobs({ section, client, token, refreshVersion, setLoadin
   useEffect(() => {
     if (!token || !trackingJobID) return
     let cancelled = false
-    let attempts = 0
     let consecutiveFailures = 0
     let timer: number | null = null
     let inFlight = false
@@ -159,25 +160,23 @@ export function useExcelJobs({ section, client, token, refreshVersion, setLoadin
     const refreshTrackedJob = async () => {
       if (cancelled || document.visibilityState === 'hidden') return
       if (inFlight) { pollingState.resumeWhenVisible = true; return }
-      if (attempts >= excelJobPollMaxAttempts) { stopPolling(`自动刷新已在 ${excelJobPollMaxAttempts} 次后停止，请手动查询任务状态。`); return }
-      attempts += 1
       inFlight = true
       let nextDelay: number | null = null
       try {
         const nextJob = await refreshJobByID(trackingJobID, { silent: true, signal: controller.signal })
         if (cancelled || controller.signal.aborted) return
+        const poll = nextExcelJobPollState(consecutiveFailures, Boolean(nextJob), excelJobPollMaxAttempts)
+        consecutiveFailures = poll.consecutiveFailures
         if (!nextJob) {
-          consecutiveFailures += 1
-          const delayMilliseconds = Math.min(30_000, 2_000 * 2 ** Math.min(consecutiveFailures, 4))
-          if (attempts >= excelJobPollMaxAttempts) { stopPolling(`自动刷新已在 ${excelJobPollMaxAttempts} 次后停止，请手动查询任务状态。`); return }
+          const delayMilliseconds = poll.delayMilliseconds
+          if (poll.stop) { stopPolling(`自动刷新连续失败 ${excelJobPollMaxAttempts} 次，已停止，请手动查询任务状态。`); return }
           setAutoRefreshText(`自动刷新失败，将在 ${Math.ceil(delayMilliseconds / 1000)} 秒后重试。`)
           nextDelay = delayMilliseconds
           return
         }
-        consecutiveFailures = 0
         setAutoRefreshText(`自动刷新中：任务 #${nextJob.id}，${excelJobStatusLabel(nextJob.status)}，${new Date().toLocaleTimeString()}`)
         if (!isExcelJobActive(nextJob)) { setTrackingJobID(null); void loadJobHistory(); return }
-        nextDelay = 2_000
+        nextDelay = poll.delayMilliseconds
       } finally {
         inFlight = false
         if (pollingState.resumeWhenVisible && !cancelled && !controller.signal.aborted && isPageVisible()) { pollingState.resumeWhenVisible = false; scheduleRefresh(0) }

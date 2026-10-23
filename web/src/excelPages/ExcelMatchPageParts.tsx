@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Download, RefreshCcw } from 'lucide-react'
 import { DataTable, StatusTag } from '../ui'
+import { OracleImportProgressPanel } from './OracleImportProgressPanel'
 import { excelFieldSelectOptions, excelModelSelectOptions, type ExcelMatchModel, type ExcelMatchModelField, type ExcelMatchStepConfig } from '../excelMatchConfig'
 import {
   canDownloadExcelJob,
@@ -68,6 +69,7 @@ export function ExcelJobDetailContent({ job, logs, progress, autoRefreshText, lo
       {oracleExport && <p className={styles.modeNote}>所有数据导出为同一个 XLSX。每张表超过 100 万行时，按向上取整后的 Sheet 数均分，余数分配给前几个 Sheet；小表仅保留一个 Sheet。例如 120 万行分为 2 个各 60 万行的 Sheet。</p>}
       <div className={styles.jobProgress}><strong>处理进度</strong><span>{streaming ? `已导出 ${job.processed_rows.toLocaleString('en-US')} 行，正在读取…` : `${job.processed_rows.toLocaleString('en-US')} / ${job.total_rows.toLocaleString('en-US')}（${progress}%）`}</span><progress value={streaming ? undefined : progress} max="100" aria-label={`Excel 任务 #${job.id} 处理进度`} /></div>
       <dl className={styles.jobExpiry}><dt>过期时间</dt><dd>{formatDate(job.expires_at)}</dd></dl>
+      <OracleImportProgressPanel job={job} logs={logs} />
       <div className={styles.jobLogHeading}>实时日志</div><ExcelJobLogList logs={logs} />
       <div className={styles.jobActionHeading}>操作</div>
       <div className={styles.detailActions}><button type="button" onClick={onRefresh} disabled={loading}><RefreshCcw aria-hidden="true" />刷新状态</button><button type="button" onClick={onDownload} disabled={loading || downloading || !canDownloadExcelJob(job)}><Download aria-hidden="true" />{downloading ? '下载中' : '下载结果'}</button>{!canDownloadExcelJob(job) && <span>{job.download_message || '任务完成并生成结果后可下载。'}</span>}</div>

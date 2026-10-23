@@ -157,10 +157,17 @@ func (dao *ExcelMatchJobDAO) FindLogsByJobID(ctx context.Context, jobID uint, li
 	var logs []model.ExcelMatchJobLog
 	err := dao.db.WithContext(ctx).
 		Where("job_id = ?", jobID).
-		Order("id ASC").
+		Order("id DESC").
 		Limit(limit).
 		Find(&logs).Error
-	return logs, err
+	if err != nil {
+		return nil, err
+	}
+	// Keep the newest bounded window, displayed in chronological order.
+	for left, right := 0, len(logs)-1; left < right; left, right = left+1, right-1 {
+		logs[left], logs[right] = logs[right], logs[left]
+	}
+	return logs, nil
 }
 
 func (dao *ExcelMatchJobDAO) ListSchemes(ctx context.Context, operation string) ([]model.ExcelMatchScheme, error) {
