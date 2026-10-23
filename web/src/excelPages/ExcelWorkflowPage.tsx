@@ -6,10 +6,11 @@ import { PageCanvas, PageHeader, Section, FeedbackState } from '../ui'
 import type { ClientResponse } from '../api/client'
 import { SelectField, TextField } from './OperationField'
 import { WorkflowRunPanel } from './WorkflowRunPanel'
+import { ExcelFileSelection } from './ExcelFileSelection'
 import { useExcelJobs } from './useExcelJobs'
 import { useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { readList, readObject } from './excelPageSupport'
-import { defaultWorkflowSteps, operationLabels, operationPaths, workflowIssues, type ExcelOperation, type OperationScheme, type WorkflowConfig, type WorkflowStep } from './excelOperations'
+import { defaultWorkflowSteps, operationLabels, operationPaths, workflowIssues, workflowNeedsUploads, type ExcelOperation, type OperationScheme, type WorkflowConfig, type WorkflowStep } from './excelOperations'
 import styles from './ExcelOperations.module.css'
 
 type Props = { client: ExcelPageClient; token: string; permissions: string[]; refreshVersion: number; setLoading: (value: boolean) => void; setResult: (value: ClientResponse | null) => void; onNavigateToJobs: () => void }
@@ -22,7 +23,7 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
  const [name, setName] = useState('')
  const [steps, setSteps] = useState<WorkflowStep[]>(defaultWorkflowSteps)
  const [addOperation, setAddOperation] = useState<ExcelOperation>('oracle_procedure')
- const [file, setFile] = useState<File | null>(null)
+ const [files, setFiles] = useState<File[]>([])
  const [busy, setBusy] = useState(false)
  const [reading, setReading] = useState(true)
  const [catalogError, setCatalogError] = useState('')
@@ -34,7 +35,7 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
  const canManage = permissions.includes('excel.manage')
  const running = Boolean(jobs.job && ['pending', 'running'].includes(jobs.job.status))
  const canExecute = permissions.includes('excel.execute')
- const needFile = steps.some(step => ['export_match', 'oracle_import'].includes(step.operation) && step.source !== 'previous')
+ const needFile = workflowNeedsUploads(steps)
  const load = useCallback(async (signal?: AbortSignal) => {
   setReading(true); setCatalogError('')
   const responses = await Promise.allSettled([...operations.map(op => operationPaths[op]), '/v1/excel-match-jobs/workflows'].map(path => client(path, { method: 'GET', signal, showResult: false, silentLoading: true })))
@@ -82,11 +83,11 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
   if (running) return
   setShowIssues(true)
   if (issues.length) { setError(issues.join(' ')); return }
-  if (needFile && !file) { setError('请先选择要处理的 .xlsx 文件。'); return }
+  if (needFile && (!files.length || files.some(file => file.size === 0))) { setError('请先选择有效的待处理 .xlsx 文件。'); return }
   setBusy(true); setError(''); setMessage('')
   try {
-   const uploadId = needFile && file ? await uploads.ensureExcelUpload('export', file) : ''
-   const response = await client('/v1/excel-match-jobs/workflow-runs', { method: 'POST', body: { config: { operation: 'excel_workflow', steps }, uploadId }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 120_000 })
+   const uploadIds = needFile ? await uploads.ensureExcelUploads('export', files) : []
+   const response = await client('/v1/excel-match-jobs/workflow-runs', { method: 'POST', body: { config: { operation: 'excel_workflow', steps }, uploadIds }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 120_000 })
    if (!response.ok) throw new Error(response.error?.message || '任务创建失败')
    jobs.registerCreatedJob(response, false)
   } catch (cause) { setError(cause instanceof Error ? cause.message : '任务创建失败') } finally { setBusy(false) }
@@ -101,9 +102,9 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
    <Section title="执行步骤" description="可增删和调整顺序，最多 20 步。每个步骤调用已保存的方法。"><div className={styles.stack}>
     {reading && <FeedbackState kind="loading" title="读取方法目录中…" />}
     {catalogError && <FeedbackState kind="error" title="方法目录未就绪" description={catalogError} action={<Button type="button" variant="outline" onClick={() => void load()}>重试</Button>} />}
-    <ol className={styles.steps}>{steps.map((step, index) => <li className={styles.step} key={index}><div className={styles.stepHead}><div className={styles.stepTitle}><span className={styles.number}>{String(index + 1).padStart(2, '0')}</span>{operationLabels[step.operation]}</div><div className={styles.actions}><Button type="button" variant="ghost" size="icon-sm" disabled={busy || index === 0} aria-label={`上移第 ${index + 1} 步`} onClick={() => move(index, -1)}><ArrowUp aria-hidden="true" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={busy || index === steps.length - 1} aria-label={`下移第 ${index + 1} 步`} onClick={() => move(index, 1)}><ArrowDown aria-hidden="true" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={busy} aria-label={`删除第 ${index + 1} 步`} onClick={() => setSteps(current => current.filter((_, i) => i !== index))}><Trash2 aria-hidden="true" /></Button></div></div><div className={styles.fields}><SelectField label="调用已保存的方法" aria-invalid={showIssues && !step.schemeId} hint={showIssues && !step.schemeId ? "请选择一个已保存的方法。" : undefined} value={step.schemeId} disabled={busy || reading} onChange={e => update(index, { schemeId: Number(e.target.value) })}><option value={0}>请选择方法</option>{step.schemeId > 0 && !catalog[step.operation].some(item => item.id === step.schemeId) && <option value={step.schemeId}>方法已不可用，请重新选择</option>}{catalog[step.operation].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>{['export_match', 'oracle_import'].includes(step.operation) && <SelectField label="Excel 数据来源" value={step.source || 'upload'} disabled={busy} onChange={e => update(index, { source: e.target.value as 'upload' | 'previous' })}><option value="upload">本次上传的原文件</option><option value="previous">前面匹配步骤生成的 Excel</option></SelectField>}</div>{step.source === 'previous' && <p className={styles.note}>直接使用前面最近一次匹配步骤写完的文件；自动识别结果工作表和表头，无需重新上传。</p>}{catalog[step.operation].length === 0 && !reading && <p className={styles.note}>尚无可用方法，请先到“方法准备”中的对应模块保存。</p>}</li>)}</ol>
+    <ol className={styles.steps}>{steps.map((step, index) => <li className={styles.step} key={index}><div className={styles.stepHead}><div className={styles.stepTitle}><span className={styles.number}>{String(index + 1).padStart(2, '0')}</span>{operationLabels[step.operation]}</div><div className={styles.actions}><Button type="button" variant="ghost" size="icon-sm" disabled={busy || index === 0} aria-label={`上移第 ${index + 1} 步`} onClick={() => move(index, -1)}><ArrowUp aria-hidden="true" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={busy || index === steps.length - 1} aria-label={`下移第 ${index + 1} 步`} onClick={() => move(index, 1)}><ArrowDown aria-hidden="true" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={busy} aria-label={`删除第 ${index + 1} 步`} onClick={() => setSteps(current => current.filter((_, i) => i !== index))}><Trash2 aria-hidden="true" /></Button></div></div><div className={styles.fields}><SelectField label="调用已保存的方法" aria-invalid={showIssues && !step.schemeId} hint={showIssues && !step.schemeId ? "请选择一个已保存的方法。" : undefined} value={step.schemeId} disabled={busy || reading} onChange={e => update(index, { schemeId: Number(e.target.value) })}><option value={0}>请选择方法</option>{step.schemeId > 0 && !catalog[step.operation].some(item => item.id === step.schemeId) && <option value={step.schemeId}>方法已不可用，请重新选择</option>}{catalog[step.operation].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>{['export_match', 'oracle_import'].includes(step.operation) && <SelectField label="Excel 数据来源" value={step.source || 'upload'} disabled={busy} onChange={e => update(index, { source: e.target.value as 'upload' | 'previous' })}><option value="upload">本次上传的原文件</option><option value="previous">前面匹配步骤生成的 Excel</option></SelectField>}</div>{step.source === 'previous' && <p className={styles.note}>直接使用前面最近一次匹配步骤写完的全部结果文件；Oracle 导入自动逐个处理全部结果工作表，无需重新上传。</p>}{catalog[step.operation].length === 0 && !reading && <p className={styles.note}>尚无可用方法，请先到“方法准备”中的对应模块保存。</p>}</li>)}</ol>
     <div className={styles.toolbar}><SelectField label="添加操作类型" value={addOperation} disabled={busy || steps.length >= 20} onChange={e => setAddOperation(e.target.value as ExcelOperation)}>{operations.map(op => <option key={op} value={op}>{operationLabels[op]}</option>)}</SelectField><Button type="button" variant="outline" disabled={busy || steps.length >= 20} onClick={() => setSteps(current => [...current, { operation: addOperation, schemeId: 0, ...(['export_match', 'oracle_import'].includes(addOperation) ? { source: 'upload' as const } : {}) }])}><Plus aria-hidden="true" />添加步骤</Button></div>
-    {needFile && <div className={styles.file}><TextField label="本次处理的 Excel 文件" type="file" accept=".xlsx" disabled={busy || !canExecute} onChange={e => { setFile(e.target.files?.[0] || null); uploads.clearUploadRef('export') }} /><p className={styles.note}>{file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : '支持 .xlsx 文件，多个步骤可复用同一次上传。'}</p></div>}
+    {needFile && <div className={styles.file}><ExcelFileSelection label="本次处理的 Excel 文件" files={files} disabled={busy || running || !canExecute} onChange={next => { setFiles(next); uploads.clearUploadRef('export') }} hint="全部文件共用此流程，逐文件顺序处理；来源选“前面匹配步骤”时自动使用全部匹配结果文件与工作表，无需再次上传。" /></div>}
     <div className={styles.note} aria-live="polite">{uploads.uploadProgress}</div>
     <div className={styles.footer}><p className={styles.note}>每个写入步骤独立提交，后续失败不会回滚此前成功的数据。<br />执行在后台继续，最终文件可在任务中下载。</p><Button type="button" disabled={busy || reading || Boolean(catalogError) || !canExecute || running} onClick={() => void execute()}><Play aria-hidden="true" />{busy ? '提交任务中…' : running ? '任务执行中…' : '按顺序执行'}</Button></div>
    </div></Section>

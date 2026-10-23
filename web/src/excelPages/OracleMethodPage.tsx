@@ -7,6 +7,7 @@ import { PageCanvas, PageHeader, Section, FeedbackState } from '../ui'
 import type { ClientResponse } from '../api/client'
 import { TextField } from './OperationField'
 import { OracleImportEditor } from './OracleImportEditor'
+import { ExcelFileSelection } from './ExcelFileSelection'
 import { OracleProcedureEditor } from './OracleProcedureEditor'
 import { WorkflowRunPanel } from './WorkflowRunPanel'
 import { useExcelJobs } from './useExcelJobs'
@@ -22,7 +23,7 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
  const [name, setName] = useState('')
  const [query, setQuery] = useState('')
  const [config, setConfig] = useState<OracleMethodConfig>(() => operation === 'oracle_import' ? emptyImportConfig() : emptyProcedureConfig())
- const [file, setFile] = useState<File | null>(null)
+ const [files, setFiles] = useState<File[]>([])
  const [busy, setBusy] = useState(false)
  const [reading, setReading] = useState(true)
  const [error, setError] = useState('')
@@ -66,11 +67,11 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
  }
  async function execute() {
   if (!saved || !unchanged || running) return
-  if (operation === 'oracle_import' && !file) { setError('请先选择待导入的 .xlsx 文件。'); return }
+  if (operation === 'oracle_import' && (!files.length || files.some(file => file.size === 0))) { setError('请先选择有效的待导入 .xlsx 文件。'); return }
   setBusy(true); setError(''); setMessage('')
   try {
-   const uploadId = operation === 'oracle_import' && file ? await uploads.ensureExcelUpload('import', file) : ''
-   const response = await client('/v1/excel-match-jobs/workflow-runs', { method: 'POST', body: { config: { operation: 'excel_workflow', steps: [{ operation, schemeId: selected, ...(operation === 'oracle_import' ? { source: 'upload' } : {}) }] }, uploadId }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 120_000 })
+   const uploadIds = operation === 'oracle_import' ? await uploads.ensureExcelUploads('import', files) : []
+   const response = await client('/v1/excel-match-jobs/workflow-runs', { method: 'POST', body: { config: { operation: 'excel_workflow', steps: [{ operation, schemeId: selected, ...(operation === 'oracle_import' ? { source: 'upload' } : {}) }] }, uploadIds }, retry: false, acceptSafeErrorMessage: true, showResult: false, silentLoading: true, timeoutMs: 120_000 })
    if (!response.ok) throw new Error(response.error?.message || '创建任务失败')
    jobs.registerCreatedJob(response, false)
   } catch (cause) { setError(cause instanceof Error ? cause.message : '创建任务失败') } finally { setBusy(false) }
@@ -85,7 +86,7 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
      <form onSubmit={event => void save(event)} className={styles.stack}><FieldGroup><TextField label="方法名称" required maxLength={100} value={name} disabled={busy || !canManage} onChange={e => setName(e.target.value)} placeholder="例如：订单暂存表导入…" />{config.operation === 'oracle_import' ? <OracleImportEditor config={config} onChange={setConfig} disabled={busy || !canManage} client={client} /> : <OracleProcedureEditor config={config} onChange={setConfig} disabled={busy || !canManage} />}</FieldGroup><div className={styles.footer}><p className={styles.note}>{canManage ? '同名方法保存时将覆盖原配置。' : '当前账号可查看，配置保存需要 Excel 管理权限。'}</p><Button type="submit" disabled={busy || !canManage}><Save aria-hidden="true" />{busy ? '处理中…' : '保存方法'}</Button></div></form>
     </Section>
     <Section title="单独执行" description="使用已保存的方法创建后台任务。">
-     <div className={styles.stack}>{operation === 'oracle_import' && <TextField label="待导入的 Excel 文件" type="file" accept=".xlsx" disabled={busy || !canExecute} onChange={e => { setFile(e.target.files?.[0] || null); uploads.clearUploadRef('import') }} />}{!unchanged && <p className={styles.note}>请先选择或保存方法，再执行。</p>}<div aria-live="polite" className={styles.note}>{uploads.uploadProgress}</div><div><Button type="button" disabled={busy || !canExecute || !unchanged || running} onClick={() => void execute()}><Play aria-hidden="true" />执行已保存的方法</Button></div></div>
+     <div className={styles.stack}>{operation === 'oracle_import' && <ExcelFileSelection label="待导入的 Excel 文件" files={files} disabled={busy || running || !canExecute} onChange={next => { setFiles(next); uploads.clearUploadRef('import') }} hint="全部文件共用已保存的方法配置，按选择顺序逐个导入。" />}{!unchanged && <p className={styles.note}>请先选择或保存方法，再执行。</p>}<div aria-live="polite" className={styles.note}>{uploads.uploadProgress}</div><div><Button type="button" disabled={busy || !canExecute || !unchanged || running} onClick={() => void execute()}><Play aria-hidden="true" />{busy ? '提交任务中…' : '执行已保存的方法'}</Button></div></div>
     </Section>
    </div>
   </div>

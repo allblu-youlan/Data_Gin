@@ -1,6 +1,6 @@
 export type ExcelOperation = 'export_match' | 'oracle_import' | 'oracle_procedure' | 'oracle_export'
 export type OracleMethodOperation = 'oracle_import' | 'oracle_procedure'
-export type OracleImportConfig = { operation: 'oracle_import'; owner: string; tableName: string; sheetName: string; headerRow: number; mappings: Array<{ excelColumn: string; field: string }> }
+export type OracleImportConfig = { operation: 'oracle_import'; owner: string; tableName: string; sheetName: string; allSheets?: boolean; headerRow: number; mappings: Array<{ excelColumn: string; field: string }>; fixedIdentifier?: { enabled: boolean; field: string; value: string } }
 export type ProcedureParameter = { name: string; direction: 'IN' | 'OUT' | 'IN OUT'; dataType: string; value: string }
 export type ProcedureConfig = { operation: 'oracle_procedure'; owner: string; packageName: string; procedureName: string; parameters: ProcedureParameter[]; success: { parameter: string; operator: 'eq' | 'contains'; value: string } }
 export type OracleMethodConfig = OracleImportConfig | ProcedureConfig
@@ -15,7 +15,7 @@ export const operationPaths: Record<ExcelOperation, string> = {
  oracle_procedure: '/v1/excel-match-jobs/operation-schemes/oracle_procedure',
  oracle_export: '/v1/excel-match-jobs/oracle-export-schemes',
 }
-export const emptyImportConfig = (): OracleImportConfig => ({ operation: 'oracle_import', owner: '', tableName: '', sheetName: 'Sheet1', headerRow: 1, mappings: [{ excelColumn: '', field: '' }] })
+export const emptyImportConfig = (): OracleImportConfig => ({ operation: 'oracle_import', owner: '', tableName: '', sheetName: 'Sheet1', allSheets: false, headerRow: 1, mappings: [{ excelColumn: '', field: '' }], fixedIdentifier: { enabled: false, field: '', value: '' } })
 export const emptyProcedureConfig = (): ProcedureConfig => ({ operation: 'oracle_procedure', owner: '', packageName: '', procedureName: '', parameters: [], success: { parameter: '', operator: 'eq', value: '' } })
 export const defaultWorkflowSteps = (): WorkflowStep[] => [
  { operation: 'export_match', schemeId: 0, source: 'upload' },
@@ -23,6 +23,10 @@ export const defaultWorkflowSteps = (): WorkflowStep[] => [
  { operation: 'oracle_procedure', schemeId: 0 },
  { operation: 'oracle_export', schemeId: 0 },
 ]
+
+export function workflowNeedsUploads(steps: WorkflowStep[]): boolean {
+ return steps.some(step => ['export_match', 'oracle_import'].includes(step.operation) && step.source !== 'previous')
+}
 
 export function workflowIssues(steps: WorkflowStep[]): string[] {
  const issues: string[] = []

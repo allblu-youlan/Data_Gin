@@ -8,6 +8,7 @@ import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, Ex
 import { buildExcelUploadPayload, useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { useExcelJobs } from './useExcelJobs'
 import { ExcelRuleEditor } from './ExcelRuleEditor'
+import { ExcelFileSelection } from './ExcelFileSelection'
 import styles from './ExcelMatchPage.module.css'
 
 export type { ExcelPageClient, ExcelPageClientOptions } from './useExcelUploads'
@@ -32,12 +33,12 @@ export function ExcelMatchPage({
   onNavigateToJobs: () => void
 }) {
   const jobs = useExcelJobs({ section, client, token, refreshVersion, setLoading, setResult })
-  const [selectedExportFileName, setSelectedExportFileName] = useState('')
+  const [selectedExportFiles, setSelectedExportFiles] = useState<File[]>([])
   const [selectedImportFileName, setSelectedImportFileName] = useState('')
   const [selectedClearFileName, setSelectedClearFileName] = useState('')
   const [excelDialog, setExcelDialog] = useState<ExcelDialogMode | null>(null)
   const [previewResult, setPreviewResult] = useState<ExcelMatchPreviewResult | null>(null)
-  const { uploadProgress, clearUploadRef, ensureExcelUpload, resetUploads } = useExcelUploads(client)
+  const { uploadProgress, clearUploadRef, ensureExcelUpload, ensureExcelUploads, resetUploads } = useExcelUploads(client)
   const [exportSchemes, setExportSchemes] = useState<ExcelMatchScheme[]>([])
   const [importSchemes, setImportSchemes] = useState<ExcelMatchScheme[]>([])
   const [exportDefaults, setExportDefaults] = useState<ExcelExportSchemeConfig>(defaultExcelExportScheme)
@@ -74,7 +75,7 @@ export function ExcelMatchPage({
   const requestErrorMessage = (response: ClientResponse, fallback: string) => response.error?.message || fallback
 
   function resetExcelDialogFiles() {
-    setSelectedExportFileName('')
+    setSelectedExportFiles([])
     setSelectedImportFileName('')
     setSelectedClearFileName('')
     setPreviewResult(null)
@@ -268,7 +269,7 @@ export function ExcelMatchPage({
   useEffect(() => {
     setPendingWrite(null)
     setExcelDialog(null)
-    setSelectedExportFileName('')
+    setSelectedExportFiles([])
     setSelectedImportFileName('')
     setSelectedClearFileName('')
     setPreviewResult(null)
@@ -381,7 +382,7 @@ export function ExcelMatchPage({
       setExportEmptyCellFills(cloneExcelEmptyCellFills(defaultExcelExportScheme.emptyCellFills))
       setExportFormKey((value) => value + 1)
       setPreviewResult(null)
-      setSelectedExportFileName('')
+      setSelectedExportFiles([])
       clearUploadRef('export')
       return
     }
@@ -393,7 +394,7 @@ export function ExcelMatchPage({
     setExportEmptyCellFills(cloneExcelEmptyCellFills(defaults.emptyCellFills))
     setExportFormKey((value) => value + 1)
     setPreviewResult(null)
-    setSelectedExportFileName('')
+    setSelectedExportFiles([])
     clearUploadRef('export')
   }
 
@@ -421,16 +422,16 @@ export function ExcelMatchPage({
     event.preventDefault()
     if (!validateExportForm(event.currentTarget, true)) return
     const form = new FormData(event.currentTarget)
-    const file = form.get('file')
-    if (!(file instanceof File) || file.size === 0) {
-      setResult({ ok: false, status: 0, data: '请选择 .xlsx 文件' })
+    const files = form.getAll('file').filter((value): value is File => value instanceof File)
+    if (!files.length || files.some(file => file.size === 0)) {
+      setResult({ ok: false, status: 0, data: '请选择有效的 .xlsx 文件' })
       return
     }
 
     setLoading(true)
     try {
-      const uploadId = await ensureExcelUpload('export', file)
-      const payload = buildExcelUploadPayload(uploadId, buildExportConfig(form))
+      const uploadIds = await ensureExcelUploads('export', files)
+      const payload = buildExcelUploadPayload(uploadIds, buildExportConfig(form))
       const nextResult = await client('/v1/excel-match-jobs', {
         method: 'POST',
         body: payload,
@@ -472,7 +473,7 @@ export function ExcelMatchPage({
         retry: false,
         timeoutMs: 120_000,
       })
-      setResult({ ok: nextResult.ok, status: nextResult.status, data: { message: nextResult.ok ? 'Excel 匹配预览已更新。' : requestErrorMessage(nextResult, '预览 Excel 匹配失败。') }, error: nextResult.error })
+      setResult({ ok: nextResult.ok, status: nextResult.status, data: { message: nextResult.ok ? `Excel 匹配预览已更新${selectedExportFiles.length > 1 ? `，仅预览第 1 个文件（共 ${selectedExportFiles.length} 个）` : ''}。` : requestErrorMessage(nextResult, '预览 Excel 匹配失败。') }, error: nextResult.error })
       if (nextResult.ok) {
         setPreviewResult(readObject<ExcelMatchPreviewResult>(nextResult, 'preview'))
       }
@@ -641,7 +642,8 @@ export function ExcelMatchPage({
   function renderExportMatchForm() {
     return (
       <form className={`${styles.uploadForm} ${styles.schemeForm}`} onSubmit={createExportJob} noValidate onChange={() => setPreviewResult(null)} key={exportFormKey}>
-        <div className={styles.schemeToolbar}><label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedExportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('export'); setPreviewResult(null) }} /><span>{selectedExportFileName || '请选择 Excel 文件'}</span></label><Field label="Sheet" name="sheetName" defaultValue={exportDefaults.sheetName} /><div className={styles.schemeToolbarActions}><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) beginSchemeSave(form, 'export_match', selectedExportSchemeID ? 'current' : 'new') }} disabled={loading}>保存方案</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) void previewExportJob(form) }} disabled={loading}><FileJson aria-hidden="true" />预览匹配</button><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建导出任务</button></div></div>
+        <div className={styles.schemeToolbar}><ExcelFileSelection label="Excel 文件" files={selectedExportFiles} disabled={loading} onChange={files => { setSelectedExportFiles(files); clearUploadRef('export'); setPreviewResult(null) }} /><Field label="Sheet" name="sheetName" defaultValue={exportDefaults.sheetName} /><div className={styles.schemeToolbarActions}><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) beginSchemeSave(form, 'export_match', selectedExportSchemeID ? 'current' : 'new') }} disabled={loading}>保存方案</button><button type="button" onClick={(event) => { const form = event.currentTarget.form; if (form && validateExportForm(form)) void previewExportJob(form) }} disabled={loading}><FileJson aria-hidden="true" />预览匹配</button><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建导出任务</button></div></div>
+        <p className={styles.modeNote}>全部文件共用当前方案和 Sheet 名称，按选择顺序处理。预览仅检查第 1 个文件；创建任务会提交全部已选文件{selectedExportFiles.length > 0 ? `（${selectedExportFiles.length} 个）` : ''}。</p>
         <div className={styles.stepEditor}>
           <div className={styles.stepEditorTitle}><div><strong>匹配规则 <span className={styles.ruleCount}>{enabledStepCount} / {exportSteps.length} 已启用</span></strong><span>按顺序执行，点击规则展开详情；停用后保留配置。</span></div><button type="button" onClick={addExportStep} disabled={exportSteps.length >= 20}>添加规则</button></div>
           {enabledStepCount === 0 && <p className={styles.modeNote} role="status">当前没有启用的规则。可保存方案，预览和导出前请至少启用一条规则。</p>}

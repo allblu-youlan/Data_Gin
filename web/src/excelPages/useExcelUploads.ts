@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { ApiRequestOptions, ClientResponse, HTTPMethod } from '../api/client'
 import { excelChunkSize, readObject, sameExcelFile, type ExcelUploadRef, type ExcelUploadSession, type ExcelUploadSlot } from './excelPageSupport'
 
@@ -9,33 +9,37 @@ function requestErrorMessage(response: ClientResponse, fallback: string) {
   return response.error?.message || fallback
 }
 
-export function buildExcelUploadPayload(uploadId: string, config: unknown) {
+export function buildExcelUploadPayload(uploadId: string | readonly string[], config: unknown) {
   const payload = new FormData()
-  payload.append('uploadId', uploadId)
+  if (typeof uploadId === 'string') payload.append('uploadId', uploadId)
+  else payload.append('uploadIds', JSON.stringify(uploadId))
   payload.append('config', JSON.stringify(config))
   return payload
 }
 
 export function useExcelUploads(client: ExcelPageClient) {
-  const [uploadRefs, setUploadRefs] = useState<Partial<Record<ExcelUploadSlot, ExcelUploadRef>>>({})
+  const uploadRefs = useRef<Partial<Record<ExcelUploadSlot, ExcelUploadRef[]>>>({})
   const [uploadProgress, setUploadProgress] = useState('')
 
   function clearUploadRef(slot: ExcelUploadSlot) {
-    setUploadRefs((current) => ({ ...current, [slot]: undefined }))
+    delete uploadRefs.current[slot]
     setUploadProgress('')
   }
 
   const resetUploads = useCallback(() => {
-    setUploadRefs({})
+    uploadRefs.current = {}
     setUploadProgress('')
   }, [])
 
-  async function ensureExcelUpload(slot: ExcelUploadSlot, file: File) {
-    const existing = uploadRefs[slot]
-    if (existing && sameExcelFile(file, existing)) return existing.uploadId
+  async function ensureExcelUpload(slot: ExcelUploadSlot, file: File, batchLabel = '') {
+    const existing = uploadRefs.current[slot]?.find(ref => sameExcelFile(file, ref))
+    if (existing) {
+      setUploadProgress(`${batchLabel}已上传：${file.name}`)
+      return existing.uploadId
+    }
 
     const totalChunks = Math.ceil(file.size / excelChunkSize)
-    setUploadProgress(`准备上传 ${file.name}，共 ${totalChunks} 个分片`)
+    setUploadProgress(`${batchLabel}准备上传 ${file.name}，共 ${totalChunks} 个分片`)
     const createResult = await client('/v1/excel-match-jobs/uploads', {
       method: 'POST',
       body: { fileName: file.name, totalChunks },
@@ -54,7 +58,7 @@ export function useExcelUploads(client: ExcelPageClient) {
       chunkForm.append('index', String(index))
       chunkForm.append('totalChunks', String(totalChunks))
       chunkForm.append('chunk', file.slice(start, end), `${file.name}.part${index}`)
-      setUploadProgress(`上传分片 ${index + 1}/${totalChunks}`)
+      setUploadProgress(`${batchLabel}${file.name} · 上传分片 ${index + 1}/${totalChunks}`)
       const chunkResult = await client(`/v1/excel-match-jobs/uploads/${encodeURIComponent(session.uploadId)}/chunks`, {
         method: 'POST',
         body: chunkForm,
@@ -66,7 +70,7 @@ export function useExcelUploads(client: ExcelPageClient) {
       if (!chunkResult.ok) throw new Error(requestErrorMessage(chunkResult, `上传分片 ${index + 1} 失败`))
     }
 
-    setUploadProgress('合并 Excel 分片')
+    setUploadProgress(`${batchLabel}合并 ${file.name} 分片`)
     const completeResult = await client(`/v1/excel-match-jobs/uploads/${encodeURIComponent(session.uploadId)}/complete`, {
       method: 'POST',
       body: { totalChunks },
@@ -83,10 +87,19 @@ export function useExcelUploads(client: ExcelPageClient) {
       lastModified: file.lastModified,
       totalChunks,
     }
-    setUploadRefs((current) => ({ ...current, [slot]: nextRef }))
-    setUploadProgress(`上传完成：${file.name}`)
+    uploadRefs.current[slot] = [...(uploadRefs.current[slot] ?? []), nextRef]
+    setUploadProgress(`${batchLabel}上传完成：${file.name}`)
     return session.uploadId
   }
 
-  return { uploadProgress, clearUploadRef, ensureExcelUpload, resetUploads }
+  async function ensureExcelUploads(slot: ExcelUploadSlot, files: readonly File[]) {
+    const uploadIds: string[] = []
+    for (let index = 0; index < files.length; index++) {
+      uploadIds.push(await ensureExcelUpload(slot, files[index], `文件 ${index + 1}/${files.length} · `))
+    }
+    setUploadProgress(`已准备 ${files.length} 个 Excel 文件，等待后台顺序处理。`)
+    return uploadIds
+  }
+
+  return { uploadProgress, clearUploadRef, ensureExcelUpload, ensureExcelUploads, resetUploads }
 }

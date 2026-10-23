@@ -59,6 +59,12 @@ export function formValue(form: FormData, key: string) { const value = form.get(
 export function parseExportColumnFormats(raw: string): ExcelExportColumnFormat[] { return raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => { const separator = line.includes('=') ? '=' : ':'; const [column = '', format = ''] = line.split(separator); return { column: column.trim(), format: format.trim().toLowerCase() } }).filter((item) => item.column && item.format) }
 export function exportColumnFormatsText(formats: ExcelExportColumnFormat[] | undefined) { return Array.isArray(formats) ? formats.filter((item) => item.column && item.format).map((item) => `${item.column}=${item.format}`).join('\n') : '' }
 export function sameExcelFile(file: File, ref: ExcelUploadRef) { return file.name === ref.fileName && file.size === ref.size && file.lastModified === ref.lastModified }
+
+export function excelFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
 export function exportSchemeDefaults(config: ExcelMatchSchemeConfig): ExcelExportSchemeConfig { const steps = migrateExcelMatchSteps(config, defaultExcelExportScheme.steps[0]); return { sheetName: config.sheetName || defaultExcelExportScheme.sheetName, steps, emptyCellFills: cloneExcelEmptyCellFills(config.emptyCellFills), exportColumnFormats: exportColumnFormatsText(config.exportColumnFormats) || defaultExcelExportScheme.exportColumnFormats, batchSize: config.batchSize ? String(config.batchSize) : defaultExcelExportScheme.batchSize } }
 export function importSchemeDefaults(config: ExcelMatchSchemeConfig): ExcelImportSchemeConfig { return { sheetName: config.sheetName || defaultExcelImportScheme.sheetName, tableName: config.tableName || defaultExcelImportScheme.tableName, dbMatchField: config.dbMatchField || defaultExcelImportScheme.dbMatchField, matchExcelColumn: config.matchExcelColumn || defaultExcelImportScheme.matchExcelColumn, writeMappings: migrateExcelImportWriteMappings(config, defaultExcelImportScheme.writeMappings[0]), batchSize: config.batchSize ? String(config.batchSize) : defaultExcelImportScheme.batchSize } }
 export function excelJobStatusLabel(value: string) { return ({ pending: '等待处理', running: '处理中', success: '成功', failed: '失败', expired: '已过期' } as Record<string, string>)[value] ?? (value || '-') }
