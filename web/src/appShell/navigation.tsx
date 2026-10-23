@@ -146,7 +146,7 @@ export const navGroups: NavGroup[] = [
     label: '数据工具',
     items: [
       { key: 'excel_workflow', label: '复杂操作台', description: '匹配、导入、过程与导出串行执行', icon: <ListChecks aria-hidden="true" /> },
-      { key: 'excel_oracle_import', label: '导入 Excel 数据', description: '保存 Excel 到 Oracle 导入方法', icon: <Upload aria-hidden="true" /> },
+      { key: 'excel_oracle_import', label: '导入 Oracle', description: '保存 Excel 到 Oracle 导入方法', icon: <Upload aria-hidden="true" /> },
       { key: 'excel_procedure', label: '存储过程执行', description: '调用 Oracle 过程与校验成功标志', icon: <Database aria-hidden="true" /> },
       { key: 'excel_jobs', label: 'Excel 任务', description: '状态与结果下载', icon: <ScrollText aria-hidden="true" /> },
       { key: 'excel_export', label: 'Excel 导出', description: 'Oracle 表数据导出', icon: <Download aria-hidden="true" /> },

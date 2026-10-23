@@ -4,6 +4,7 @@ import { excelChunkSize, readObject, sameExcelFile, type ExcelUploadRef, type Ex
 
 export type ExcelPageClientOptions = Omit<ApiRequestOptions, 'method'> & { method?: HTTPMethod; showResult?: boolean; silentLoading?: boolean }
 export type ExcelPageClient = (path: string, options?: ExcelPageClientOptions) => Promise<ClientResponse>
+type ExcelUploadScope = ExcelUploadSlot | `workflow:${string}`
 
 function requestErrorMessage(response: ClientResponse, fallback: string) {
   return response.error?.message || fallback
@@ -18,10 +19,10 @@ export function buildExcelUploadPayload(uploadId: string | readonly string[], co
 }
 
 export function useExcelUploads(client: ExcelPageClient) {
-  const uploadRefs = useRef<Partial<Record<ExcelUploadSlot, ExcelUploadRef[]>>>({})
+  const uploadRefs = useRef<Partial<Record<ExcelUploadScope, ExcelUploadRef[]>>>({})
   const [uploadProgress, setUploadProgress] = useState('')
 
-  function clearUploadRef(slot: ExcelUploadSlot) {
+  function clearUploadRef(slot: ExcelUploadScope) {
     delete uploadRefs.current[slot]
     setUploadProgress('')
   }
@@ -31,7 +32,7 @@ export function useExcelUploads(client: ExcelPageClient) {
     setUploadProgress('')
   }, [])
 
-  async function ensureExcelUpload(slot: ExcelUploadSlot, file: File, batchLabel = '') {
+  async function ensureExcelUpload(slot: ExcelUploadScope, file: File, batchLabel = '') {
     const existing = uploadRefs.current[slot]?.find(ref => sameExcelFile(file, ref))
     if (existing) {
       setUploadProgress(`${batchLabel}已上传：${file.name}`)
@@ -92,12 +93,12 @@ export function useExcelUploads(client: ExcelPageClient) {
     return session.uploadId
   }
 
-  async function ensureExcelUploads(slot: ExcelUploadSlot, files: readonly File[]) {
+  async function ensureExcelUploads(slot: ExcelUploadScope, files: readonly File[], stepLabel = '') {
     const uploadIds: string[] = []
     for (let index = 0; index < files.length; index++) {
-      uploadIds.push(await ensureExcelUpload(slot, files[index], `文件 ${index + 1}/${files.length} · `))
+      uploadIds.push(await ensureExcelUpload(slot, files[index], `${stepLabel}文件 ${index + 1}/${files.length} · `))
     }
-    setUploadProgress(`已准备 ${files.length} 个 Excel 文件，等待后台顺序处理。`)
+    setUploadProgress(`${stepLabel}已准备 ${files.length} 个 Excel 文件，等待后台顺序处理。`)
     return uploadIds
   }
 
