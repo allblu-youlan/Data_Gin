@@ -385,6 +385,10 @@ func processExcelMatchPreview(ctx context.Context, input *excelize.File, config 
 }
 
 func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPath string, config ExcelMatchConfig, lookup ExcelMatchLookup, onProgress func(ExcelMatchJobStats)) (ExcelMatchJobStats, error) {
+	return processExcelMatchFileWithState(ctx, inputPath, outputPath, config, lookup, nil, onProgress)
+}
+
+func processExcelMatchFileWithState(ctx context.Context, inputPath, outputPath string, config ExcelMatchConfig, lookup ExcelMatchLookup, state *excelMatchPipelineState, onProgress func(ExcelMatchJobStats)) (ExcelMatchJobStats, error) {
 	input, err := excelize.OpenFile(inputPath)
 	if err != nil {
 		return ExcelMatchJobStats{}, err
@@ -396,9 +400,12 @@ func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPat
 	if !sheetExists(input.GetSheetList(), config.SheetName) {
 		return ExcelMatchJobStats{}, fmt.Errorf("Excel 不存在 sheet: %s", config.SheetName)
 	}
-	reservations, err := collectExcelOrderItemReservations(ctx, input, config, 0)
-	if err != nil {
-		return ExcelMatchJobStats{}, err
+	if state == nil {
+		reservations, err := collectExcelOrderItemReservations(ctx, input, config, 0)
+		if err != nil {
+			return ExcelMatchJobStats{}, err
+		}
+		state = newExcelMatchPipelineState(reservations)
 	}
 	rows, err := input.Rows(config.SheetName)
 	if err != nil {
@@ -413,7 +420,6 @@ func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPat
 	}
 
 	stats := ExcelMatchJobStats{}
-	state := newExcelMatchPipelineState(reservations)
 	var layout excelMatchPipelineLayout
 	var buffered []*excelMatchPipelineRow
 	rowInSheet, sheetIndex := 1, 1
@@ -454,6 +460,7 @@ func processExcelMatchFileWithProgress(ctx context.Context, inputPath, outputPat
 		if err := runExcelMatchSteps(ctx, config, lookup, layout, state, buffered); err != nil {
 			return err
 		}
+		state.orderItems.releaseCompletedOrders()
 		for _, bufferedRow := range buffered {
 			if err := rotateSheet(); err != nil {
 				return err

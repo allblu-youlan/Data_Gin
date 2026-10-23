@@ -2,6 +2,7 @@ package data_dao
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -87,13 +88,43 @@ func TestExcelMatchJobPageQueryMatchesPositiveTaskID(t *testing.T) {
 	if strings.Contains(statement, "42") || strings.Contains(statement, "export_match") {
 		t.Fatalf("Excel job page query interpolated filters: %s", statement)
 	}
-	wantVars := []any{uint64(42), "%42%", "%42%", "export_match", "export_match"}
+	wantVars := []any{uint64(42), "%42%", "%42%", "export_match", "export_match", "excel_workflow", 1, "export_match"}
 	if len(query.Statement.Vars) != len(wantVars) {
 		t.Fatalf("Excel job ID query vars = %#v, want %#v", query.Statement.Vars, wantVars)
 	}
 	for index, want := range wantVars {
 		if query.Statement.Vars[index] != want {
 			t.Fatalf("Excel job ID query vars[%d] = %#v, want %#v", index, query.Statement.Vars[index], want)
+		}
+	}
+}
+
+func TestExcelMatchJobPageQueryIncludesOnlySingleStepMatchingWorkflows(t *testing.T) {
+	dao := &ExcelMatchJobDAO{db: dryRunWeatherDAOTestDB(t)}
+	query := dao.applyListFilters(
+		dao.db.WithContext(t.Context()).Model(&model.ExcelMatchJob{}),
+		ExcelMatchJobListQuery{Status: "success", Operation: "match"},
+	).Find(&[]model.ExcelMatchJob{})
+	if query.Error != nil {
+		t.Fatal(query.Error)
+	}
+	statement := query.Statement.SQL.String()
+	// Keep the legacy fallback branch and require all three workflow guards
+	// together: workflow operation, exactly one step, and a matching step.
+	// The outer group keeps the OR from bypassing the selected job status.
+	condition := "status = ? AND ((COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.operation')), ''), ?) = ? OR (" +
+		"JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.operation')) = ? AND JSON_LENGTH(config_json, '$.steps') = ? AND " +
+		"JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.steps[0].operation')) = ?)))"
+	if !strings.Contains(statement, condition) {
+		t.Fatalf("matching filter lost legacy compatibility or workflow/status guards: %s", statement)
+	}
+	want := []interface{}{"success", "export_match", "export_match", "excel_workflow", 1, "export_match"}
+	if !reflect.DeepEqual(query.Statement.Vars, want) {
+		t.Fatalf("matching filter arguments=%v want=%v", query.Statement.Vars, want)
+	}
+	for _, value := range []string{"success", "export_match", "excel_workflow"} {
+		if strings.Contains(statement, value) {
+			t.Fatalf("matching filter interpolated %q: %s", value, statement)
 		}
 	}
 }

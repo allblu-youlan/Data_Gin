@@ -124,9 +124,13 @@ func (dao *ExcelMatchJobDAO) applyListFilters(query *gorm.DB, params ExcelMatchJ
 	const operationSQL = "JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.operation'))"
 	switch params.Operation {
 	case "match":
+		// Batch matching shares the workflow worker, but a multi-step workflow
+		// must remain distinct from a standalone matching task in the list.
 		query = query.Where(
-			"COALESCE(NULLIF("+operationSQL+", ''), ?) = ?",
-			"export_match", "export_match",
+			"(COALESCE(NULLIF("+operationSQL+", ''), ?) = ? OR ("+
+				operationSQL+" = ? AND JSON_LENGTH(config_json, '$.steps') = ? AND "+
+				"JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.steps[0].operation')) = ?))",
+			"export_match", "export_match", "excel_workflow", 1, "export_match",
 		)
 	case "write":
 		query = query.Where(

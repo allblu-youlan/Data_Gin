@@ -21,30 +21,21 @@ type excelWorkflowExecutor func(context.Context, int, ExcelWorkflowStep, string)
 // One synchronous loop is the execution boundary. An error prevents every
 // subsequent step, including when a procedure's configured flag does not match.
 func runExcelWorkflow(ctx context.Context, config ExcelWorkflowConfig, uploadPath string, execute excelWorkflowExecutor, completed func(int) error) (string, error) {
-	previous, result := "", ""
-	for i, step := range config.Steps {
-		if err := ctx.Err(); err != nil {
-			return result, err
+	results, err := runExcelWorkflowFiles(ctx, config, []string{uploadPath}, func(ctx context.Context, index int, step ExcelWorkflowStep, sources []string) ([]string, error) {
+		source := ""
+		if len(sources) > 0 {
+			source = sources[0]
 		}
-		source := uploadPath
-		if step.Source == "previous" {
-			source = previous
+		result, err := execute(ctx, index, step, source)
+		if result == "" {
+			return nil, err
 		}
-		next, err := execute(ctx, i, step, source)
-		if err != nil {
-			return result, fmt.Errorf("第 %d 步「%s」失败: %w", i+1, step.Name, err)
-		}
-		if next != "" {
-			result = next
-		}
-		if step.Operation == excelOperationExportMatch {
-			previous = next
-		}
-		if err := completed(i + 1); err != nil {
-			return result, err
-		}
+		return []string{result}, err
+	}, completed)
+	if len(results) > 0 {
+		return results[0], err
 	}
-	return result, nil
+	return "", err
 }
 
 func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, record *model.ExcelMatchJob) (processErr error) {
@@ -67,18 +58,26 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 	if err := json.Unmarshal([]byte(record.ConfigJSON), &config); err != nil {
 		return err
 	}
-	result, err := runExcelWorkflow(ctx, config, record.SourceFilePath, func(ctx context.Context, index int, step ExcelWorkflowStep, source string) (string, error) {
+	sources, err := excelWorkflowSourcePaths(record, config)
+	if err != nil {
+		return err
+	}
+	results, err := runExcelWorkflowFiles(ctx, config, sources, func(ctx context.Context, index int, step ExcelWorkflowStep, sources []string) ([]string, error) {
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d/%d 步：%s，开始执行", index+1, len(config.Steps), step.Name), nil)
-		output, err := s.executeExcelWorkflowStep(ctx, record, index, step, source)
+		output, err := s.executeExcelWorkflowFilesStep(ctx, record, index, step, sources)
 		if err != nil {
 			s.logJob(context.WithoutCancel(ctx), record.ID, "error", fmt.Sprintf("第 %d 步：%s 失败，后续步骤已停止；请检查方法配置、源文件及 Oracle 返回标志", index+1, step.Name), nil)
-			return "", err
+			return nil, err
 		}
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d 步：%s，执行成功", index+1, step.Name), nil)
 		return output, nil
 	}, func(completed int) error {
 		return s.jobDAO.UpdateProgress(ctx, record.ID, ExcelMatchJobStats{TotalRows: len(config.Steps), ProcessedRows: completed})
 	})
+	if err != nil {
+		return err
+	}
+	result, err := excelWorkflowResultFile(record.WorkDir, results)
 	if err != nil {
 		return err
 	}
@@ -101,32 +100,8 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 	return nil
 }
 
-func (s *ExcelMatchJobService) executeExcelWorkflowStep(ctx context.Context, record *model.ExcelMatchJob, index int, step ExcelWorkflowStep, source string) (string, error) {
+func (s *ExcelMatchJobService) executeExcelWorkflowDatabaseStep(ctx context.Context, record *model.ExcelMatchJob, index int, step ExcelWorkflowStep) (string, error) {
 	switch step.Operation {
-	case excelOperationExportMatch:
-		var config ExcelMatchConfig
-		if err := json.Unmarshal(step.Config, &config); err != nil {
-			return "", err
-		}
-		if step.Source == "previous" {
-			config.SheetName = defaultExcelResultSheet
-		}
-		output := filepath.Join(record.WorkDir, fmt.Sprintf("match_%d.xlsx", index+1))
-		err := withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
-			_, err := processExcelMatchFile(ctx, source, output, config, databaseExcelMatchLookup{dao: s.jobDAO})
-			return err
-		})
-		return output, err
-	case ExcelOperationOracleImport:
-		config, err := excelWorkflowImportConfig(step)
-		if err != nil {
-			return "", err
-		}
-		count, err := ExecuteOracleExcelImport(ctx, source, config)
-		if err == nil {
-			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导入 %d 行", count), nil)
-		}
-		return "", err
 	case ExcelOperationOracleProcedure:
 		var config OracleProcedureConfig
 		if err := json.Unmarshal(step.Config, &config); err != nil {
@@ -168,6 +143,50 @@ func excelWorkflowImportConfig(step ExcelWorkflowStep) (OracleExcelImportConfig,
 	if step.Source == "previous" {
 		config.SheetName = defaultExcelResultSheet
 		config.HeaderRow = 1
+		config.AllSheets = true
 	}
 	return config, nil
+}
+
+func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context, record *model.ExcelMatchJob, index int, step ExcelWorkflowStep, sources []string) ([]string, error) {
+	switch step.Operation {
+	case excelOperationExportMatch:
+		var config ExcelMatchConfig
+		if err := json.Unmarshal(step.Config, &config); err != nil {
+			return nil, err
+		}
+		if step.Source == "previous" {
+			config.SheetName = defaultExcelResultSheet
+		}
+		outputDir := filepath.Join(record.WorkDir, fmt.Sprintf("match_%d", index+1))
+		var outputs []string
+		lastFile, lastRows := -1, 0
+		err := withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
+			var err error
+			outputs, err = processExcelMatchFiles(ctx, sources, outputDir, config, databaseExcelMatchLookup{dao: s.jobDAO}, func(done, total int, stats ExcelMatchJobStats) {
+				if done != lastFile || stats.ProcessedRows < lastRows || stats.ProcessedRows-lastRows >= 250000 {
+					s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d 步匹配进度：%d/%d 个文件，当前文件已处理 %d 行", index+1, done, total, stats.ProcessedRows), nil)
+					lastFile, lastRows = done, stats.ProcessedRows
+				}
+			})
+			return err
+		})
+		return outputs, err
+	case ExcelOperationOracleImport:
+		config, err := excelWorkflowImportConfig(step)
+		if err != nil {
+			return nil, err
+		}
+		count, err := ExecuteOracleExcelImportFiles(ctx, sources, config)
+		if err == nil {
+			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导入 %d 个文件，共 %d 行", len(sources), count), nil)
+		}
+		return nil, err
+	default:
+		result, err := s.executeExcelWorkflowDatabaseStep(ctx, record, index, step)
+		if result == "" {
+			return nil, err
+		}
+		return []string{result}, err
+	}
 }

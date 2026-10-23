@@ -90,14 +90,18 @@ func (ctrl *ExcelMatchJobController) DeleteWorkflow(c *gin.Context) {
 
 func (ctrl *ExcelMatchJobController) CreateWorkflow(c *gin.Context) {
 	var input struct {
-		Config   data_svc.ExcelWorkflowConfig `json:"config"`
-		UploadID string                       `json:"uploadId"`
+		Config    data_svc.ExcelWorkflowConfig `json:"config"`
+		UploadID  string                       `json:"uploadId"`
+		UploadIDs []string                     `json:"uploadIds"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(400, msg.ErrResponseStr("执行参数格式无效"))
 		return
 	}
-	record, err := ctrl.service.CreateWorkflowJob(c.Request.Context(), input.Config, input.UploadID)
+	if len(input.UploadIDs) == 0 && input.UploadID != "" {
+		input.UploadIDs = []string{input.UploadID}
+	}
+	record, err := ctrl.service.CreateWorkflowJobFromUploads(c.Request.Context(), input.Config, input.UploadIDs)
 	if err != nil {
 		zap.L().Error("Excel workflow creation failed", zap.Error(err))
 		c.JSON(400, msg.ErrResponseStr("创建任务失败，请检查已上传文件、步骤及方法是否有效"))

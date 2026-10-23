@@ -22,8 +22,9 @@ type ExcelWorkflowStep struct {
 }
 
 type ExcelWorkflowConfig struct {
-	Operation string              `json:"operation"`
-	Steps     []ExcelWorkflowStep `json:"steps"`
+	Operation   string              `json:"operation"`
+	Steps       []ExcelWorkflowStep `json:"steps"`
+	SourceFiles []string            `json:"sourceFiles,omitempty"`
 }
 
 type ExcelWorkflowScheme struct {
@@ -34,6 +35,7 @@ type ExcelWorkflowScheme struct {
 
 func validateExcelWorkflow(input ExcelWorkflowConfig) (ExcelWorkflowConfig, error) {
 	input.Steps = append([]ExcelWorkflowStep(nil), input.Steps...)
+	input.SourceFiles = nil
 	input.Operation = excelOperationWorkflow
 	if len(input.Steps) == 0 || len(input.Steps) > 20 {
 		return input, errors.New("组合操作需配置 1 至 20 个步骤")

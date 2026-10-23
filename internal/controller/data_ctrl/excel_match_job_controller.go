@@ -80,6 +80,13 @@ func (ctrl *ExcelMatchJobController) CreateJob(c *gin.Context) {
 	var matchJob *model.ExcelMatchJob
 	if err == nil {
 		matchJob, err = ctrl.service.CreateJob(c.Request.Context(), fileHeader, config)
+	} else if raw := c.PostForm("uploadIds"); raw != "" {
+		var uploadIDs []string
+		if err := json.Unmarshal([]byte(raw), &uploadIDs); err != nil || len(uploadIDs) == 0 {
+			c.JSON(400, msg.ErrResponseStr("Excel 文件列表无效"))
+			return
+		}
+		matchJob, err = ctrl.service.CreateMatchJobFromUploads(c.Request.Context(), uploadIDs, config)
 	} else if uploadID != "" {
 		matchJob, err = ctrl.service.CreateJobFromUpload(c.Request.Context(), uploadID, config)
 	} else {

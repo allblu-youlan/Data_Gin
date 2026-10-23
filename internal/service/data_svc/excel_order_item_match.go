@@ -58,9 +58,10 @@ type excelOrderItemIdentity struct {
 type excelOrderItemUseCounts map[excelOrderItemIdentity]int
 
 type excelOrderItemMatchState struct {
-	reservations excelOrderItemReservations
-	used         map[string]excelOrderItemUseCounts
-	usedCount    int
+	reservations         excelOrderItemReservations
+	used                 map[string]excelOrderItemUseCounts
+	usedCount            int
+	reservationsComplete bool
 }
 
 func newExcelOrderItemMatchState(reservations excelOrderItemReservations) *excelOrderItemMatchState {
@@ -70,7 +71,52 @@ func newExcelOrderItemMatchState(reservations excelOrderItemReservations) *excel
 	}
 }
 
+// Call after all steps in a batch have consumed their reservations. An order
+// must stay in used until every file/step has exhausted its future candidates.
+func (state *excelOrderItemMatchState) releaseCompletedOrders() {
+	if len(state.reservations) == 0 && !state.reservationsComplete {
+		return
+	}
+	for order, used := range state.used {
+		known, pending := false, false
+		for _, byOrder := range state.reservations {
+			bySpec, exists := byOrder[order]
+			if !exists {
+				continue
+			}
+			known = true
+			for _, reservations := range bySpec {
+				for _, reservation := range reservations {
+					if reservation.count > 0 {
+						pending = true
+						break
+					}
+				}
+				if pending {
+					break
+				}
+			}
+			if pending {
+				break
+			}
+		}
+		if (!known && !state.reservationsComplete) || pending {
+			continue
+		}
+		for _, count := range used {
+			state.usedCount -= count
+		}
+		delete(state.used, order)
+	}
+}
+
 func collectExcelOrderItemReservations(ctx context.Context, input excelRowsSource, config ExcelMatchConfig, scanLimit int) (excelOrderItemReservations, error) {
+	return collectExcelOrderItemReservationsFiltered(ctx, input, config, scanLimit, nil)
+}
+
+// selectOrder runs once for each eligible SKU step/row. A counting pass may
+// return false for every order; a second pass can retain repeated orders only.
+func collectExcelOrderItemReservationsFiltered(ctx context.Context, input excelRowsSource, config ExcelMatchConfig, scanLimit int, selectOrder func(string) bool) (excelOrderItemReservations, error) {
 	reservations := make(excelOrderItemReservations)
 	hasOrderItemStep := false
 	for stepIndex, step := range config.Steps {
@@ -126,10 +172,17 @@ func collectExcelOrderItemReservations(ctx context.Context, input excelRowsSourc
 			if orderNo == "" || specCode == "" || skipExcelOrderItemSpecCode(specCode) || !priceOK || !qtyOK {
 				continue
 			}
+			if selectOrder != nil && !selectOrder(orderNo) {
+				continue
+			}
 			if reservations.add(stepIndex, orderNo, specCode, priceCents, qty) {
 				reservationGroups++
 				if reservationGroups > maxExcelOrderReservationGroups {
-					return nil, fmt.Errorf("规格前缀匹配组合超过上限 %d，请拆分Excel文件", maxExcelOrderReservationGroups)
+					kind := "订单"
+					if selectOrder != nil {
+						kind = "重复订单"
+					}
+					return nil, fmt.Errorf("待处理%s的SKU规格预留组合超过内存保护上限 %d，请按订单号拆批", kind, maxExcelOrderReservationGroups)
 				}
 			}
 		}
@@ -271,7 +324,7 @@ func (state *excelOrderItemMatchState) match(detail excelOrderItemDetail, orderN
 			continue
 		}
 		if state.usedCount >= maxExcelOrderUsedItems {
-			return "", "", fmt.Errorf("订单商品明细使用数量超过上限 %d，请拆分Excel文件", maxExcelOrderUsedItems)
+			return "", "", fmt.Errorf("待处理重复订单占用的SKU超过内存保护上限，请按订单号拆批")
 		}
 		used[identity]++
 		state.usedCount++
@@ -309,7 +362,7 @@ func (state *excelOrderItemMatchState) matchByAmountAndQty(items []excelOrderIte
 			continue
 		}
 		if state.usedCount >= maxExcelOrderUsedItems {
-			return "", "", fmt.Errorf("订单商品明细使用数量超过上限 %d，请拆分Excel文件", maxExcelOrderUsedItems)
+			return "", "", fmt.Errorf("待处理重复订单占用的SKU超过内存保护上限，请按订单号拆批")
 		}
 		used[identity]++
 		state.usedCount++
