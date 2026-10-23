@@ -37,6 +37,7 @@ type ExcelMatchJobListPage struct {
 }
 
 var ErrExcelMatchCleanupLeaseLost = errors.New("excel match cleanup: lease lost")
+var ErrExcelMatchJobNotRunning = errors.New("Excel 任务已停止运行")
 
 var allowedBojunExcelFields = map[string]struct{}{
 	"billdate":             {},
@@ -269,7 +270,7 @@ func (dao *ExcelMatchJobDAO) markRunningClaimQuery(
 func (dao *ExcelMatchJobDAO) UpdateProgress(ctx context.Context, id uint, stats ExcelMatchJobStats) error {
 	return dao.db.WithContext(ctx).
 		Model(&model.ExcelMatchJob{}).
-		Where("id = ?", id).
+		Where("id = ? AND status = ?", id, "running").
 		Updates(map[string]interface{}{
 			"total_rows":     stats.TotalRows,
 			"processed_rows": stats.ProcessedRows,
@@ -282,9 +283,9 @@ func (dao *ExcelMatchJobDAO) UpdateProgress(ctx context.Context, id uint, stats 
 
 func (dao *ExcelMatchJobDAO) MarkSuccess(ctx context.Context, id uint, stats ExcelMatchJobStats, expiresAt time.Time) error {
 	now := time.Now()
-	return dao.db.WithContext(ctx).
+	result := dao.db.WithContext(ctx).
 		Model(&model.ExcelMatchJob{}).
-		Where("id = ?", id).
+		Where("id = ? AND status = ?", id, "running").
 		Updates(map[string]interface{}{
 			"status":         "success",
 			"total_rows":     stats.TotalRows,
@@ -295,14 +296,21 @@ func (dao *ExcelMatchJobDAO) MarkSuccess(ctx context.Context, id uint, stats Exc
 			"finished_at":    model.TimeNormal{Time: now},
 			"expires_at":     model.TimeNormal{Time: expiresAt},
 			"updated_at":     now.Unix(),
-		}).Error
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrExcelMatchJobNotRunning
+	}
+	return nil
 }
 
 func (dao *ExcelMatchJobDAO) MarkFailed(ctx context.Context, id uint, errMessage string, expiresAt time.Time) error {
 	now := time.Now()
 	return dao.db.WithContext(ctx).
 		Model(&model.ExcelMatchJob{}).
-		Where("id = ?", id).
+		Where("id = ? AND status IN ?", id, []string{"pending", "running"}).
 		Updates(map[string]interface{}{
 			"status":        "failed",
 			"error_message": errMessage,

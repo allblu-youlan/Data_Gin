@@ -9,7 +9,7 @@ import (
 
 func TestOracleExcelImportProgressCountsAndCommitsAllFiles(t *testing.T) {
 	rows := [][]interface{}{{"订单号", "金额"}, {"", ""}}
-	for index := 0; index < 201; index++ {
+	for index := 0; index < 1001; index++ {
 		rows = append(rows, []interface{}{fmt.Sprintf("ORDER_%d", index), "10"})
 	}
 	first := oracleImportWorkbook(t, "first.xlsx", oracleImportSheetFixture{name: "订单", rows: rows})
@@ -41,10 +41,10 @@ func TestOracleExcelImportProgressCountsAndCommitsAllFiles(t *testing.T) {
 			intermediate, committing := false, false
 			for _, progress := range events {
 				if progress.Stage == "importing" {
-					if !progress.TotalKnown || progress.TotalRows != 203 || progress.Identifier != "42" {
+					if !progress.TotalKnown || progress.TotalRows != 1003 || progress.Identifier != "42" {
 						t.Fatalf("wrong import total or identifier: %+v", progress)
 					}
-					intermediate = intermediate || progress.ProcessedRows == 200
+					intermediate = intermediate || progress.ProcessedRows == 1000
 				}
 				committing = committing || progress.Stage == "committing"
 			}
@@ -53,10 +53,10 @@ func TestOracleExcelImportProgressCountsAndCommitsAllFiles(t *testing.T) {
 				t.Fatalf("progress lost intermediate count or source location: %+v", events)
 			}
 			if fail {
-				if count != 0 || last.Stage != "failed" || last.ProcessedRows != 200 || committing || state.commits != 0 {
+				if count != 0 || last.Stage != "failed" || last.ProcessedRows != 1000 || committing || state.commits != 0 {
 					t.Fatalf("failed batch reported successful rows: count=%d last=%+v", count, last)
 				}
-			} else if count != 203 || !committing || last.Stage != "completed" || last.ProcessedRows != 203 || last.TotalRows != 203 {
+			} else if count != 1003 || !committing || last.Stage != "completed" || last.ProcessedRows != 1003 || last.TotalRows != 1003 {
 				t.Fatalf("final progress did not match committed rows: count=%d last=%+v", count, last)
 			}
 		})

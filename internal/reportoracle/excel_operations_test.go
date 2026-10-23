@@ -2,6 +2,7 @@ package reportoracle
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,49 @@ func TestOperationValuesPreserveDecimalsAndBindDates(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := OperationValue(test.dataType, test.value); err == nil {
 				t.Fatal("invalid input accepted")
+			}
+		})
+	}
+}
+
+func TestOperationDateValuesPreserveFormatsAndTimezones(t *testing.T) {
+	for _, dataType := range []string{"DATE", "TIMESTAMP", "TIMESTAMP(6) WITH TIME ZONE"} {
+		t.Run(dataType, func(t *testing.T) {
+			for _, test := range []struct{ name, value, want string }{
+				{"explicit timezone", "2026-10-22T08:30:45.123456789+05:30", "2026-10-22T08:30:45.123456789+05:30"},
+				{"space fractional seconds", "2026-10-22 08:30:45.123456789", "2026-10-22T08:30:45.123456789+08:00"},
+				{"T fractional seconds", "2026-10-22T08:30:45.123456789", "2026-10-22T08:30:45.123456789+08:00"},
+				{"space minutes", "2026-10-22 08:30", "2026-10-22T08:30:00+08:00"},
+				{"T minutes", "2026-10-22T08:30", "2026-10-22T08:30:00+08:00"},
+				{"date", "2026-10-22", "2026-10-22T00:00:00+08:00"},
+				{"slash seconds", "2026/1/2 08:30:45", "2026-01-02T08:30:45+08:00"},
+				{"slash date", "2026/1/2", "2026-01-02T00:00:00+08:00"},
+				{"Shanghai daylight saving", "1986-07-01 08:30:45", "1986-07-01T08:30:45+09:00"},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					value, err := OperationValue(dataType, test.value)
+					if err != nil {
+						t.Fatal(err)
+					}
+					date, ok := value.(time.Time)
+					if !ok || date.Format(time.RFC3339Nano) != test.want {
+						t.Fatalf("date=%v (%T), want %s", value, value, test.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestOperationDateValuesReturnLocationError(t *testing.T) {
+	original := operationDateLocation
+	t.Cleanup(func() { operationDateLocation = original })
+	want := errors.New("timezone data unavailable")
+	operationDateLocation = func() (*time.Location, error) { return nil, want }
+	for _, dataType := range []string{"DATE", "TIMESTAMP"} {
+		t.Run(dataType, func(t *testing.T) {
+			if _, err := OperationValue(dataType, "2026-10-22"); !errors.Is(err, want) {
+				t.Fatalf("error=%v, want %v", err, want)
 			}
 		})
 	}

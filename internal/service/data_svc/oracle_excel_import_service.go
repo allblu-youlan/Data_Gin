@@ -146,40 +146,6 @@ func executeOracleExcelImportOnConnection(ctx context.Context, connection oracle
 	return executeOracleExcelImportFilesOnConnection(ctx, connection, []string{path}, config, nextOracleExcelImportIdentifier)
 }
 
-const (
-	oracleExcelImportBatchRows = 200
-	oracleExcelImportMaxBinds  = 5000
-	// Keep batches within the existing conservative 999-column budget.
-	oracleExcelImportMaxBatchColumns = 999
-)
-
-func oracleExcelImportBatchSize(width int) int {
-	return min(oracleExcelImportBatchRows, oracleExcelImportMaxBinds/width, oracleExcelImportMaxBatchColumns/width)
-}
-
-func oracleExcelImportBatchStatement(single string, width, rows int) string {
-	insert := single[:strings.LastIndex(single, " VALUES (")]
-	var statement strings.Builder
-	statement.Grow(32 + rows*(len(insert)+width*8+12))
-	// Separate INSERT statements evaluate identity/sequence defaults per row.
-	// INSERT ALL ... SELECT 1 FROM DUAL can reuse one sequence value.
-	statement.WriteString("BEGIN")
-	for row := 0; row < rows; row++ {
-		statement.WriteByte(' ')
-		statement.WriteString(insert)
-		statement.WriteString(" VALUES (")
-		for column := 0; column < width; column++ {
-			if column > 0 {
-				statement.WriteString(", ")
-			}
-			fmt.Fprintf(&statement, ":%d", row*width+column+1)
-		}
-		statement.WriteString(");")
-	}
-	statement.WriteString(" END;")
-	return statement.String()
-}
-
 func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection oracleOperationConnection, paths []string, config OracleExcelImportConfig, nextIdentifier func(context.Context) (string, error)) (int, error) {
 	return executeOracleExcelImportFilesWithProgressOnConnection(ctx, connection, paths, config, nextIdentifier, nil)
 }
@@ -249,10 +215,8 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 		return 0, fmt.Errorf("prepare Oracle Excel import: %w", err)
 	}
 	defer prepared.Close()
-	width := len(columns)
-	batchSize := oracleExcelImportBatchSize(width)
+	batchSize := oracleExcelImportBatchRows
 	batch := make([][]interface{}, 0, batchSize)
-	statements := make(map[int]string)
 	var first, last oracleExcelImportLocation
 	flush := func() error {
 		if len(batch) == 0 {
@@ -260,19 +224,17 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 		}
 		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
 		var err error
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if len(batch) == 1 {
 			_, err = prepared.ExecContext(ctx, batch[0]...)
 		} else {
-			query := statements[len(batch)]
-			if query == "" {
-				query = oracleExcelImportBatchStatement(statement, width, len(batch))
-				statements[len(batch)] = query
+			var arguments []interface{}
+			arguments, err = oracleExcelImportArrayBinds(columns, batch)
+			if err == nil {
+				_, err = prepared.ExecContext(ctx, arguments...)
 			}
-			arguments := make([]interface{}, 0, len(batch)*width)
-			for _, values := range batch {
-				arguments = append(arguments, values...)
-			}
-			_, err = tx.ExecContext(ctx, query, arguments...)
 		}
 		if err != nil {
 			return fmt.Errorf("批量写入失败（%s 至 %s）: %w", first, last, err)
@@ -280,6 +242,9 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 		reporter.state.ProcessedRows += len(batch)
 		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
 		reporter.emit(false)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		clear(batch)
 		batch = batch[:0]
 		return nil
@@ -310,6 +275,9 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 	}
 	reporter.state.Stage = "committing"
 	reporter.emit(true)
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit Oracle Excel import: %w", err)
 	}

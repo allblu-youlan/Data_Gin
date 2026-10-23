@@ -84,8 +84,11 @@ func TestExcelWorkflowAllMatchFilesImportBeforeProcedure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(result) != 2 || procedureCalls != 1 || len(state.rows) != 1 || len(state.rows[0]) != 6 {
+			if len(result) != 2 || procedureCalls != 1 || len(state.rows) != 1 || len(state.rows[0]) != 6 || len(state.rawRows[0]) != 3 {
 				t.Fatalf("result=%v state=%+v calls=%d", result, state, procedureCalls)
+			}
+			if !reflect.DeepEqual(state.rawRows[0][0].Value, []string{"A", "B"}) || state.statements[0] != state.statement {
+				t.Fatalf("workflow did not bind all workbooks to one prepared insert: raw=%v SQL=%s", state.rawRows[0], state.statements[0])
 			}
 			want := []interface{}{"A", "匹配店A", "42", "B", "匹配店B", "42"}
 			for index, value := range state.rows[0] {

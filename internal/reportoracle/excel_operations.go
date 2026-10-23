@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/godror/godror"
@@ -20,6 +21,11 @@ type ProcedureValue struct {
 }
 
 var operationNumberPattern = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+
+// Bulk imports parse each date cell; load the timezone data only once.
+var operationDateLocation = sync.OnceValues(func() (*time.Location, error) {
+	return time.LoadLocation("Asia/Shanghai")
+})
 
 func NormalizeOperationDataType(dataType string) (string, error) {
 	dataType = strings.ToUpper(strings.Join(strings.Fields(dataType), " "))
@@ -58,7 +64,7 @@ func OperationValue(dataType, value string) (interface{}, error) {
 		if value == "" {
 			return nil, nil
 		}
-		location, err := time.LoadLocation("Asia/Shanghai")
+		location, err := operationDateLocation()
 		if err != nil {
 			return nil, err
 		}

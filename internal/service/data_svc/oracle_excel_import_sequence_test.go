@@ -12,10 +12,9 @@ import (
 	"gin-biz-web-api/internal/reportoracle"
 )
 
-func TestOracleExcelImportBatchesKeepSeparateInsertsForGeneratedIDs(t *testing.T) {
-	// 28 mapped columns produce the 35-row batch seen in the failing import.
-	// ID is deliberately omitted so Oracle evaluates its default per INSERT.
-	const width, rows = 28, 36
+func TestOracleExcelImportArrayBatchesLeaveGeneratedIDsToOracle(t *testing.T) {
+	// ID is deliberately omitted so Oracle evaluates its default per row.
+	const width, rows = 28, 1001
 	config := OracleExcelImportConfig{Owner: "DEMO", TableName: "ORDERS", SheetName: "Sheet1", HeaderRow: 1}
 	columns := []reportoracle.ResultColumn{{Name: "ID", DataType: "NUMBER"}}
 	header := make([]interface{}, width)
@@ -42,28 +41,31 @@ func TestOracleExcelImportBatchesKeepSeparateInsertsForGeneratedIDs(t *testing.T
 		t.Fatalf("count=%d state=%+v error=%v", count, state, err)
 	}
 	query := state.statements[0]
-	if !strings.HasPrefix(query, "BEGIN ") || !strings.HasSuffix(query, "; END;") {
-		t.Fatalf("batch must execute independent INSERT statements: %s", query)
+	if query != state.statement || !strings.HasPrefix(query, `INSERT INTO "DEMO"."ORDERS" (`) || strings.Contains(query, `"ID"`) || strings.Contains(query, "BEGIN") || strings.Contains(query, "INSERT ALL") {
+		t.Fatalf("array batch must leave ID to its default in one prepared INSERT: %s", query)
 	}
-	inserts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(query, "BEGIN "), " END;"), ";")
-	if len(inserts) != 36 || inserts[35] != "" || len(state.rows[0]) != 35*width {
-		t.Fatalf("expected 35 independent inserts and one trailing row: inserts=%d binds=%d", len(inserts)-1, len(state.rows[0]))
+	if len(state.rawRows[0]) != width || len(state.rows[0]) != 1000*width {
+		t.Fatalf("expected 1000 rows in 28 column arrays and one trailing row: column binds=%d expanded values=%d", len(state.rawRows[0]), len(state.rows[0]))
 	}
 	placeholder := regexp.MustCompile(`:(\d+)`)
-	for row, insert := range inserts[:35] {
-		insert = strings.TrimSpace(insert)
-		binds := placeholder.FindAllStringSubmatch(insert, -1)
-		if !strings.HasPrefix(insert, `INSERT INTO "DEMO"."ORDERS" (`) || strings.Contains(insert, `"ID"`) || len(binds) != width {
-			t.Fatalf("row %d is not an independent insert leaving ID to its default: %s", row+1, insert)
+	binds := placeholder.FindAllStringSubmatch(query, -1)
+	if len(binds) != width {
+		t.Fatalf("expected one bind per column: %s", query)
+	}
+	for column, bind := range binds {
+		values, ok := state.rawRows[0][column].Value.([]string)
+		if bind[1] != strconv.Itoa(column+1) || !ok || len(values) != 1000 {
+			t.Fatalf("column %d lost its full array bind: placeholder=%v values=%v", column+1, bind, state.rawRows[0][column])
 		}
-		for column, bind := range binds {
+		for row := range values {
 			offset := row*width + column
-			if bind[1] != strconv.Itoa(offset+1) || state.rows[0][offset].Value != fmt.Sprintf("row %d column %d", row+1, column+1) {
-				t.Fatalf("row %d column %d lost its distinct bind or value: %v", row+1, column+1, bind)
+			want := fmt.Sprintf("row %d column %d", row+1, column+1)
+			if values[row] != want || state.rows[0][offset].Value != want {
+				t.Fatalf("row %d column %d lost its distinct value: array=%v expanded=%v", row+1, column+1, values[row], state.rows[0][offset].Value)
 			}
 		}
 	}
-	if state.statements[1] != state.statement || len(state.rows[1]) != width || state.rows[1][0].Value != "row 36 column 1" {
+	if state.statements[1] != state.statement || len(state.rawRows[1]) != width || len(state.rows[1]) != width || state.rawRows[1][0].Value != "row 1001 column 1" {
 		t.Fatalf("trailing single row changed: SQL=%s values=%v", state.statements[1], state.rows[1])
 	}
 }

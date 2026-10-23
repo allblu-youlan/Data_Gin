@@ -2,8 +2,12 @@ package data_svc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"gin-biz-web-api/internal/dao/data_dao"
+	"go.uber.org/zap"
 )
 
 // OracleExcelImportProgress separates row progress from workflow step counts.
@@ -44,11 +48,33 @@ func (reporter *oracleExcelImportProgressReporter) emit(force bool) {
 	reporter.written = reporter.written || reporter.state.ProcessedRows > 0
 }
 
-func (service *ExcelMatchJobService) oracleExcelImportProgressLogger(ctx context.Context, jobID uint, stepIndex int, stepName string) func(OracleExcelImportProgress) {
+func (service *ExcelMatchJobService) oracleExcelImportProgressLogger(ctx context.Context, jobID uint, stepIndex int, stepName string, cancelRun context.CancelFunc) func(OracleExcelImportProgress) {
+	var checkedAt time.Time
 	return func(progress OracleExcelImportProgress) {
+		terminal := progress.Stage == "failed" || progress.Stage == "completed"
+		if !terminal {
+			if ctx.Err() != nil {
+				return
+			}
+			if progress.Stage == "committing" || time.Since(checkedAt) >= 2*time.Second {
+				if err := service.requireExcelWorkflowRunning(ctx, jobID); err != nil {
+					cancelRun()
+					logCtx, cancelLog := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+					defer cancelLog()
+					message := "任务已停止运行，已取消 Oracle 导入，等待事务回滚"
+					if !errors.Is(err, data_dao.ErrExcelMatchJobNotRunning) {
+						message = "任务状态检查失败，已停止 Oracle 导入，等待事务回滚"
+						zap.L().Error("Check Oracle import job state failed", zap.Uint("job_id", jobID), zap.Error(err))
+					}
+					service.logJob(logCtx, jobID, "error", message, nil)
+					return
+				}
+				checkedAt = time.Now()
+			}
+		}
 		progress.StepIndex, progress.StepName = stepIndex+1, stepName
 		logCtx := ctx
-		if progress.Stage == "failed" || progress.Stage == "completed" {
+		if terminal {
 			logCtx = context.WithoutCancel(ctx)
 		}
 		logCtx, cancel := context.WithTimeout(logCtx, 5*time.Second)

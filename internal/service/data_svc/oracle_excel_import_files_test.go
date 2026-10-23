@@ -79,16 +79,19 @@ func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndAutomaticIde
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 205 || state.commits != 1 || state.rollbacks != 0 || len(state.rows) != 2 {
+	if count != 205 || state.commits != 1 || state.rollbacks != 0 || len(state.rows) != 1 {
 		t.Fatalf("rows=%d executions=%d commits=%d rollbacks=%d", count, len(state.rows), state.commits, state.rollbacks)
 	}
 	next := 1
 	for batchIndex, arguments := range state.rows {
-		if len(arguments) > oracleExcelImportMaxBinds || len(arguments) > oracleExcelImportMaxBatchColumns {
-			t.Fatalf("unbounded batch: binds=%d", len(arguments))
+		if len(arguments) > oracleExcelImportBatchRows*3 || len(state.rawRows[batchIndex]) != 3 {
+			t.Fatalf("unbounded batch: rows=%d column binds=%d", len(arguments)/3, len(state.rawRows[batchIndex]))
 		}
-		if !strings.HasPrefix(state.statements[batchIndex], "BEGIN INSERT INTO ") || strings.Contains(state.statements[batchIndex], "'001'") {
-			t.Fatalf("batch did not use bound independent inserts: %s", state.statements[batchIndex])
+		if state.statements[batchIndex] != state.statement || !strings.HasPrefix(state.statements[batchIndex], "INSERT INTO ") || strings.Contains(state.statements[batchIndex], "'001'") {
+			t.Fatalf("batch did not use a prepared bound insert: %s", state.statements[batchIndex])
+		}
+		if codes, ok := state.rawRows[batchIndex][0].Value.([]string); !ok || len(codes) != len(arguments)/3 {
+			t.Fatalf("batch lost its column array: %v", state.rawRows[batchIndex])
 		}
 		for index := 0; index < len(arguments); index += 3 {
 			if arguments[index].Value != fmt.Sprintf("%03d", next) || arguments[index+2].Value != "42" {
@@ -247,17 +250,6 @@ func TestOracleExcelImportIdentifierAcceptsEmptyLegacyValueAndRejectsDates(t *te
 			}
 			if err != nil || normalized.FixedIdentifier.Value != "" {
 				t.Fatalf("config=%+v error=%v", normalized, err)
-			}
-		})
-	}
-}
-
-func TestOracleExcelImportBatchSizeRespectsColumnAndBindingLimits(t *testing.T) {
-	for _, width := range []int{1, 3, 5, 20, 200, 513} {
-		t.Run(fmt.Sprintf("%d columns", width), func(t *testing.T) {
-			rows := oracleExcelImportBatchSize(width)
-			if rows < 1 || rows > oracleExcelImportBatchRows || rows*width > oracleExcelImportMaxBinds || rows*width > oracleExcelImportMaxBatchColumns {
-				t.Fatalf("unbounded batch: width=%d rows=%d", width, rows)
 			}
 		})
 	}

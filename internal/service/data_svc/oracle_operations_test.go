@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
 
@@ -20,6 +22,7 @@ type oracleOperationsTestState struct {
 	commits, rollbacks int
 	statement          string
 	statements         []string
+	rawRows            [][]driver.NamedValue
 	rows               [][]driver.NamedValue
 	writeError         error
 	writeErrorAt       int
@@ -82,7 +85,31 @@ func (statement *oracleOperationsTestStmt) ExecContext(_ context.Context, values
 
 func (state *oracleOperationsTestState) execute(query string, values []driver.NamedValue) (driver.Result, error) {
 	state.statements = append(state.statements, query)
-	state.rows = append(state.rows, append([]driver.NamedValue(nil), values...))
+	raw := append([]driver.NamedValue(nil), values...)
+	batchRows := 0
+	for index := range raw {
+		switch raw[index].Value.(type) {
+		case []string, []godror.Number, []time.Time, []godror.Lob:
+			array := reflect.ValueOf(raw[index].Value)
+			copy := reflect.MakeSlice(array.Type(), array.Len(), array.Len())
+			reflect.Copy(copy, array)
+			raw[index].Value = copy.Interface()
+			batchRows = array.Len()
+		}
+	}
+	state.rawRows = append(state.rawRows, raw)
+	rows := append([]driver.NamedValue(nil), raw...)
+	if batchRows > 0 {
+		rows = make([]driver.NamedValue, 0, batchRows*len(raw))
+		for row := 0; row < batchRows; row++ {
+			for _, value := range raw {
+				value.Value = reflect.ValueOf(value.Value).Index(row).Interface()
+				value.Ordinal = len(rows) + 1
+				rows = append(rows, value)
+			}
+		}
+	}
+	state.rows = append(state.rows, rows)
 	if state.writeErrorAt == 0 || len(state.rows) == state.writeErrorAt {
 		return driver.RowsAffected(1), state.writeError
 	}
@@ -157,8 +184,14 @@ func TestOracleExcelImportUsesHeaderMappingPreservesValuesAndCommits(t *testing.
 	if state.rows[0][0].Value != "000123" || state.rows[0][1].Value != godror.Number("12345678901234567890.125") {
 		t.Fatalf("mapped values lost precision or order: %+v", state.rows[0])
 	}
-	if !strings.HasPrefix(state.statements[0], "BEGIN INSERT INTO ") || state.rows[0][2].Value != "000124" {
+	if state.statements[0] != state.statement || state.rows[0][2].Value != "000124" {
 		t.Fatalf("rows were not batched in order: SQL=%s values=%v", state.statements[0], state.rows[0])
+	}
+	if codes, ok := state.rawRows[0][0].Value.([]string); !ok || !reflect.DeepEqual(codes, []string{"000123", "000124"}) {
+		t.Fatalf("codes were not bound as a column array: %v", state.rawRows[0])
+	}
+	if amounts, ok := state.rawRows[0][1].Value.([]godror.Number); !ok || !reflect.DeepEqual(amounts, []godror.Number{"12345678901234567890.125", "42.50"}) {
+		t.Fatalf("amounts were not bound as a precise number array: %v", state.rawRows[0])
 	}
 }
 

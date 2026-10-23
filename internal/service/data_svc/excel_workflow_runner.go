@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/storage"
@@ -46,7 +47,13 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 	if !claimed {
 		return fmt.Errorf("%w: 组合操作已领取或已结束，不重复执行写入", asynq.SkipRetry)
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	stopMonitoring := monitorExcelWorkflowState(ctx, 2*time.Second, func(stateCtx context.Context) error {
+		return s.requireExcelWorkflowRunning(stateCtx, record.ID)
+	}, cancel)
 	defer func() {
+		cancel()
+		stopMonitoring()
 		if processErr != nil {
 			zap.L().Error("Excel workflow failed", zap.Uint("job_id", record.ID), zap.Error(processErr))
 			stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -63,8 +70,12 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 		return err
 	}
 	results, err := runExcelWorkflowFiles(ctx, config, sources, func(ctx context.Context, index int, step ExcelWorkflowStep, sources []string) ([]string, error) {
+		if err := s.requireExcelWorkflowRunning(ctx, record.ID); err != nil {
+			cancel()
+			return nil, err
+		}
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d/%d 步：%s，开始执行", index+1, len(config.Steps), step.Name), nil)
-		output, err := s.executeExcelWorkflowFilesStep(ctx, record, index, step, sources)
+		output, err := s.executeExcelWorkflowFilesStep(ctx, record, index, step, sources, cancel)
 		if err != nil {
 			s.logJob(context.WithoutCancel(ctx), record.ID, "error", fmt.Sprintf("第 %d 步：%s 失败，后续步骤已停止；请检查方法配置、源文件及 Oracle 返回标志", index+1, step.Name), nil)
 			return nil, err
@@ -72,9 +83,16 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d 步：%s，执行成功", index+1, step.Name), nil)
 		return output, nil
 	}, func(completed int) error {
+		if err := s.requireExcelWorkflowRunning(ctx, record.ID); err != nil {
+			cancel()
+			return err
+		}
 		return s.jobDAO.UpdateProgress(ctx, record.ID, ExcelMatchJobStats{TotalRows: len(config.Steps), ProcessedRows: completed})
 	})
 	if err != nil {
+		return err
+	}
+	if err := s.requireExcelWorkflowRunning(ctx, record.ID); err != nil {
 		return err
 	}
 	result, err := excelWorkflowResultFile(record.WorkDir, results)
@@ -93,10 +111,55 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 			}
 		}
 	}
+	stopMonitoring()
 	if err := s.jobDAO.MarkSuccess(ctx, record.ID, ExcelMatchJobStats{TotalRows: len(config.Steps), ProcessedRows: len(config.Steps)}, time.Now().Add(excelMatchRetention)); err != nil {
 		return err
 	}
 	s.logJob(ctx, record.ID, "info", "组合操作全部完成，结果保留 24 小时", nil)
+	return nil
+}
+
+// The watcher can cancel a blocked Oracle call. Its owner stops and joins it
+// before finishing the job, so a completed workflow leaves no polling behind.
+func monitorExcelWorkflowState(ctx context.Context, interval time.Duration, check func(context.Context) error, cancelRun context.CancelFunc) func() {
+	monitorCtx, cancelMonitor := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer cancelMonitor()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-monitorCtx.Done():
+				return
+			case <-ticker.C:
+				if err := check(monitorCtx); err != nil {
+					if monitorCtx.Err() == nil {
+						zap.L().Warn("Excel workflow stopped by task state", zap.Error(err))
+						cancelRun()
+					}
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		cancelMonitor()
+		<-done
+	}
+}
+
+func (s *ExcelMatchJobService) requireExcelWorkflowRunning(ctx context.Context, jobID uint) error {
+	stateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	record, err := s.jobDAO.FindByID(stateCtx, jobID)
+	if err != nil {
+		return fmt.Errorf("检查组合任务状态失败: %w", err)
+	}
+	if record.Status != "running" {
+		return fmt.Errorf("%w: 当前状态 %s", data_dao.ErrExcelMatchJobNotRunning, record.Status)
+	}
 	return nil
 }
 
@@ -149,7 +212,7 @@ func excelWorkflowImportConfig(step ExcelWorkflowStep) (OracleExcelImportConfig,
 	return config, nil
 }
 
-func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context, record *model.ExcelMatchJob, index int, step ExcelWorkflowStep, sources []string) ([]string, error) {
+func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context, record *model.ExcelMatchJob, index int, step ExcelWorkflowStep, sources []string, cancel context.CancelFunc) ([]string, error) {
 	switch step.Operation {
 	case excelOperationExportMatch:
 		var config ExcelMatchConfig
@@ -178,7 +241,7 @@ func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context
 		if err != nil {
 			return nil, err
 		}
-		count, err := ExecuteOracleExcelImportFilesWithProgress(ctx, sources, config, s.oracleExcelImportProgressLogger(ctx, record.ID, index, step.Name))
+		count, err := ExecuteOracleExcelImportFilesWithProgress(ctx, sources, config, s.oracleExcelImportProgressLogger(ctx, record.ID, index, step.Name, cancel))
 		if err == nil {
 			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导入 %d 个文件，共 %d 行", len(sources), count), nil)
 		}
