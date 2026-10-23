@@ -157,7 +157,7 @@ func TestOracleExcelImportUsesHeaderMappingPreservesValuesAndCommits(t *testing.
 	if state.rows[0][0].Value != "000123" || state.rows[0][1].Value != godror.Number("12345678901234567890.125") {
 		t.Fatalf("mapped values lost precision or order: %+v", state.rows[0])
 	}
-	if !strings.HasPrefix(state.statements[0], "INSERT ALL ") || state.rows[0][2].Value != "000124" {
+	if !strings.HasPrefix(state.statements[0], "BEGIN INSERT INTO ") || state.rows[0][2].Value != "000124" {
 		t.Fatalf("rows were not batched in order: SQL=%s values=%v", state.statements[0], state.rows[0])
 	}
 }
