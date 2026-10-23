@@ -230,6 +230,7 @@ type reportRunInputFieldSchema struct {
 	Multiple            bool              `json:"multiple,omitempty"`
 	Example             json.RawMessage   `json:"example,omitempty"`
 	DefaultValue        json.RawMessage   `json:"default,omitempty"`
+	DefaultTime         string            `json:"defaultTime,omitempty"`
 	AllowedValues       []json.RawMessage `json:"allowedValues,omitempty"`
 	QueryName           string            `json:"queryName,omitempty"`
 }
@@ -247,12 +248,12 @@ func (service *ReportRunService) createJSONInputRun(
 	if conditions == nil {
 		conditions = request.Parameters
 	}
-	canonical, fingerprint, err := normalizeRefCursorConditions([]byte(published.Version.InputSchemaJSON), conditions)
+	createdAt := service.now().UTC()
+	canonical, fingerprint, err := normalizeRefCursorConditionsAt([]byte(published.Version.InputSchemaJSON), conditions, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("%w: conditions do not match the published JSON schema", ErrReportRunInvalid)
 	}
 	runUUID := uuid.NewString()
-	createdAt := service.now().UTC()
 	command := &reportrepo.CreateRunCommand{
 		Run: model.ReportRun{
 			RunUUID: runUUID, DefinitionID: definitionID, VersionID: published.Version.ID, RequestedBy: actor,
@@ -273,6 +274,10 @@ func (service *ReportRunService) createJSONInputRun(
 }
 
 func normalizeRefCursorConditions(schemaJSON []byte, input map[string]json.RawMessage) ([]byte, string, error) {
+	return normalizeRefCursorConditionsAt(schemaJSON, input, time.Now())
+}
+
+func normalizeRefCursorConditionsAt(schemaJSON []byte, input map[string]json.RawMessage, now time.Time) ([]byte, string, error) {
 	totalBytes := 0
 	for code, value := range input {
 		totalBytes += len(code) + len(value)
@@ -296,6 +301,13 @@ func normalizeRefCursorConditions(schemaJSON []byte, input map[string]json.RawMe
 	}
 	normalized := make(map[string]json.RawMessage, len(schema))
 	for code, field := range schema {
+		if field.DefaultTime != "" {
+			var err error
+			field.DefaultValue, err = reportTimeDefaultValue(field.DefaultTime, field.Type, field.Control, field.Format, now)
+			if err != nil {
+				return nil, "", ErrReportRunInvalid
+			}
+		}
 		value, supplied := input[code]
 		if !supplied || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			if len(bytes.TrimSpace(field.DefaultValue)) > 0 {

@@ -757,6 +757,7 @@ type reportInputFieldSchema struct {
 	Multiple            bool            `json:"multiple,omitempty"`
 	Example             json.RawMessage `json:"example,omitempty"`
 	DefaultValue        json.RawMessage `json:"default,omitempty"`
+	DefaultTime         string          `json:"defaultTime,omitempty"`
 	AllowedValues       json.RawMessage `json:"allowedValues,omitempty"`
 	QueryName           string          `json:"queryName,omitempty"`
 }
@@ -793,6 +794,7 @@ func canonicalReportInputSchema(raw json.RawMessage) (json.RawMessage, error) {
 		field.Control = strings.ToUpper(strings.TrimSpace(field.Control))
 		field.Format = strings.TrimSpace(field.Format)
 		field.QueryName = strings.TrimSpace(field.QueryName)
+		field.DefaultTime = strings.ToUpper(strings.TrimSpace(field.DefaultTime))
 		field.Multiple = false
 		if field.Type == "" || field.DisplayName == "" || utf8.RuneCountInString(field.DisplayName) > 128 {
 			return nil, invalidReport("input schema field type or displayName is invalid")
@@ -855,6 +857,19 @@ func validateReportInputFieldValues(field reportInputFieldSchema) error {
 	runtimeField := reportRunInputFieldSchema{
 		Type: field.Type, DisplayName: field.DisplayName, Control: field.Control,
 		Format: field.Format, Required: field.Required,
+	}
+	if field.DefaultTime != "" {
+		if len(bytes.TrimSpace(field.DefaultValue)) > 0 || len(bytes.TrimSpace(field.AllowedValues)) > 0 || field.QueryName != "" || field.RelationID != "" || field.Control == "SELECT" {
+			return invalidReport("dynamic time defaults cannot be combined with fixed defaults or selection options")
+		}
+		value, err := reportTimeDefaultValue(field.DefaultTime, field.Type, field.Control, field.Format, time.Now())
+		if err != nil {
+			return invalidReport("input schema defaultTime is invalid")
+		}
+		_, decoded, err := canonicalConditionValue(value)
+		if err != nil || !conditionValueMatchesField(decoded, runtimeField) {
+			return invalidReport("input schema defaultTime does not match the field type or format")
+		}
 	}
 	var allowed []json.RawMessage
 	if len(bytes.TrimSpace(field.AllowedValues)) > 0 {

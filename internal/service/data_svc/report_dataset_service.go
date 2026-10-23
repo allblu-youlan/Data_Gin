@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func selectReportsEnabled() bool {
@@ -181,13 +182,16 @@ func canonicalSelectInputSchema(raw json.RawMessage) (json.RawMessage, error) {
 	return canonicalReportInputSchema(raw)
 }
 func normalizeSelectConditions(schema model.JSONText, input map[string]json.RawMessage) ([]byte, error) {
+	return normalizeSelectConditionsAt(schema, input, time.Now())
+}
+func normalizeSelectConditionsAt(schema model.JSONText, input map[string]json.RawMessage, now time.Time) ([]byte, error) {
 	if strings.TrimSpace(string(schema)) == "{}" {
 		if len(input) > 0 {
 			return nil, ErrReportRunInvalid
 		}
 		return []byte(`{}`), nil
 	}
-	normalized, _, e := normalizeRefCursorConditions([]byte(schema), input)
+	normalized, _, e := normalizeRefCursorConditionsAt([]byte(schema), input, now)
 	return normalized, e
 }
 func (service *ReportRunService) createSelectRun(ctx context.Context, actor, definitionID uint, req requestbody.ReportRunCreateRequest, published *reportrepo.PublishedReport) (*ReportRunDTO, error) {
@@ -201,7 +205,8 @@ func (service *ReportRunService) createSelectRun(ctx context.Context, actor, def
 	if conditions == nil {
 		conditions = req.Parameters
 	}
-	parameters, e := normalizeSelectConditions(published.Version.InputSchemaJSON, conditions)
+	now := service.now().UTC()
+	parameters, e := normalizeSelectConditionsAt(published.Version.InputSchemaJSON, conditions, now)
 	if e != nil {
 		return nil, e
 	}
@@ -223,7 +228,6 @@ func (service *ReportRunService) createSelectRun(ctx context.Context, actor, def
 		return nil, fmt.Errorf("%w: %v", ErrReportRunInvalid, e)
 	}
 	inputJSON, _ := json.Marshal(inputs)
-	now := service.now().UTC()
 	runUUID := uuid.NewString()
 	fingerprint := reportdataset.Hash(struct {
 		Parameters json.RawMessage
