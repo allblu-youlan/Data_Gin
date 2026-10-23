@@ -1,10 +1,11 @@
 package data_svc
 
 import (
-	"archive/zip"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestOracleExcelExportUsesColumnCommentsAndPreservesCustomTitles(t *testing.
 	if err != nil || config.Columns[0].Title != "订单编号" || config.Columns[1].Title != "AMOUNT" {
 		t.Fatalf("default titles=%+v error=%v", config.Columns, err)
 	}
-	output, _, err := renderOracleExcelExport(t.Context(), &fakeOracleExcelRows{}, config, schema, t.TempDir(), 2, nil)
+	output, _, err := renderOracleExcelTestRows(t.Context(), &fakeOracleExcelRows{}, config, schema, t.TempDir(), 2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,82 +111,70 @@ func TestOracleExcelExportRejectsInvalidConfiguration(t *testing.T) {
 	}
 }
 
-func TestOracleExcelExportWorkbookAndSplit(t *testing.T) {
-	if oracleExcelRowsPerFile != 1_000_000 {
-		t.Fatal("file limit must be one million data rows")
+func TestOracleExcelExportWorkbookAndBalancedSheets(t *testing.T) {
+	if oracleExcelRowsPerSheet != 1_000_000 {
+		t.Fatal("sheet limit must be one million data rows")
 	}
-	for _, count := range []int{0, 2, 3, 4} {
-		t.Run(fmt.Sprintf("rows_%d", count), func(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		count int
+		sizes []int
+	}{{"empty", 0, []int{0}}, {"boundary", 3, []int{3}}, {"even split", 4, []int{2, 2}}, {"remainder", 5, []int{3, 2}}, {"three sheets", 8, []int{3, 3, 2}}} {
+		t.Run(test.name, func(t *testing.T) {
 			config, _, _, err := buildOracleExcelExportQuery(OracleExcelExportConfig{Owner: "DEMO", TableName: "ORDERS", Columns: []OracleExcelExportColumn{{Field: "CODE", Title: "编码"}, {Field: "AMOUNT"}}}, oracleExcelTestSchema())
 			if err != nil {
 				t.Fatal(err)
 			}
-			rows := &fakeOracleExcelRows{remaining: count}
-			path, total, err := renderOracleExcelExport(t.Context(), rows, config, oracleExcelTestSchema(), t.TempDir(), 2, nil)
-			if err != nil || total != count {
+			path, total, err := renderOracleExcelTestRows(t.Context(), &fakeOracleExcelRows{remaining: test.count}, config, oracleExcelTestSchema(), t.TempDir(), 3, nil)
+			if err != nil || total != test.count || filepath.Ext(path) != ".xlsx" {
 				t.Fatalf("render path=%s total=%d err=%v", path, total, err)
 			}
-			workbooks := make([]*excelize.File, 0)
-			if count <= 2 {
-				if filepath.Ext(path) != ".xlsx" {
-					t.Fatalf("single output=%s", path)
-				}
-				file, err := excelize.OpenFile(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				workbooks = append(workbooks, file)
-			} else {
-				archive, err := zip.OpenReader(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer archive.Close()
-				if len(archive.File) != 2 {
-					t.Fatalf("archive contains %d files", len(archive.File))
-				}
-				for _, entry := range archive.File {
-					source, err := entry.Open()
-					if err != nil {
-						t.Fatal(err)
-					}
-					file, err := excelize.OpenReader(source)
-					_ = source.Close()
-					if err != nil {
-						t.Fatal(err)
-					}
-					workbooks = append(workbooks, file)
-				}
+			file, err := excelize.OpenFile(path)
+			if err != nil {
+				t.Fatal(err)
 			}
-			read := 0
-			for _, file := range workbooks {
-				defer file.Close()
-				data, err := file.GetRows("数据")
-				if err != nil || len(data) < 1 || strings.Join(data[0], ",") != "编码,AMOUNT" || len(data) > 3 {
-					t.Fatalf("rows=%v err=%v", data, err)
+			defer file.Close()
+			if len(file.GetSheetList()) != len(test.sizes) {
+				t.Fatalf("sheets=%v sizes=%v", file.GetSheetList(), test.sizes)
+			}
+			for part, count := range test.sizes {
+				name := "数据"
+				if len(test.sizes) > 1 {
+					name = fmt.Sprintf("数据_%d", part+1)
+				}
+				data, err := file.GetRows(name)
+				if err != nil || len(data) != count+1 || strings.Join(data[0], ",") != "编码,AMOUNT" {
+					t.Fatalf("sheet=%s rows=%v err=%v", name, data, err)
 				}
 				for index, row := range data[1:] {
 					if row[0] != "=2+3" || row[1] != "123456789012345678.12" {
 						t.Fatalf("data changed: %v", row)
 					}
-					formula, _ := file.GetCellFormula("数据", fmt.Sprintf("A%d", index+2))
+					formula, _ := file.GetCellFormula(name, fmt.Sprintf("A%d", index+2))
 					if formula != "" {
 						t.Fatalf("text interpreted as formula: %s", formula)
 					}
 				}
-				read += len(data) - 1
-			}
-			if read != count {
-				t.Fatalf("read %d rows, want %d", read, count)
 			}
 		})
 	}
 }
 
+func renderOracleExcelTestRows(ctx context.Context, rows oracleExcelRows, config OracleExcelExportConfig, schema []reportoracle.ResultColumn, dir string, limit int, progress func(int) error) (string, int, error) {
+	spool := filepath.Join(dir, "sheet-data")
+	defer os.RemoveAll(spool)
+	sheet := OracleExcelExportSheet{SheetName: "数据", Owner: config.Owner, TableName: config.TableName, Columns: config.Columns, Filters: config.Filters}
+	snapshot, err := spoolOracleExcelSheet(ctx, rows, sheet, schema, spool, progress)
+	if err != nil {
+		return "", snapshot.Rows, err
+	}
+	return renderOracleExcelSnapshots(ctx, []oracleExcelSheetSnapshot{snapshot}, dir, limit, progress)
+}
+
 func TestOracleExcelExportPropagatesReadFailure(t *testing.T) {
 	want := errors.New("Oracle read failed")
 	rows := &fakeOracleExcelRows{err: want}
-	_, _, err := renderOracleExcelExport(t.Context(), rows, OracleExcelExportConfig{TableName: "ORDERS", Columns: []OracleExcelExportColumn{{Field: "CODE", Title: "CODE"}}}, oracleExcelTestSchema(), t.TempDir(), 2, nil)
+	_, _, err := renderOracleExcelTestRows(t.Context(), rows, OracleExcelExportConfig{TableName: "ORDERS", Columns: []OracleExcelExportColumn{{Field: "CODE", Title: "CODE"}}}, oracleExcelTestSchema(), t.TempDir(), 2, nil)
 	if !errors.Is(err, want) {
 		t.Fatalf("render error=%v", err)
 	}

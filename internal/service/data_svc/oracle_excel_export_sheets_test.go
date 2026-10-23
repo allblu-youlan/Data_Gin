@@ -1,7 +1,6 @@
 package data_svc
 
 import (
-	"archive/zip"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -14,23 +13,25 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"gin-biz-web-api/internal/reportoracle"
 
 	"github.com/xuri/excelize/v2"
 )
 
-func TestOracleExcelMultiSheetSplitsAndRepeatsSmallTables(t *testing.T) {
+func TestOracleExcelMultiSheetBalancesTablesWithinOneWorkbook(t *testing.T) {
 	tests := []struct {
 		name   string
 		counts []int
 		want   [][]int
 	}{
-		{"one workbook", []int{2, 1}, [][]int{{2, 1}}},
-		{"large and small", []int{5, 2}, [][]int{{3, 2}, {2, 2}}},
-		{"exact boundary is repeated", []int{6, 3}, [][]int{{3, 3}, {3, 3}}},
-		{"empty tables keep headers", []int{0, 0}, [][]int{{0, 0}}},
-		{"different large tables", []int{8, 5, 1}, [][]int{{3, 3, 1}, {3, 2, 1}, {2, 0, 1}}},
+		{"small tables", []int{2, 1}, [][]int{{2}, {1}}},
+		{"even split", []int{4, 2}, [][]int{{2, 2}, {2}}},
+		{"large and small", []int{5, 2}, [][]int{{3, 2}, {2}}},
+		{"exact boundary", []int{6, 3}, [][]int{{3, 3}, {3}}},
+		{"empty tables keep headers", []int{0, 0}, [][]int{{0}, {0}}},
+		{"different large tables", []int{8, 5, 1}, [][]int{{3, 3, 2}, {3, 2}, {1}}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -43,47 +44,116 @@ func TestOracleExcelMultiSheetSplitsAndRepeatsSmallTables(t *testing.T) {
 			}
 			dir := t.TempDir()
 			output, processed, err := executeOracleExcelExport(t.Context(), connection, config, dir, 3, nil)
-			if err != nil || processed != total {
+			if err != nil || processed != total || filepath.Ext(output) != ".xlsx" {
 				t.Fatalf("output=%s processed=%d want=%d error=%v", output, processed, total, err)
 			}
 			for _, reads := range connection.reads {
 				if reads != 1 {
-					t.Fatalf("table was queried again while copying sheets: %v", connection.reads)
+					t.Fatalf("table was queried again: %v", connection.reads)
 				}
 			}
 			if len(connection.reads) != len(test.counts) || connection.active != 0 {
 				t.Fatalf("cursor lifecycle reads=%v active=%d", connection.reads, connection.active)
 			}
 			if _, err := os.Stat(filepath.Join(dir, "sheet-data")); !os.IsNotExist(err) {
-				t.Fatalf("temporary sheet snapshots were not removed: %v", err)
+				t.Fatalf("temporary snapshots were not removed: %v", err)
 			}
-			files := openOracleExcelResultWorkbooks(t, output)
-			if len(files) != len(test.want) {
-				t.Fatalf("workbooks=%d want=%d", len(files), len(test.want))
-			}
-			for part, file := range files {
-				if len(file.GetSheetList()) != len(test.counts) {
-					t.Fatalf("unexpected sheets in output: %v", file.GetSheetList())
-				}
-				for sheet, count := range test.want[part] {
-					name := fmt.Sprintf("表%d", sheet+1)
+			file := openOracleExcelResultWorkbooks(t, output)[0]
+			var wantNames []string
+			for source, sizes := range test.want {
+				start := 0
+				for part, count := range sizes {
+					name := fmt.Sprintf("表%d", source+1)
+					if len(sizes) > 1 {
+						name += fmt.Sprintf("_%d", part+1)
+					}
+					wantNames = append(wantNames, name)
 					rows, err := file.GetRows(name)
 					if err != nil || len(rows) != count+1 || strings.Join(rows[0], ",") != "编号,金额" {
-						t.Fatalf("part=%d sheet=%s rows=%v want=%d error=%v", part+1, name, rows, count, err)
-					}
-					start := 0
-					if test.counts[sheet] > 3 {
-						start = part * 3
+						t.Fatalf("sheet=%s rows=%v want=%d error=%v", name, rows, count, err)
 					}
 					for index, row := range rows[1:] {
-						want := fmt.Sprintf("%d_%03d", sheet+1, start+index+1)
+						want := fmt.Sprintf("%d_%03d", source+1, start+index+1)
 						if len(row) != 2 || row[0] != want || row[1] != "123456789012345678.12" {
-							t.Fatalf("source data duplicated, lost or rounded: part=%d sheet=%d row=%v wantCode=%s", part+1, sheet+1, row, want)
+							t.Fatalf("source data duplicated, lost or rounded: sheet=%s row=%v wantCode=%s", name, row, want)
 						}
 					}
+					start += count
 				}
 			}
+			if !reflect.DeepEqual(file.GetSheetList(), wantNames) {
+				t.Fatalf("sheets=%v want=%v", file.GetSheetList(), wantNames)
+			}
 		})
+	}
+}
+
+func TestOracleExcelBalancedSheetSizesAtMillionRowLimit(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		rows int
+		want []int
+	}{
+		{"empty", 0, []int{0}},
+		{"one million", 1_000_000, []int{1_000_000}},
+		{"one extra row", 1_000_001, []int{500_001, 500_000}},
+		{"user example 1.2 million", 1_200_000, []int{600_000, 600_000}},
+		{"1.5 million", 1_500_000, []int{750_000, 750_000}},
+		{"two million", 2_000_000, []int{1_000_000, 1_000_000}},
+		{"three balanced sheets", 2_000_002, []int{666_668, 666_667, 666_667}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := oracleExcelBalancedSheetRows(test.rows, oracleExcelRowsPerSheet)
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("sizes=%v want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestOracleExcelLegacyRequestAlsoBalancesSheets(t *testing.T) {
+	connection := newOracleExcelSheetsTestConnection(t, []int{4})
+	dir := t.TempDir()
+	output, total, err := executeOracleExcelExport(t.Context(), connection, OracleExcelExportConfig{Owner: "DEMO", TableName: "TABLE_1"}, dir, 3, nil)
+	if err != nil || total != 4 || connection.active != 0 || connection.reads["TABLE_1"] != 1 {
+		t.Fatalf("output=%s total=%d reads=%v active=%d error=%v", output, total, connection.reads, connection.active, err)
+	}
+	file := openOracleExcelResultWorkbooks(t, output)[0]
+	if !reflect.DeepEqual(file.GetSheetList(), []string{"数据_1", "数据_2"}) {
+		t.Fatalf("legacy sheets=%v", file.GetSheetList())
+	}
+	for _, name := range file.GetSheetList() {
+		rows, err := file.GetRows(name)
+		if err != nil || len(rows) != 3 {
+			t.Fatalf("sheet=%s rows=%v error=%v", name, rows, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "sheet-data")); !os.IsNotExist(err) {
+		t.Fatalf("legacy snapshots were not removed: %v", err)
+	}
+}
+
+func TestOracleExcelBalancedSheetNamesPreserveConfiguredNames(t *testing.T) {
+	connection := newOracleExcelSheetsTestConnection(t, []int{4, 1, 4})
+	longName := strings.Repeat("长", 31)
+	config := OracleExcelExportConfig{Sheets: []OracleExcelExportSheet{
+		{SheetName: "A", Owner: "DEMO", TableName: "TABLE_1"},
+		{SheetName: "a_1", Owner: "DEMO", TableName: "TABLE_2"},
+		{SheetName: longName, Owner: "DEMO", TableName: "TABLE_3"},
+	}}
+	output, _, err := executeOracleExcelExport(t.Context(), connection, config, t.TempDir(), 3, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := openOracleExcelResultWorkbooks(t, output)[0]
+	want := []string{"A_1_2", "A_2", "a_1", strings.Repeat("长", 29) + "_1", strings.Repeat("长", 29) + "_2"}
+	if !reflect.DeepEqual(file.GetSheetList(), want) {
+		t.Fatalf("sheet names=%v want=%v", file.GetSheetList(), want)
+	}
+	for _, name := range file.GetSheetList() {
+		if utf8.RuneCountInString(name) > 31 {
+			t.Fatalf("sheet name too long: %s", name)
+		}
 	}
 }
 
@@ -92,7 +162,7 @@ func TestOracleExcelMultiSheetSnapshotPreservesTextDatesAndNulls(t *testing.T) {
 	rows := &oracleExcelSpoolFixtureRows{values: []interface{}{[]byte("=2+3"), time.Date(2026, 10, 22, 8, 30, 15, 0, time.FixedZone("Asia/Shanghai", 8*60*60)), nil}}
 	sheet := OracleExcelExportSheet{SheetName: "类型", Columns: []OracleExcelExportColumn{{Field: "CODE", Title: "编号"}, {Field: "TIME", Title: "时间"}, {Field: "EMPTY", Title: "空值"}}}
 	schema := []reportoracle.ResultColumn{{Name: "CODE", DataType: "VARCHAR2"}, {Name: "TIME", DataType: "DATE"}, {Name: "EMPTY", DataType: "VARCHAR2"}}
-	snapshot, err := spoolOracleExcelSheet(t.Context(), rows, sheet, schema, filepath.Join(dir, "spool"), 3, nil)
+	snapshot, err := spoolOracleExcelSheet(t.Context(), rows, sheet, schema, filepath.Join(dir, "spool"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,34 +262,15 @@ func TestOracleExcelMultiSheetConfigurationRoundTrips(t *testing.T) {
 
 func openOracleExcelResultWorkbooks(t *testing.T, path string) []*excelize.File {
 	t.Helper()
-	if filepath.Ext(path) == ".xlsx" {
-		file, err := excelize.OpenFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = file.Close() })
-		return []*excelize.File{file}
+	if filepath.Ext(path) != ".xlsx" {
+		t.Fatalf("expected a single XLSX: %s", path)
 	}
-	archive, err := zip.OpenReader(path)
+	file, err := excelize.OpenFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = archive.Close() })
-	files := make([]*excelize.File, 0, len(archive.File))
-	for _, entry := range archive.File {
-		source, err := entry.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		file, err := excelize.OpenReader(source)
-		_ = source.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = file.Close() })
-		files = append(files, file)
-	}
-	return files
+	t.Cleanup(func() { _ = file.Close() })
+	return []*excelize.File{file}
 }
 
 type oracleExcelSheetsTestConnection struct {

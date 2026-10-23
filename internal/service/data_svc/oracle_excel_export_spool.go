@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gin-biz-web-api/internal/reportoracle"
 
@@ -17,51 +17,27 @@ import (
 type oracleExcelSheetSnapshot struct {
 	Sheet  OracleExcelExportSheet
 	Schema []reportoracle.ResultColumn
-	Parts  []string
+	Path   string
 	Rows   int
 }
 
-// Persist one cursor exactly once. Repeated small sheets are replayed from this
-// snapshot, so each output workbook contains the same small-table contents.
-func spoolOracleExcelSheet(ctx context.Context, rows oracleExcelRows, sheet OracleExcelExportSheet, schema []reportoracle.ResultColumn, dir string, rowsPerFile int, progress func(int) error) (oracleExcelSheetSnapshot, error) {
-	snapshot := oracleExcelSheetSnapshot{Sheet: sheet, Schema: schema}
-	if rowsPerFile < 1 || rowsPerFile > oracleExcelRowsPerFile || len(sheet.Columns) == 0 {
-		return snapshot, fmt.Errorf("Oracle Sheet 分片配置无效")
+// Count and persist a single cursor before choosing balanced sheet sizes.
+// Only one row is held in memory, and each table is queried exactly once.
+func spoolOracleExcelSheet(ctx context.Context, rows oracleExcelRows, sheet OracleExcelExportSheet, schema []reportoracle.ResultColumn, dir string, progress func(int) error) (oracleExcelSheetSnapshot, error) {
+	snapshot := oracleExcelSheetSnapshot{Sheet: sheet, Schema: schema, Path: filepath.Join(dir, "rows.jsonl")}
+	if len(sheet.Columns) == 0 {
+		return snapshot, fmt.Errorf("Oracle Sheet 导出字段不能为空")
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return snapshot, err
 	}
-	var file *os.File
-	var writer *bufio.Writer
-	var encoder *json.Encoder
-	defer func() {
-		if file != nil {
-			_ = file.Close()
-		}
-	}()
-	openPart := func() error {
-		part := filepath.Join(dir, fmt.Sprintf("part_%05d.jsonl", len(snapshot.Parts)+1))
-		var err error
-		file, err = os.OpenFile(part, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-		if err != nil {
-			return err
-		}
-		writer = bufio.NewWriterSize(file, 64*1024)
-		encoder = json.NewEncoder(writer)
-		snapshot.Parts = append(snapshot.Parts, part)
-		return nil
-	}
-	closePart := func() error {
-		if err := writer.Flush(); err != nil {
-			return err
-		}
-		err := file.Close()
-		file = nil
-		return err
-	}
-	if err := openPart(); err != nil {
+	file, err := os.OpenFile(snapshot.Path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
 		return snapshot, err
 	}
+	defer file.Close()
+	writer := bufio.NewWriterSize(file, 64*1024)
+	encoder := json.NewEncoder(writer)
 	values := make([]interface{}, len(sheet.Columns))
 	targets := make([]interface{}, len(values))
 	for index := range values {
@@ -70,14 +46,6 @@ func spoolOracleExcelSheet(ctx context.Context, rows oracleExcelRows, sheet Orac
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return snapshot, err
-		}
-		if snapshot.Rows > 0 && snapshot.Rows%rowsPerFile == 0 {
-			if err := closePart(); err != nil {
-				return snapshot, err
-			}
-			if err := openPart(); err != nil {
-				return snapshot, err
-			}
 		}
 		if err := rows.Scan(targets...); err != nil {
 			return snapshot, fmt.Errorf("读取 Sheet %s 失败: %w", sheet.SheetName, err)
@@ -103,118 +71,131 @@ func spoolOracleExcelSheet(ctx context.Context, rows oracleExcelRows, sheet Orac
 	if err := ctx.Err(); err != nil {
 		return snapshot, err
 	}
-	return snapshot, closePart()
+	if err := writer.Flush(); err != nil {
+		return snapshot, err
+	}
+	return snapshot, file.Close()
 }
 
-func renderOracleExcelSnapshots(ctx context.Context, snapshots []oracleExcelSheetSnapshot, workDir string, rowsPerFile int, progress func(int) error) (string, int, error) {
-	if len(snapshots) == 0 || len(snapshots) > oracleExcelMaxSheets || rowsPerFile < 1 || rowsPerFile > oracleExcelRowsPerFile {
+func oracleExcelBalancedSheetRows(total, rowsPerSheet int) []int {
+	count := max(1, (total+rowsPerSheet-1)/rowsPerSheet)
+	sizes := make([]int, count)
+	for index := range sizes {
+		sizes[index] = total / count
+		if index < total%count {
+			sizes[index]++
+		}
+	}
+	return sizes
+}
+
+func oracleExcelSplitSheetName(base string, part int, reserved map[string]bool) string {
+	suffix := fmt.Sprintf("_%d", part+1)
+	name := truncateMallWeatherExportRunes(base, 31-len(suffix)) + suffix
+	for collision := 2; reserved[strings.ToLower(name)]; collision++ {
+		suffix = fmt.Sprintf("_%d_%d", part+1, collision)
+		name = truncateMallWeatherExportRunes(base, 31-len(suffix)) + suffix
+	}
+	reserved[strings.ToLower(name)] = true
+	return name
+}
+
+func renderOracleExcelSnapshots(ctx context.Context, snapshots []oracleExcelSheetSnapshot, workDir string, rowsPerSheet int, progress func(int) error) (string, int, error) {
+	if len(snapshots) == 0 || len(snapshots) > oracleExcelMaxSheets || rowsPerSheet < 1 || rowsPerSheet > oracleExcelRowsPerSheet {
 		return "", 0, fmt.Errorf("Oracle 多 Sheet 导出配置无效")
 	}
-	parts, total := 1, 0
+	total := 0
+	reserved := make(map[string]bool, len(snapshots))
 	for _, snapshot := range snapshots {
-		if len(snapshot.Parts) == 0 {
-			return "", 0, fmt.Errorf("Sheet %s 缺少数据分片", snapshot.Sheet.SheetName)
-		}
-		parts = max(parts, len(snapshot.Parts))
 		total += snapshot.Rows
+		// Reserve original names first, so a generated suffix cannot overwrite
+		// another table's configured sheet (for example A and A_1).
+		reserved[strings.ToLower(snapshot.Sheet.SheetName)] = true
 	}
-	paths := make([]string, 0, parts)
-	for part := 0; part < parts; part++ {
-		if err := ctx.Err(); err != nil {
-			return "", total, err
-		}
-		output := filepath.Join(workDir, fmt.Sprintf("export_%03d.xlsx", part+1))
-		if parts == 1 {
-			output = filepath.Join(workDir, excelMatchResultFileName)
-		}
-		if err := renderOracleExcelSnapshotWorkbook(ctx, snapshots, output, part, rowsPerFile); err != nil {
-			return "", total, err
-		}
-		paths = append(paths, output)
-		if progress != nil {
-			if err := progress(total); err != nil {
-				return "", total, err
-			}
-		}
-	}
-	if parts == 1 {
-		return paths[0], total, nil
-	}
-	output := filepath.Join(workDir, "result.zip")
-	if err := zipOracleExcelFiles(output, paths); err != nil {
-		return "", total, err
-	}
-	return output, total, nil
-}
-
-func renderOracleExcelSnapshotWorkbook(ctx context.Context, snapshots []oracleExcelSheetSnapshot, output string, part, rowsPerFile int) error {
 	file := excelize.NewFile()
 	defer file.Close()
 	styles, err := newReportExportStyles(file, "")
 	if err != nil {
-		return err
+		return "", total, err
 	}
-	for index, snapshot := range snapshots {
-		name := snapshot.Sheet.SheetName
-		if index == 0 {
-			err = file.SetSheetName("Sheet1", name)
-		} else {
-			_, err = file.NewSheet(name)
-		}
-		if err != nil {
-			return err
-		}
-		stream, err := file.NewStreamWriter(name)
-		if err != nil {
-			return err
-		}
-		if err := stream.SetColWidth(1, len(snapshot.Sheet.Columns), reportExcelDefaultWidth); err != nil {
-			return err
-		}
-		header := make([]interface{}, len(snapshot.Sheet.Columns))
-		for index, column := range snapshot.Sheet.Columns {
-			header[index] = excelize.Cell{StyleID: styles.header, Value: column.Title}
-		}
-		if err := stream.SetRow("A1", header); err != nil {
-			return err
-		}
-		readPart := part
-		if snapshot.Rows <= rowsPerFile {
-			readPart = 0
-		}
-		if readPart < len(snapshot.Parts) {
-			if err := replayOracleExcelSheet(ctx, stream, styles, snapshot, snapshot.Parts[readPart]); err != nil {
+	sheetCount := 0
+	for _, snapshot := range snapshots {
+		sizes := oracleExcelBalancedSheetRows(snapshot.Rows, rowsPerSheet)
+		err := func() error {
+			source, err := os.Open(snapshot.Path)
+			if err != nil {
 				return err
 			}
-		}
-		if err := stream.Flush(); err != nil {
-			return err
+			defer source.Close()
+			decoder := json.NewDecoder(bufio.NewReaderSize(source, 64*1024))
+			decoder.UseNumber()
+			for part, count := range sizes {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				name := snapshot.Sheet.SheetName
+				if len(sizes) > 1 {
+					name = oracleExcelSplitSheetName(name, part, reserved)
+				}
+				if sheetCount == 0 {
+					err = file.SetSheetName("Sheet1", name)
+				} else {
+					_, err = file.NewSheet(name)
+				}
+				if err != nil {
+					return err
+				}
+				stream, err := file.NewStreamWriter(name)
+				if err != nil {
+					return err
+				}
+				if err := stream.SetColWidth(1, len(snapshot.Sheet.Columns), reportExcelDefaultWidth); err != nil {
+					return err
+				}
+				header := make([]interface{}, len(snapshot.Sheet.Columns))
+				for index, column := range snapshot.Sheet.Columns {
+					header[index] = excelize.Cell{StyleID: styles.header, Value: column.Title}
+				}
+				if err := stream.SetRow("A1", header); err != nil {
+					return err
+				}
+				if err := replayOracleExcelSheet(ctx, stream, styles, snapshot, decoder, count); err != nil {
+					return err
+				}
+				if err := stream.Flush(); err != nil {
+					return err
+				}
+				sheetCount++
+			}
+			return nil
+		}()
+		if err != nil {
+			return "", total, err
 		}
 	}
-	return file.SaveAs(output)
+	output := filepath.Join(workDir, excelMatchResultFileName)
+	if err := file.SaveAs(output); err != nil {
+		return "", total, err
+	}
+	if progress != nil {
+		if err := progress(total); err != nil {
+			return "", total, err
+		}
+	}
+	return output, total, nil
 }
 
-func replayOracleExcelSheet(ctx context.Context, stream *excelize.StreamWriter, styles reportExportStyles, snapshot oracleExcelSheetSnapshot, partPath string) error {
-	file, err := os.Open(partPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	decoder := json.NewDecoder(bufio.NewReaderSize(file, 64*1024))
-	decoder.UseNumber()
+func replayOracleExcelSheet(ctx context.Context, stream *excelize.StreamWriter, styles reportExportStyles, snapshot oracleExcelSheetSnapshot, decoder *json.Decoder, count int) error {
 	types := make(map[string]string, len(snapshot.Schema))
 	for _, column := range snapshot.Schema {
 		types[column.Name] = oracleExcelValueType(column.DataType)
 	}
-	for rowNumber := 2; ; rowNumber++ {
+	for rowNumber := 2; rowNumber < count+2; rowNumber++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		var values []interface{}
 		if err := decoder.Decode(&values); err != nil {
-			if err == io.EOF {
-				return nil
-			}
 			return fmt.Errorf("读取 Sheet %s 缓存失败: %w", snapshot.Sheet.SheetName, err)
 		}
 		if len(values) != len(snapshot.Sheet.Columns) {
@@ -236,4 +217,5 @@ func replayOracleExcelSheet(ctx context.Context, stream *excelize.StreamWriter, 
 			return err
 		}
 	}
+	return nil
 }

@@ -50,7 +50,7 @@ func (s *ExcelMatchJobService) CreateOracleExportJob(ctx context.Context, input 
 		_ = s.jobDAO.MarkFailed(ctx, export.ID, "投递 Oracle 导出任务失败", expiresAt)
 		return nil, err
 	}
-	s.logJob(ctx, export.ID, "info", "Oracle Excel 导出任务已创建，每个文件最多 100 万条数据", nil)
+	s.logJob(ctx, export.ID, "info", "Oracle Excel 导出任务已创建，超过 100 万行的表将在同一 Excel 内均分为多个 Sheet", nil)
 	return export, nil
 }
 
@@ -114,7 +114,7 @@ func (s *ExcelMatchJobService) processOracleExportJob(ctx context.Context, expor
 	err = withOracleExcelConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
 		return withExcelizeTempDir(filepath.Join(export.WorkDir, excelizeTempDirName), func() error {
 			var err error
-			export.ResultFilePath, total, err = executeOracleExcelExport(queryCtx, connection, config, export.WorkDir, oracleExcelRowsPerFile, func(count int) error {
+			export.ResultFilePath, total, err = executeOracleExcelExport(queryCtx, connection, config, export.WorkDir, oracleExcelRowsPerSheet, func(count int) error {
 				return s.jobDAO.UpdateProgress(queryCtx, export.ID, ExcelMatchJobStats{ProcessedRows: count})
 			})
 			return err

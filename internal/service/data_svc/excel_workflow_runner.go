@@ -120,7 +120,7 @@ func (s *ExcelMatchJobService) executeExcelWorkflowDatabaseStep(ctx context.Cont
 			return withExcelizeTempDir(filepath.Join(record.WorkDir, excelizeTempDirName), func() error {
 				var total int
 				var renderErr error
-				output, total, renderErr = executeOracleExcelExport(queryCtx, connection, config, dir, oracleExcelRowsPerFile, nil)
+				output, total, renderErr = executeOracleExcelExport(queryCtx, connection, config, dir, oracleExcelRowsPerSheet, nil)
 				if renderErr == nil {
 					s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导出 %d 行", total), nil)
 				}
