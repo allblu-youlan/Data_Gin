@@ -71,11 +71,13 @@ func TestExcelWorkflowMillionRowsAcrossFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The reader receives a number already allocated once for this execution.
+	input.FixedIdentifier.Value = "1"
 	imported := 0
 	for _, path := range outputs {
 		count, err := readOracleExcelImport(t.Context(), path, input, columns, func(values []interface{}) error {
-			if values[1] != "SKU-001" || values[2] != "001" {
-				return fmt.Errorf("matched value or fixed identifier lost: %v", values)
+			if values[1] != "SKU-001" || values[2] != "1" {
+				return fmt.Errorf("matched value or import number lost: %v", values)
 			}
 			return nil
 		})
@@ -87,5 +89,5 @@ func TestExcelWorkflowMillionRowsAcrossFiles(t *testing.T) {
 	if len(outputs) != 2 || imported != 2*rowsPerFile || imported <= excelMaxRowsPerSheet {
 		t.Fatalf("files=%d imported=%d", len(outputs), imported)
 	}
-	t.Logf("verified %d matched/imported rows with exact fixed identifier 001", imported)
+	t.Logf("verified %d matched/imported rows with one shared import number", imported)
 }

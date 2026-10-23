@@ -62,7 +62,7 @@ func TestExcelWorkflowAllMatchFilesImportBeforeProcedure(t *testing.T) {
 					if !input.AllSheets || input.HeaderRow != 1 {
 						t.Fatalf("handoff=%+v", input)
 					}
-					count, err := executeOracleExcelImportFilesOnConnection(ctx, connection, sources, input)
+					count, err := executeOracleExcelImportFilesOnConnection(ctx, connection, sources, input, oracleImportTestIdentifier)
 					if err == nil && count != 2 {
 						t.Fatalf("imported rows=%d", count)
 					}
@@ -87,7 +87,7 @@ func TestExcelWorkflowAllMatchFilesImportBeforeProcedure(t *testing.T) {
 			if len(result) != 2 || procedureCalls != 1 || len(state.rows) != 1 || len(state.rows[0]) != 6 {
 				t.Fatalf("result=%v state=%+v calls=%d", result, state, procedureCalls)
 			}
-			want := []interface{}{"A", "匹配店A", "001", "B", "匹配店B", "001"}
+			want := []interface{}{"A", "匹配店A", "42", "B", "匹配店B", "42"}
 			for index, value := range state.rows[0] {
 				if value.Value != want[index] {
 					t.Fatalf("bound[%d]=%v, want %v", index, value.Value, want[index])

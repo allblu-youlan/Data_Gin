@@ -104,17 +104,16 @@ func buildOracleExcelImport(input OracleExcelImportConfig, schema []reportoracle
 	}
 	if input.FixedIdentifier != nil {
 		fixed := *input.FixedIdentifier
+		// Saved configurations never retain an execution's batch number.
+		fixed.Value = ""
 		input.FixedIdentifier = &fixed
 		if fixed.Enabled {
 			fixed.Field = strings.ToUpper(strings.TrimSpace(fixed.Field))
-			if strings.TrimSpace(fixed.Value) == "" {
-				return input, "", nil, errors.New("启用固定标识时，标识值不能为空")
-			}
 			if err := addColumn(fixed.Field); err != nil {
 				return input, "", nil, err
 			}
-			if _, err := reportoracle.OperationValue(columns[len(columns)-1].DataType, fixed.Value); err != nil {
-				return input, "", nil, fmt.Errorf("固定标识值无效: %w", err)
+			if _, err := reportoracle.OperationValue(columns[len(columns)-1].DataType, "1"); err != nil {
+				return input, "", nil, fmt.Errorf("导入标号字段须支持字符或数值: %w", err)
 			}
 		}
 	}
@@ -130,7 +129,7 @@ func ExecuteOracleExcelImportFiles(ctx context.Context, paths []string, config O
 	count := 0
 	err := withOracleOperationConnection(ctx, 2*time.Hour, func(queryCtx context.Context, connection *reportoracle.Adapter) error {
 		var err error
-		count, err = executeOracleExcelImportFilesOnConnection(queryCtx, connection, paths, config)
+		count, err = executeOracleExcelImportFilesOnConnection(queryCtx, connection, paths, config, nextOracleExcelImportIdentifier)
 		return err
 	})
 	if err != nil {
@@ -140,7 +139,7 @@ func ExecuteOracleExcelImportFiles(ctx context.Context, paths []string, config O
 }
 
 func executeOracleExcelImportOnConnection(ctx context.Context, connection oracleOperationConnection, path string, config OracleExcelImportConfig) (int, error) {
-	return executeOracleExcelImportFilesOnConnection(ctx, connection, []string{path}, config)
+	return executeOracleExcelImportFilesOnConnection(ctx, connection, []string{path}, config, nextOracleExcelImportIdentifier)
 }
 
 const (
@@ -176,7 +175,7 @@ func oracleExcelImportBatchStatement(single string, width, rows int) string {
 	return statement.String()
 }
 
-func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection oracleOperationConnection, paths []string, config OracleExcelImportConfig) (int, error) {
+func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection oracleOperationConnection, paths []string, config OracleExcelImportConfig, nextIdentifier func(context.Context) (string, error)) (int, error) {
 	if len(paths) == 0 {
 		return 0, errors.New("请选择至少一个 Excel 文件")
 	}
@@ -187,6 +186,14 @@ func executeOracleExcelImportFilesOnConnection(ctx context.Context, connection o
 	normalized, statement, columns, err := buildOracleExcelImport(config, schema)
 	if err != nil {
 		return 0, err
+	}
+	if fixed := normalized.FixedIdentifier; fixed != nil && fixed.Enabled {
+		// Allocate once per execution, before any Oracle insert. All files,
+		// sheets and rows in this execution receive this same new number.
+		fixed.Value, err = nextIdentifier(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("生成导入标号失败: %w", err)
+		}
 	}
 	tx, err := connection.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
@@ -361,7 +368,7 @@ func readOracleExcelImportSheet(ctx context.Context, file *excelize.File, sheet 
 		if fixed := config.FixedIdentifier; fixed != nil && fixed.Enabled {
 			value, err := reportoracle.OperationValue(columns[len(columns)-1].DataType, fixed.Value)
 			if err != nil {
-				return 0, fmt.Errorf("固定标识值无效: %w", err)
+				return 0, fmt.Errorf("导入标号无效: %w", err)
 			}
 			values[len(values)-1] = value
 		}

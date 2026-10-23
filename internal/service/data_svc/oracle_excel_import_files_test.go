@@ -1,11 +1,13 @@
 package data_svc
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -62,7 +64,7 @@ func oracleImportFilesColumns() []reportoracle.ResultColumn {
 	return append(oracleImportTestColumns(), reportoracle.ResultColumn{Name: "BATCH_TAG", DataType: "VARCHAR2"})
 }
 
-func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndFixedIdentifier(t *testing.T) {
+func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndAutomaticIdentifier(t *testing.T) {
 	firstRows := [][]interface{}{{"订单号", "金额"}, {"001", "1.50"}, {"", ""}, {"002", "2.50"}}
 	secondRows := [][]interface{}{{"金额", "订单号"}}
 	for index := 3; index <= 203; index++ {
@@ -73,7 +75,7 @@ func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndFixedIdentif
 	state := &oracleOperationsTestState{}
 	db := sql.OpenDB(oracleOperationsTestConnector{state: state})
 	defer db.Close()
-	count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: oracleImportFilesColumns()}, []string{first, second}, oracleImportFilesConfig())
+	count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: oracleImportFilesColumns()}, []string{first, second}, oracleImportFilesConfig(), oracleImportTestIdentifier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,8 +91,8 @@ func TestOracleExcelImportFilesStreamsAllSheetsWithBoundedBatchesAndFixedIdentif
 			t.Fatalf("batch did not use bound INSERT ALL: %s", state.statements[batchIndex])
 		}
 		for index := 0; index < len(arguments); index += 3 {
-			if arguments[index].Value != fmt.Sprintf("%03d", next) || arguments[index+2].Value != "001" {
-				t.Fatalf("file/sheet order or fixed identifier changed: row=%d values=%v", next, arguments[index:index+3])
+			if arguments[index].Value != fmt.Sprintf("%03d", next) || arguments[index+2].Value != "42" {
+				t.Fatalf("file/sheet order or automatic identifier changed: row=%d values=%v", next, arguments[index:index+3])
 			}
 			if _, ok := arguments[index+1].Value.(godror.Number); !ok {
 				t.Fatalf("amount lost numeric binding: %T", arguments[index+1].Value)
@@ -122,7 +124,7 @@ func TestOracleExcelImportFilesRollsBackEarlierBatchesWhenLaterFileFails(t *test
 			state := &oracleOperationsTestState{writeError: test.writeError, writeErrorAt: test.errorAt}
 			db := sql.OpenDB(oracleOperationsTestConnector{state: state})
 			defer db.Close()
-			count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: oracleImportFilesColumns()}, []string{first, second}, oracleImportFilesConfig())
+			count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: oracleImportFilesColumns()}, []string{first, second}, oracleImportFilesConfig(), oracleImportTestIdentifier)
 			if err == nil || count != 0 || state.commits != 0 || state.rollbacks != 1 || len(state.rows) == 0 {
 				t.Fatalf("count=%d state=%+v error=%v", count, state, err)
 			}
@@ -154,17 +156,16 @@ func TestOracleExcelImportSingleSheetAndDisabledIdentifierKeepSingleRowStatement
 	}
 }
 
-func TestOracleExcelImportFixedIdentifierValidatesMetadataAndDoesNotMutateDraft(t *testing.T) {
+func TestOracleExcelImportIdentifierValidatesMetadataAndClearsSavedValue(t *testing.T) {
 	for _, test := range []struct{ name, field, value string }{
 		{name: "field must exist", field: "MISSING", value: "001"},
 		{name: "field cannot also be mapped", field: "CODE", value: "001"},
-		{name: "enabled value cannot be empty", field: "BATCH_TAG", value: ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := oracleImportFilesConfig()
 			config.FixedIdentifier.Field, config.FixedIdentifier.Value = test.field, test.value
 			if _, _, _, err := buildOracleExcelImport(config, oracleImportFilesColumns()); err == nil {
-				t.Fatal("invalid fixed identifier accepted")
+				t.Fatal("invalid identifier field accepted")
 			}
 		})
 	}
@@ -173,8 +174,81 @@ func TestOracleExcelImportFixedIdentifierValidatesMetadataAndDoesNotMutateDraft(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if normalized.FixedIdentifier.Field != "BATCH_TAG" || config.FixedIdentifier.Field != "batch_tag" || normalized.FixedIdentifier.Value != "001" || len(columns) != 3 || strings.Contains(statement, "001") {
+	if normalized.FixedIdentifier.Field != "BATCH_TAG" || config.FixedIdentifier.Field != "batch_tag" || normalized.FixedIdentifier.Value != "" || config.FixedIdentifier.Value != "001" || len(columns) != 3 || strings.Contains(statement, "001") {
 		t.Fatalf("fixed identifier was mutated or interpolated: config=%+v normalized=%+v SQL=%s", config.FixedIdentifier, normalized.FixedIdentifier, statement)
+	}
+}
+
+func oracleImportTestIdentifier(context.Context) (string, error) { return "42", nil }
+
+func TestOracleExcelImportAllocatesOneNewNumberOnEveryExecution(t *testing.T) {
+	first := oracleImportWorkbook(t, "first.xlsx", oracleImportSheetFixture{name: "first", rows: [][]interface{}{{"订单号", "金额"}, {"A", "10"}}}, oracleImportSheetFixture{name: "second", rows: [][]interface{}{{"订单号", "金额"}, {"B", "20"}}})
+	second := oracleImportWorkbook(t, "second.xlsx", oracleImportSheetFixture{name: "third", rows: [][]interface{}{{"订单号", "金额"}, {"C", "30"}}})
+	for _, kind := range []string{"VARCHAR2", "NUMBER"} {
+		t.Run(kind, func(t *testing.T) {
+			columns := oracleImportFilesColumns()
+			columns[len(columns)-1].DataType = kind
+			next := 0
+			allocate := func(context.Context) (string, error) { next++; return strconv.Itoa(next), nil }
+			config := oracleImportFilesConfig()
+			for run := 1; run <= 2; run++ {
+				state := &oracleOperationsTestState{}
+				db := sql.OpenDB(oracleOperationsTestConnector{state: state})
+				count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: columns}, []string{first, second}, config, allocate)
+				_ = db.Close()
+				if err != nil || count != 3 || next != run || state.commits != 1 {
+					t.Fatalf("run=%d count=%d allocations=%d state=%+v error=%v", run, count, next, state, err)
+				}
+				for _, batch := range state.rows {
+					for offset := 2; offset < len(batch); offset += 3 {
+						if kind == "NUMBER" {
+							if _, ok := batch[offset].Value.(godror.Number); !ok {
+								t.Fatalf("identifier lost numeric binding: %T", batch[offset].Value)
+							}
+						}
+						if fmt.Sprint(batch[offset].Value) != strconv.Itoa(run) {
+							t.Fatalf("run=%d reused another import number: %v", run, batch[offset].Value)
+						}
+					}
+				}
+				if config.FixedIdentifier.Value != "001" {
+					t.Fatalf("execution changed saved draft: %+v", config.FixedIdentifier)
+				}
+			}
+		})
+	}
+}
+
+func TestOracleExcelImportIdentifierFailureStopsBeforeOracleWrites(t *testing.T) {
+	path := oracleImportWorkbook(t, "import.xlsx", oracleImportSheetFixture{name: "Sheet1", rows: [][]interface{}{{"订单号", "金额"}, {"A", "10"}}})
+	state := &oracleOperationsTestState{}
+	db := sql.OpenDB(oracleOperationsTestConnector{state: state})
+	defer db.Close()
+	want := errors.New("sequence storage unavailable")
+	count, err := executeOracleExcelImportFilesOnConnection(t.Context(), oracleOperationsFakeConnection{db: db, columns: oracleImportFilesColumns()}, []string{path}, oracleImportFilesConfig(), func(context.Context) (string, error) { return "", want })
+	if !errors.Is(err, want) || count != 0 || len(state.rows) != 0 || state.statement != "" || state.commits != 0 {
+		t.Fatalf("count=%d state=%+v error=%v", count, state, err)
+	}
+}
+
+func TestOracleExcelImportIdentifierAcceptsEmptyLegacyValueAndRejectsDates(t *testing.T) {
+	for _, kind := range []string{"VARCHAR2", "NUMBER", "DATE"} {
+		t.Run(kind, func(t *testing.T) {
+			config := oracleImportFilesConfig()
+			config.FixedIdentifier.Value = ""
+			columns := oracleImportFilesColumns()
+			columns[len(columns)-1].DataType = kind
+			normalized, _, _, err := buildOracleExcelImport(config, columns)
+			if kind == "DATE" {
+				if err == nil {
+					t.Fatal("date column accepted for an incrementing identifier")
+				}
+				return
+			}
+			if err != nil || normalized.FixedIdentifier.Value != "" {
+				t.Fatalf("config=%+v error=%v", normalized, err)
+			}
+		})
 	}
 }
 
