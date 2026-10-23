@@ -1,4 +1,5 @@
 import type { BojunColumn, BojunTable, ReportColumnSource, ReportExecutionPolicy, ReportQueryColumn, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryOperator, ReportQueryOrder, ReportQueryRelation, ReportQuerySpec, ReportQueryValue } from './types'
+import { isReportTimeDefault } from './timeDefaults.js'
 
 export const reportQueryOperators: ReportQueryOperator[] = ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE', 'BETWEEN', 'IN', 'NOT_IN', 'PREFIX', 'CONTAINS', 'IS_NULL', 'IS_NOT_NULL']
 export const defaultReportExecutionPolicy: ReportExecutionPolicy = { exportPolicy: 'MANUAL', resultRetentionHours: 24, purgeAfterExport: false }
@@ -24,6 +25,9 @@ function parseValue(value: unknown): ReportQueryValue {
   if (item.kind === 'CONSTANT') return { kind: item.kind, value: item.value }
   if (item.kind === 'PARAMETER') return { kind: item.kind, code: queryText(item.code) }
   if (item.kind === 'FIELD') return { kind: item.kind, aliasId: queryText(item.aliasId), columnId: queryText(item.columnId) }
+  if (item.kind === 'TIME' && isReportTimeDefault(item.code)) return { kind: item.kind, code: item.code }
+  if (item.kind === 'TIME_RANGE' && (item.code === 'CURRENT_MONTH' || item.code === 'PREVIOUS_MONTH' || item.code === 'NEXT_MONTH')) return { kind: item.kind, code: item.code }
+  if (item.kind === 'COLUMN_MAX') return { kind: item.kind }
   throw new Error('不支持的查询条件值。')
 }
 export function parseReportQueryConditionGroup(value: unknown, depth = 0): ReportQueryConditionGroup {

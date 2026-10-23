@@ -475,7 +475,8 @@ export type ReportColumnSource =
 
 export type ReportQueryOperator = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'BETWEEN' | 'IN' | 'NOT_IN' | 'PREFIX' | 'CONTAINS' | 'IS_NULL' | 'IS_NOT_NULL'
 export type ReportQueryField = { aliasId: string; columnId: string; label?: string }
-export type ReportQueryValue = { kind: 'CONSTANT'; value: unknown } | { kind: 'PARAMETER'; code: string } | { kind: 'FIELD'; aliasId: string; columnId: string }
+export type ReportMonthRange = 'CURRENT_MONTH' | 'PREVIOUS_MONTH' | 'NEXT_MONTH'
+export type ReportQueryValue = { kind: 'CONSTANT'; value: unknown } | { kind: 'PARAMETER'; code: string } | { kind: 'FIELD'; aliasId: string; columnId: string } | { kind: 'TIME'; code: ReportTimeDefault } | { kind: 'TIME_RANGE'; code: ReportMonthRange } | { kind: 'COLUMN_MAX' }
 export type ReportQueryCondition = ReportQueryField & { operator: ReportQueryOperator; value?: ReportQueryValue }
 export type ReportQueryConditionGroup = { logic: 'AND' | 'OR'; items: Array<ReportQueryCondition | ReportQueryConditionGroup> }
 export type ReportQueryOrder = ReportQueryField & { direction: 'ASC' | 'DESC' }

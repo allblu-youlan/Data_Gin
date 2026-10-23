@@ -1,4 +1,5 @@
-import type { ReportAllowedFilter, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryInputs, ReportQueryOperator, ReportRunContract } from '../../types'
+import type { ReportAllowedFilter, ReportQueryCondition, ReportQueryConditionGroup, ReportQueryInputs, ReportQueryOperator, ReportQueryValue, ReportRunContract } from '../../types'
+import { computedReportValueError, isComputedReportValue } from './computedValues.js'
 
 export const runtimeOperatorLabels: Record<ReportQueryOperator, string> = { EQ: '等于', NE: '不等于', GT: '大于', GTE: '大于等于', LT: '小于', LTE: '小于等于', BETWEEN: '区间', IN: '属于集合', NOT_IN: '不属于集合', PREFIX: '开头为', CONTAINS: '包含', IS_NULL: '为空', IS_NOT_NULL: '不为空' }
 export const runtimeFilterKey = (field: { aliasId: string; columnId: string }) => `${field.aliasId}:${field.columnId}`
@@ -18,7 +19,8 @@ export function isSimpleRuntimeWhere(contract: Pick<ReportRunContract, 'allowedF
     if ('logic' in item) return false
     const key = runtimeFilterKey(item)
     const allowed = contract.allowedFilters?.find((field) => runtimeFilterKey(field) === key)
-    if (seen.has(key) || !allowed?.operators.includes(item.operator) || item.value && item.value.kind !== 'CONSTANT') return false
+    if (seen.has(key) || !allowed?.operators.includes(item.operator) || item.value && item.value.kind !== 'CONSTANT' && !isComputedReportValue(item.value)) return false
+    if (isComputedReportValue(item.value) && computedReportValueError(item.value, item.operator, allowed.logicalType)) return false
     if (!runtimeNoValue(item.operator) && !runtimeCollection(item.operator) && item.value?.kind === 'CONSTANT') {
       const raw = item.value.value
       const values = item.operator === 'BETWEEN' ? Array.isArray(raw) ? raw : [raw] : [raw]
@@ -29,11 +31,11 @@ export function isSimpleRuntimeWhere(contract: Pick<ReportRunContract, 'allowedF
   })
 }
 
-export function updateRuntimeFilter(value: ReportQueryInputs, field: ReportAllowedFilter, operator: ReportQueryOperator | '', raw?: unknown): ReportQueryInputs {
+export function updateRuntimeFilter(value: ReportQueryInputs, field: ReportAllowedFilter, operator: ReportQueryOperator | '', raw?: unknown, source?: ReportQueryValue): ReportQueryInputs {
   if (operator && !field.operators.includes(operator)) throw new Error('该字段不允许使用此筛选方式。')
   const items = (value.where?.items ?? []).filter((item) => 'logic' in item || runtimeFilterKey(item) !== runtimeFilterKey(field))
   const condition: ReportQueryCondition = { aliasId: field.aliasId, columnId: field.columnId, operator: operator || field.operators[0] }
-  if (operator && !runtimeNoValue(operator)) condition.value = { kind: 'CONSTANT', value: raw ?? '' }
+  if (operator && !runtimeNoValue(operator)) condition.value = source ?? { kind: 'CONSTANT', value: raw ?? '' }
   return { ...value, where: { logic: 'AND', items: operator ? [...items, condition] : items } }
 }
 
@@ -99,15 +101,25 @@ function validScalar(value: unknown, type?: string): string {
 
 export function validateRuntimeQueryInputs(contract: Pick<ReportRunContract, 'allowedFilters' | 'allowedSortFields'>, value: ReportQueryInputs): string {
   let count = 0
-  function validate(group: ReportQueryConditionGroup, depth: number): string {
+  let maxCount = 0
+  function validate(group: ReportQueryConditionGroup, depth: number, andPath = true): string {
     if (depth >= 3 || !['AND', 'OR'].includes(group.logic)) return '筛选分组最多为 3 层。'
     for (const item of group.items) {
-      if ('logic' in item) { const error = validate(item, depth + 1); if (error) return error; continue }
+      if ('logic' in item) { const error = validate(item, depth + 1, andPath && group.logic === 'AND'); if (error) return error; continue }
       if (++count > 20) return '每次查询最多设置 20 个筛选条件。'
       const field = contract.allowedFilters?.find((entry) => runtimeFilterKey(entry) === runtimeFilterKey(item))
       if (!field || !field.operators.includes(item.operator)) return '筛选字段或操作符未获当前报表允许，请重新选择。'
       const label = field.label || `字段 #${field.columnId}`
       if (runtimeNoValue(item.operator)) { if (item.value !== undefined) return `${label}：空值筛选无需填写值。`; continue }
+      if (isComputedReportValue(item.value)) {
+        const error = computedReportValueError(item.value, item.operator, field.logicalType)
+        if (error) return `${label}：${error}`
+        if (item.value.kind === 'COLUMN_MAX') {
+          if (!andPath || group.logic !== 'AND') return '本列最大值只能用于 AND 条件。'
+          if (++maxCount > 1) return '每次查询最多设置一项本列最大值筛选。'
+        }
+        continue
+      }
       if (item.value?.kind !== 'CONSTANT') return `${label}：请直接填写筛选值。`
       const raw = item.value.value
       const collection = item.operator === 'BETWEEN' || runtimeCollection(item.operator)

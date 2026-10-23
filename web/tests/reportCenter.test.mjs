@@ -14,6 +14,42 @@ import { normalizeDatasourceCode, validateDatasourceConnection, validateDatasour
 import { mergeReportInputOptions, reportInputOptionMatches, reportInputSelectionKeys, reportInputSelectionValue } from '../.test-dist/reportCenter/inputOptions.js'
 import { isReportInputQueryName } from '../.test-dist/reportCenter/inputQueryName.js'
 import { previewReportTimeDefault, reportTimeDefaultOptions } from '../.test-dist/reportCenter/timeDefaults.js'
+import { parseReportQueryConditionGroup } from '../.test-dist/reportCenter/bojunQueryConfig.js'
+import { computedReportValuePreview, reportTimeOperator } from '../.test-dist/reportCenter/components/ReportQueryDesigner/computedValues.js'
+
+test('numeric and date month ranges stay dynamic through query normalization and configuration', () => {
+  const fields = [
+    { aliasId: 'base', columnId: '1', label: '数字日期', logicalType: 'integer', operators: ['EQ', 'GTE', 'LTE', 'BETWEEN'] },
+    { aliasId: 'base', columnId: '2', label: '日期', logicalType: 'date', operators: ['EQ', 'GTE', 'LTE', 'BETWEEN'] },
+  ]
+  let value = {}
+  for (const field of fields) value = updateRuntimeFilter(value, field, 'BETWEEN', undefined, { kind: 'TIME_RANGE', code: 'CURRENT_MONTH' })
+  assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, value), true)
+  assert.equal(validateRuntimeQueryInputs({ allowedFilters: fields }, value), '')
+  assert.deepEqual(normalizeRuntimeQueryInputs(value), value)
+  assert.deepEqual(parseReportQueryConditionGroup(value.where), value.where)
+  const now = new Date('2026-10-23T03:00:00Z')
+  assert.match(computedReportValuePreview({ kind: 'TIME_RANGE', code: 'CURRENT_MONTH' }, 'integer', now), /20261001 至 20261031.*含首尾/)
+  assert.match(computedReportValuePreview({ kind: 'TIME_RANGE', code: 'CURRENT_MONTH' }, 'date', now), /2026-10-01 至 2026-10-31.*含末日全天/)
+  const single = updateRuntimeFilter({}, fields[0], 'LTE', undefined, { kind: 'TIME', code: 'MONTH_END' })
+  assert.equal(validateRuntimeQueryInputs({ allowedFilters: fields }, single), '')
+  assert.equal(reportTimeOperator(['LTE']), 'LTE')
+  assert.equal(reportTimeOperator(['EQ', 'GTE'], 'EQ'), 'EQ')
+  assert.equal(reportTimeOperator(['BETWEEN']), undefined)
+})
+
+test('maximum filters preserve the computed source and reject ambiguous combinations', () => {
+  const fields = [1, 2].map((id) => ({ aliasId: 'base', columnId: String(id), label: `字段${id}`, logicalType: 'integer', operators: ['EQ', 'GTE', 'BETWEEN'] }))
+  const maximum = updateRuntimeFilter({}, fields[0], 'EQ', undefined, { kind: 'COLUMN_MAX' })
+  const filtered = updateRuntimeFilter(maximum, fields[1], 'GTE', '10')
+  assert.equal(isSimpleRuntimeWhere({ allowedFilters: fields }, filtered), true)
+  assert.equal(validateRuntimeQueryInputs({ allowedFilters: fields }, filtered), '')
+  assert.deepEqual(parseReportQueryConditionGroup(filtered.where), filtered.where)
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: fields }, { where: { ...maximum.where, logic: 'OR' } }), /AND/)
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: fields }, updateRuntimeFilter(maximum, fields[1], 'EQ', undefined, { kind: 'COLUMN_MAX' })), /最多.*一项/)
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: fields }, updateRuntimeFilter({}, fields[0], 'GTE', undefined, { kind: 'COLUMN_MAX' })), /等于/)
+  assert.match(validateRuntimeQueryInputs({ allowedFilters: fields }, updateRuntimeFilter({}, fields[0], 'EQ', undefined, { kind: 'TIME_RANGE', code: 'CURRENT_MONTH' })), /区间/)
+})
 
 test('dynamic time defaults survive configuration and resolve at execution instead of page load', () => {
   const schema = parseReportInputSchemaDocument({

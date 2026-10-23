@@ -1,0 +1,4 @@
+.editor, .editor label { display: grid; gap: var(--space-1); min-width: 0; }
+.editor label { color: var(--color-text-secondary); font-size: 12px; }
+.editor select { width: 100%; min-width: 0; min-height: 32px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); padding: var(--space-1) var(--space-2); background: var(--color-canvas); color: var(--color-text); font-size: 12px; }
+.editor small { color: var(--color-text-secondary); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }

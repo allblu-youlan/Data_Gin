@@ -1,6 +1,8 @@
 import type { FormEvent } from 'react'
 import type { ReportAllowedFilter, ReportQueryInputs, ReportQueryOperator, ReportRunContract } from '../../types'
 import { ReportConditionEditor } from './ReportConditionEditor'
+import { ReportComputedValueEditor } from './ReportComputedValueEditor'
+import { computedReportValueError, isComputedReportValue, reportTimeOperator, supportsComputedReportValue, supportsReportTimeValue } from './computedValues'
 import { isSimpleRuntimeWhere, readRuntimeFilter, runtimeCollection, runtimeDateInput, runtimeDateValue, runtimeFilterKey, runtimeNoValue, runtimeOperatorLabels, updateRuntimeFilter } from './runtimeFilters'
 import styles from './ReportRuntimeQueryEditor.module.css'
 
@@ -22,6 +24,8 @@ function RuntimeFilter({ field, value, disabled, onChange }: { field: ReportAllo
   const effective = operator || field.operators.find((item) => !runtimeNoValue(item))
   const valueOperator = operator || effective || ''
   const raw = condition?.value?.kind === 'CONSTANT' ? condition.value.value : ''
+  const computed = isComputedReportValue(condition?.value) ? condition.value : undefined
+  const timeOperator = reportTimeOperator(field.operators, operator)
   const inputType = field.logicalType === 'date' ? 'date' : field.logicalType === 'datetime' ? 'datetime-local' : 'text'
   const inputMode = field.logicalType === 'integer' ? 'numeric' : field.logicalType === 'decimal' ? 'decimal' : undefined
   function update(raw: unknown) { if (effective) onChange(updateRuntimeFilter(value, field, effective, raw)) }
@@ -33,6 +37,14 @@ function RuntimeFilter({ field, value, disabled, onChange }: { field: ReportAllo
     const selected = event.currentTarget.value
     const next: ReportQueryOperator | '' = field.operators.find((item) => item === selected) ?? ''
     const nextRaw = next === 'BETWEEN' ? Array.isArray(raw) && raw.length === 2 ? raw : ['', ''] : runtimeCollection(next) ? Array.isArray(raw) ? raw : [] : Array.isArray(raw) ? '' : raw
-    onChange(updateRuntimeFilter(value, field, next, nextRaw))
-  }}><option value="">不限</option>{field.operators.map((item) => <option value={item} key={item}>{runtimeOperatorLabels[item]}</option>)}</select>{runtimeNoValue(valueOperator) ? <span className={styles.noValue}>无需填写值</span> : valueOperator === 'BETWEEN' ? <div className={styles.range}>{input(Array.isArray(raw) ? raw[0] : '', `${field.label}区间起始值`, (text) => update([text, Array.isArray(raw) ? raw[1] ?? '' : '']))}<span>至</span>{input(Array.isArray(raw) ? raw[1] : '', `${field.label}区间结束值`, (text) => update([Array.isArray(raw) ? raw[0] ?? '' : '', text]))}</div> : runtimeCollection(valueOperator) ? <input aria-label={`${field.label}的集合值`} type="text" autoComplete="off" placeholder="多个值用逗号分隔…" value={Array.isArray(raw) ? raw.join(',') : String(raw ?? '')} onChange={(event) => update(event.currentTarget.value.split(/[,，\n]/))} /> : input(raw, `${field.label}的筛选值`, update)}</div></fieldset>
+    onChange(updateRuntimeFilter(value, field, next, nextRaw, next && computed && !computedReportValueError(computed, next, field.logicalType) ? computed : undefined))
+  }}><option value="">不限</option>{field.operators.map((item) => <option value={item} key={item}>{runtimeOperatorLabels[item]}</option>)}</select>{computed ? <span className={styles.noValue}>{computed.kind === 'COLUMN_MAX' ? '本列最大值' : '按查询时间计算'}</span> : runtimeNoValue(valueOperator) ? <span className={styles.noValue}>无需填写值</span> : valueOperator === 'BETWEEN' ? <div className={styles.range}>{input(Array.isArray(raw) ? raw[0] : '', `${field.label}区间起始值`, (text) => update([text, Array.isArray(raw) ? raw[1] ?? '' : '']))}<span>至</span>{input(Array.isArray(raw) ? raw[1] : '', `${field.label}区间结束值`, (text) => update([Array.isArray(raw) ? raw[0] ?? '' : '', text]))}</div> : runtimeCollection(valueOperator) ? <input aria-label={`${field.label}的集合值`} type="text" autoComplete="off" placeholder="多个值用逗号分隔…" value={Array.isArray(raw) ? raw.join(',') : String(raw ?? '')} onChange={(event) => update(event.currentTarget.value.split(/[,，\n]/))} /> : input(raw, `${field.label}的筛选值`, update)}</div>
+    {supportsComputedReportValue(field.logicalType) ? <div className={styles.valueSource}><label>值来源<select aria-label={`${field.label}的值来源`} value={computed?.kind ?? 'CONSTANT'} onChange={(event) => {
+      const kind = event.currentTarget.value
+      if (kind === 'COLUMN_MAX') onChange(updateRuntimeFilter(value, field, 'EQ', undefined, { kind }))
+      else if (kind === 'TIME_RANGE') onChange(updateRuntimeFilter(value, field, 'BETWEEN', undefined, { kind, code: 'CURRENT_MONTH' }))
+      else if (kind === 'TIME' && timeOperator) onChange(updateRuntimeFilter(value, field, timeOperator, undefined, { kind, code: 'MONTH_START' }))
+      else onChange(updateRuntimeFilter(value, field, operator || effective || '', ''))
+    }}><option value="CONSTANT">手动填写</option>{supportsReportTimeValue(field.logicalType) && field.operators.includes('BETWEEN') ? <option value="TIME_RANGE">动态月份范围</option> : null}{supportsReportTimeValue(field.logicalType) && timeOperator ? <option value="TIME">动态时间</option> : null}{field.operators.includes('EQ') ? <option value="COLUMN_MAX">本列最大值</option> : null}</select></label>{computed ? <ReportComputedValueEditor value={computed} logicalType={field.logicalType} label={field.label || field.columnId} disabled={disabled} className={styles.computed} onChange={(source) => onChange(updateRuntimeFilter(value, field, operator, undefined, source))} /> : null}</div> : null}
+  </fieldset>
 }
