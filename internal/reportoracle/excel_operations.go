@@ -40,6 +40,9 @@ func OperationValue(dataType, value string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if value == "" {
+		return nil, nil
+	}
 	switch kind {
 	case "NUMBER", "FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE", "INTEGER":
 		value = strings.TrimSpace(value)

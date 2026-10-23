@@ -50,3 +50,24 @@ func TestOperationValuesPreserveDecimalsAndBindDates(t *testing.T) {
 		})
 	}
 }
+
+func TestOperationProcedureEmptyInputsBindNull(t *testing.T) {
+	for _, kind := range []string{"VARCHAR2", "NUMBER", "DATE", "TIMESTAMP", "CLOB", "NCLOB"} {
+		t.Run(kind, func(t *testing.T) {
+			_, arguments, outputs, err := buildOperationProcedureCall(ProcedureRef{Owner: "DEMO", Name: "SYNC"}, []ProcedureValue{
+				{Name: "P_VALUE", Direction: "IN", DataType: kind},
+				{Name: "P_RESULT", Direction: "IN OUT", DataType: kind},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if value := arguments[0].(sql.NamedArg).Value; value != nil {
+				t.Fatalf("empty %s input = %#v, want NULL", kind, value)
+			}
+			inout := arguments[1].(sql.NamedArg).Value.(sql.Out)
+			if !inout.In || outputs["P_RESULT"].value() != "" {
+				t.Fatalf("empty IN OUT binding = %+v", inout)
+			}
+		})
+	}
+}

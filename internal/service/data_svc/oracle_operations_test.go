@@ -233,7 +233,7 @@ func TestOracleProcedureValidatesSignatureAndSuccessOutput(t *testing.T) {
 		name   string
 		mutate func(*OracleProcedureConfig)
 	}{
-		{"missing parameter", func(config *OracleProcedureConfig) { config.Parameters = config.Parameters[:2] }},
+		{"unknown parameter", func(config *OracleProcedureConfig) { config.Parameters[0].Name = "MISSING" }},
 		{"wrong type", func(config *OracleProcedureConfig) { config.Parameters[0].DataType = "NUMBER" }},
 		{"input success flag", func(config *OracleProcedureConfig) { config.Success.Parameter = "P_CODE" }},
 		{"unsupported operator", func(config *OracleProcedureConfig) { config.Success.Operator = "sql" }},

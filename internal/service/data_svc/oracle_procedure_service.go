@@ -56,13 +56,23 @@ func normalizeOracleProcedureWithMetadata(input OracleProcedureConfig, arguments
 		return input, err
 	}
 	input.Operation, input.Owner, input.PackageName, input.ProcedureName = ExcelOperationOracleProcedure, ref.Owner, ref.Package, ref.Name
-	if len(input.Parameters) > 200 {
-		return input, errors.New("存储过程参数不得超过 200 个")
-	}
 	input.Parameters = append([]OracleProcedureParameter{}, input.Parameters...)
 	available := make(map[string]reportoracle.ProcedureArgument, len(arguments))
+	configured := make(map[string]bool, len(input.Parameters))
+	for _, parameter := range input.Parameters {
+		configured[strings.ToUpper(strings.TrimSpace(parameter.Name))] = true
+	}
 	for _, argument := range arguments {
-		available[strings.ToUpper(argument.Name)] = argument
+		name := strings.ToUpper(argument.Name)
+		available[name] = argument
+		direction := reportoracle.NormalizeOperationDirection(argument.Direction)
+		// Omitted defaulted inputs use Oracle defaults; all other arguments need a binding.
+		if !configured[name] && !(direction == "IN" && argument.Defaulted) {
+			input.Parameters = append(input.Parameters, OracleProcedureParameter{Name: name, Direction: direction, DataType: argument.DataType})
+		}
+	}
+	if len(input.Parameters) > 200 {
+		return input, errors.New("存储过程参数不得超过 200 个")
 	}
 	seen, outputs := make(map[string]bool), make(map[string]bool)
 	for index := range input.Parameters {
@@ -98,11 +108,6 @@ func normalizeOracleProcedureWithMetadata(input OracleProcedureConfig, arguments
 			return input, fmt.Errorf("参数 %s 的方向无效", parameter.Name)
 		}
 		outputs[parameter.Name] = parameter.Direction != "IN"
-	}
-	for _, argument := range arguments {
-		if !seen[strings.ToUpper(argument.Name)] && !(reportoracle.NormalizeOperationDirection(argument.Direction) == "IN" && argument.Defaulted) {
-			return input, fmt.Errorf("缺少存储过程参数: %s", argument.Name)
-		}
 	}
 	input.Success.Parameter = strings.ToUpper(strings.TrimSpace(input.Success.Parameter))
 	input.Success.Operator = strings.ToLower(strings.TrimSpace(input.Success.Operator))
