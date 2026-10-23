@@ -4,11 +4,12 @@ import type { ClientResponse } from '../api/client'
 import { Dialog, Drawer, FeedbackState, FilterToolbar, MetricStrip, PageCanvas, PageHeader, PaginationControls, Section } from '../ui'
 import { bojunImportWriteConfirmation, bojunImportWriteFieldOptions, buildExcelExportConfig, cloneExcelEmptyCellFills, cloneExcelImportWriteMappings, cloneExcelMatchSteps, excelMatchSchemePath, selectExcelMatchStepModel, type ExcelMatchFilterConfig, type ExcelEmptyCellFillConfig, type ExcelImportWriteMappingConfig, type ExcelMatchModel, type ExcelMatchStepConfig } from '../excelMatchConfig'
 import { bojunMatchFieldOptions, canDownloadExcelJob, defaultExcelExportScheme, defaultExcelImportScheme, excelJobStatusLabel, exportSchemeDefaults, filterSensitiveExcelModels, formValue, importSchemeDefaults, parseExportColumnFormats, readDataField, readObject, type ExcelDialogMode, type ExcelExportSchemeConfig, type ExcelImportSchemeConfig, type ExcelMatchJob, type ExcelMatchPreviewResult, type ExcelMatchScheme, type PendingSchemeSave } from './excelPageSupport'
-import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelSchemeList, Field, Metric, Panel, SelectFilter } from './ExcelMatchPageParts'
+import { ExcelJobDetailContent, ExcelJobHistoryTable, ExcelMatchPreviewPanel, ExcelSchemeList, Field, Metric, SelectFilter } from './ExcelMatchPageParts'
 import { buildExcelUploadPayload, useExcelUploads, type ExcelPageClient } from './useExcelUploads'
 import { useExcelJobs } from './useExcelJobs'
 import { ExcelRuleEditor } from './ExcelRuleEditor'
 import { ExcelFileSelection } from './ExcelFileSelection'
+import { ExcelEditor, ExcelEditorSection, ExcelWorkspace } from './ExcelWorkspace'
 import styles from './ExcelMatchPage.module.css'
 
 export type { ExcelPageClient, ExcelPageClientOptions } from './useExcelUploads'
@@ -687,12 +688,16 @@ export function ExcelMatchPage({
   }
 
   function renderImportWriteForm() {
-    return <form className={styles.uploadForm} onSubmit={createImportJob} key={importFormKey}>
-      <label>已保存方案<select name="importSchemeID" value={selectedImportSchemeID} onChange={(event) => applyImportScheme(event.currentTarget.value)}><option value="">选择方案</option>{importSchemes.map((scheme) => <option value={scheme.id} key={scheme.id}>{scheme.name}</option>)}</select></label>
-      <button type="button" disabled={!selectedImportSchemeID || loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'import_update', 'current') }}>保存到当前方案</button><button type="button" disabled={loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'import_update', 'new') }}>另存为新方案</button>
-      <label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedImportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('import') }} /><span>{selectedImportFileName || '请选择需要导入更新的 .xlsx 文件'}</span></label>
-      <Field label="Sheet 页名称" name="sheetName" defaultValue={importDefaults.sheetName} /><label>匹配表名<select name="tableName" defaultValue={importDefaults.tableName}><option value="bojun_retail_orders">伯俊零售单 bojun_retail_orders</option></select></label><label>数据库匹配字段<select name="dbMatchField" defaultValue={importDefaults.dbMatchField}>{bojunMatchFieldOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label><Field label="Excel 匹配列名" name="matchExcelColumn" defaultValue={importDefaults.matchExcelColumn} />{renderImportWriteMappings()}<Field label="批量更新大小" name="batchSize" defaultValue={importDefaults.batchSize} />
-      <label className={styles.checkboxLabel}><input name="confirmWrite" type="checkbox" />确认写入数据库</label><p className={styles.modeNote}>不勾选时只预检匹配数量，不写库；每个目标列独立判断是否为空，金额字段仅填当前为 0 的记录；Oracle 字段必须用 docno 匹配。</p>{uploadProgress && <p className={styles.modeNote} role="status" aria-live="polite">{uploadProgress}</p>}<div className={styles.formActions}><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建预检/导入任务</button></div>
+    return <form className={`${styles.uploadForm} ${styles.schemeForm}`} onSubmit={createImportJob} key={importFormKey}>
+      <div className={styles.schemeToolbar}>
+        <label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedImportFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('import') }} /><span>{selectedImportFileName || '请选择需要导入更新的 .xlsx 文件'}</span></label>
+        <Field label="Sheet 页名称" name="sheetName" defaultValue={importDefaults.sheetName} />
+        <div className={styles.schemeToolbarActions}><button type="button" disabled={!selectedImportSchemeID || loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'import_update', 'current') }}>保存到当前方案</button><button type="button" disabled={loading} onClick={(event) => { const form = event.currentTarget.form; if (form?.reportValidity()) beginSchemeSave(form, 'import_update', 'new') }}>另存为新方案</button></div>
+      </div>
+      <div className={styles.stepFields}><label>匹配表名<select name="tableName" defaultValue={importDefaults.tableName}><option value="bojun_retail_orders">伯俊零售单 bojun_retail_orders</option></select></label><label>数据库匹配字段<select name="dbMatchField" defaultValue={importDefaults.dbMatchField}>{bojunMatchFieldOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label><Field label="Excel 匹配列名" name="matchExcelColumn" defaultValue={importDefaults.matchExcelColumn} /><Field label="批量更新大小" name="batchSize" defaultValue={importDefaults.batchSize} /></div>
+      {renderImportWriteMappings()}
+      <details className={styles.schemeAdvanced}><summary>已保存方案</summary><div><label>已保存方案<select name="importSchemeID" value={selectedImportSchemeID} onChange={(event) => applyImportScheme(event.currentTarget.value)}><option value="">选择方案</option>{importSchemes.map((scheme) => <option value={scheme.id} key={scheme.id}>{scheme.name}</option>)}</select></label></div></details>
+      <div className={styles.writeConfirmation}><label className={styles.checkboxLabel}><input name="confirmWrite" type="checkbox" />确认写入数据库</label><p className={styles.modeNote}>不勾选时只预检匹配数量，不写库；每个目标列独立判断是否为空，金额字段仅填当前为 0 的记录；Oracle 字段必须用 docno 匹配。</p>{uploadProgress && <p className={styles.modeNote} role="status" aria-live="polite">{uploadProgress}</p>}<div className={styles.formActions}><button className={styles.primary} type="submit" disabled={loading}><Upload aria-hidden="true" />创建预检/导入任务</button></div></div>
     </form>
   }
 
@@ -712,10 +717,10 @@ export function ExcelMatchPage({
   }
 
   function renderClearWriteForm() {
-    return <form className={styles.uploadForm} onSubmit={createClearMatchedJob}>
-      <label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedClearFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('clear') }} /><span>{selectedClearFileName || '请选择需要退回的 .xlsx 文件'}</span></label>
-      <Field label="Sheet 页名称" name="sheetName" defaultValue="Sheet1" /><label>匹配表名<select name="tableName" defaultValue="bojun_retail_orders"><option value="bojun_retail_orders">伯俊零售单 bojun_retail_orders</option></select></label><label>数据库匹配字段<select name="dbMatchField" defaultValue="docno">{bojunMatchFieldOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label><Field label="Excel 匹配列名" name="matchExcelColumn" defaultValue="外部订单编号" /><Field label="批量处理大小" name="batchSize" defaultValue="1000" />
-      <label className={styles.checkboxLabel}><input name="confirmWrite" type="checkbox" />确认清空 matched_docno</label><p className={styles.modeNote}>不勾选时只预检会命中的行；勾选后会把命中行的 matched_docno 清空，用于退回未匹配状态。</p>{uploadProgress && <p className={styles.modeNote} role="status" aria-live="polite">{uploadProgress}</p>}<div className={styles.formActions}><button type="submit" disabled={loading}><RefreshCcw aria-hidden="true" />创建预检/退回任务</button></div>
+    return <form className={`${styles.uploadForm} ${styles.schemeForm}`} onSubmit={createClearMatchedJob}>
+      <div className={styles.schemeToolbar}><label className={styles.fileInputLabel}>Excel 文件<input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setSelectedClearFileName(event.currentTarget.files?.[0]?.name ?? ''); clearUploadRef('clear') }} /><span>{selectedClearFileName || '请选择需要退回的 .xlsx 文件'}</span></label><Field label="Sheet 页名称" name="sheetName" defaultValue="Sheet1" /></div>
+      <div className={styles.stepFields}><label>匹配表名<select name="tableName" defaultValue="bojun_retail_orders"><option value="bojun_retail_orders">伯俊零售单 bojun_retail_orders</option></select></label><label>数据库匹配字段<select name="dbMatchField" defaultValue="docno">{bojunMatchFieldOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label><Field label="Excel 匹配列名" name="matchExcelColumn" defaultValue="外部订单编号" /><Field label="批量处理大小" name="batchSize" defaultValue="1000" /></div>
+      <div className={styles.writeConfirmation}><label className={styles.checkboxLabel}><input name="confirmWrite" type="checkbox" />确认清空 matched_docno</label><p className={styles.modeNote}>不勾选时只预检会命中的行；勾选后会把命中行的 matched_docno 清空，用于退回未匹配状态。</p>{uploadProgress && <p className={styles.modeNote} role="status" aria-live="polite">{uploadProgress}</p>}<div className={styles.formActions}><button type="submit" disabled={loading}><RefreshCcw aria-hidden="true" />创建预检/退回任务</button></div></div>
     </form>
   }
 
@@ -770,16 +775,16 @@ export function ExcelMatchPage({
       </>}
 
       {section === 'write' && <>
-        <MetricStrip items={[{ key: 'schemes', label: '导入方案', value: importSchemes.length }, { key: 'default', label: '默认模式', value: '只预检' }, { key: 'write', label: '写入保护', value: '不覆盖' }, { key: 'clear', label: '清空保护', value: '需确认' }]} />
-        <section className={styles.masterDetail}>
-          <Panel title="数据库回写" icon={<Database />} meta="默认只预检；写入与退回均需二次确认">
+        <ExcelWorkspace title={importSchemes.find(scheme => String(scheme.id) === selectedImportSchemeID)?.name || '数据库回写'} description="默认只预检 · 字段不覆盖 · 实际写入与退回均需确认" actions={<button type="button" onClick={() => setSchemeLibraryOpen(true)}><ListChecks aria-hidden="true" />方案库 {importSchemes.length}</button>}>
+          <ExcelEditor>
             <div className={styles.modeSwitch} role="group" aria-label="数据库回写模式"><button type="button" className={writeMode === 'import' ? styles.active : undefined} onClick={() => setWriteMode('import')}><Database aria-hidden="true" />匹配导入</button><button type="button" className={writeMode === 'clear' ? `${styles.active} ${styles.danger}` : styles.danger} onClick={() => setWriteMode('clear')}><RefreshCcw aria-hidden="true" />退回未匹配</button></div>
-            <p className={styles.modeNote}>{writeMode === 'import' ? '先预检，确认后只填充空字段。' : '先预检，确认后清空命中行的 matched_docno。'}</p>
-            {writeMode === 'import' ? renderImportWriteForm() : renderClearWriteForm()}
+            <ExcelEditorSection title={writeMode === 'import' ? '匹配与写入配置' : '退回未匹配配置'} description={writeMode === 'import' ? '先预检，确认后只填充空字段。' : '先预检，确认后清空命中行的 matched_docno。'}>
+              {writeMode === 'import' ? renderImportWriteForm() : renderClearWriteForm()}
+            </ExcelEditorSection>
+          </ExcelEditor>
             {latestWriteJob && <section className={styles.writeSummary} aria-labelledby="excel-write-summary-title"><div><strong id="excel-write-summary-title">最近预检/写入任务</strong><span>以下数据来自服务端安全任务摘要；不覆盖与错误计数未返回。</span></div><div className={styles.jobDetail}><Metric label="任务 ID" value={latestWriteJob.id} /><Metric label="状态" value={excelJobStatusLabel(latestWriteJob.status)} /><Metric label="总行数" value={latestWriteJob.total_rows} /><Metric label="已处理" value={latestWriteJob.processed_rows} /><Metric label="预计命中" value={latestWriteJob.matched_rows} /><Metric label="未匹配" value={latestWriteJob.unmatched_rows} /></div><div className={styles.detailActions}><span>不覆盖/错误：服务端未返回独立计数。</span><button type="button" onClick={onNavigateToJobs}>查看任务详情</button></div></section>}
-          </Panel>
-          <aside className={styles.aside} aria-label="已保存导入方案"><Panel title="已保存导入方案" icon={<ListChecks />} meta={`${importSchemes.length} 个方案`}><ExcelSchemeList schemes={importSchemes} deletingSchemeID={deletingSchemeID} onDelete={setPendingSchemeDelete} onOpen={(id) => { setWriteMode('import'); applyImportScheme(String(id)) }} /></Panel></aside>
-        </section>
+        </ExcelWorkspace>
+        <Drawer open={schemeLibraryOpen} size="wide" title="已保存导入方案" description="选择方案继续配置；执行前需选择本次 Excel 文件。" onClose={() => setSchemeLibraryOpen(false)}><ExcelSchemeList schemes={importSchemes} deletingSchemeID={deletingSchemeID} onDelete={setPendingSchemeDelete} onOpen={(id) => { setSchemeLibraryOpen(false); setWriteMode('import'); applyImportScheme(String(id)) }} /></Drawer>
       </>}
 
       {pendingSchemeSave && excelDialog === null && <Dialog className={styles.dialog} open title="保存 Excel 匹配方案" closeDisabled={loading || schemeSaveInFlightRef.current} onClose={() => { if (!loading && !schemeSaveInFlightRef.current) { setPendingSchemeSave(null); setSchemeSaveError('') } }}>{renderPendingSchemeSave()}</Dialog>}

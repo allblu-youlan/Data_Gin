@@ -121,6 +121,7 @@
 .modeSwitch button { border-color: transparent; background: transparent; }
 .modeSwitch .active { border-color: var(--color-border); background: var(--color-canvas); box-shadow: var(--shadow-panel); }
 .writeSummary { display: grid; gap: var(--space-3); margin-block-start: var(--space-4); border-top: 1px solid var(--color-border); padding-block-start: var(--space-4); }
+.writeConfirmation { display: grid; gap: var(--space-3); margin-block-start: var(--space-4); border-top: 1px solid var(--color-border); padding-block-start: var(--space-4); }
 .jobDetail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric { display: grid; gap: var(--space-1); padding: var(--space-3); border-inline-end: 1px solid var(--color-border); }
 .metric span { color: var(--color-text-secondary); font-size: 12px; }

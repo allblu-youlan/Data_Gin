@@ -1,0 +1,67 @@
+.page {
+ --excel-control-height: 36px;
+ --button-height: 36px;
+ --control-height: 36px;
+ display: grid;
+ gap: var(--space-5);
+ background: var(--color-workspace);
+}
+
+.workspace {
+ composes: matchWorkspace from './ExcelMatchPage.module.css';
+ box-shadow: var(--shadow-panel);
+ --excel-control-height: 36px;
+ --button-height: 36px;
+ --control-height: 36px;
+}
+
+.heading { composes: workspaceHeading from './ExcelMatchPage.module.css'; }
+.heading h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.5; }
+.heading p, .sectionHeading p { margin: var(--space-1) 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.heading > .actions { display: flex; gap: var(--space-2); }
+.editor { composes: stepEditor from './ExcelMatchPage.module.css'; }
+.editorSection {
+ composes: rule from './ExcelMatchPage.module.css';
+ padding: var(--space-4);
+}
+.sectionHeading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.sectionHeading > div:first-child { flex: 1 1 180px; min-width: 0; }
+.sectionHeading h3 { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.5; }
+
+/* Scope the matching controls to configuration workspaces. Task history,
+   execution logs and download controls keep their existing presentation. */
+.workspace :global([data-slot='field']) { gap: var(--space-2); }
+.workspace :global([data-slot='field-group']) { gap: var(--space-4); }
+.workspace :global([data-slot='field-label']) { color: var(--color-text-secondary); font-size: 12px; font-weight: 500; line-height: 1.5; }
+.workspace :global([data-slot='field-description']) { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.workspace p { font-size: 12px; line-height: 1.6; }
+.workspace :global([data-slot='native-select-wrapper']) { width: 100%; min-width: 0; }
+.workspace :global([data-slot='input']),
+.workspace :global([data-slot='native-select']) {
+ min-width: 0;
+ height: var(--excel-control-height);
+ border: 1px solid var(--color-border-strong);
+ border-radius: var(--radius-control);
+ background: var(--color-control);
+ color: var(--color-text);
+ font-size: 13px;
+ box-shadow: none;
+}
+.workspace :global([data-slot='input']:disabled),
+.workspace :global([data-slot='native-select']:disabled) { background: var(--color-surface-subtle); color: var(--color-text-secondary); }
+.workspace :global([data-slot='button']) { min-height: 32px; border-radius: var(--radius-control); font-size: 13px; box-shadow: none; }
+.workspace :global([data-slot='button'][data-variant='default']) { background: var(--color-primary); color: var(--color-on-primary); }
+.workspace :global([data-slot='button'][data-variant='default']:hover:not(:disabled)) { background: var(--color-primary-hover); }
+.workspace :global([data-slot='button'][data-variant='outline']) { border-color: var(--color-border-strong); background: var(--color-canvas); }
+.workspace :global([data-slot='button'][data-variant='outline']:hover:not(:disabled)) { background: var(--color-surface-subtle); }
+.workspace :global([data-slot='table-head']) { height: 36px; padding: var(--space-2) var(--space-3); background: var(--color-surface-subtle); color: var(--color-text-secondary); font-size: 12px; font-weight: 500; }
+.workspace :global([data-slot='table-cell']) { padding: var(--space-2) var(--space-3); font-size: 13px; }
+.workspace :global([data-slot='field'][data-invalid='true'] [data-slot='field-description']) { color: var(--color-danger); }
+
+@media (max-width: 768px) {
+ .workspace, .editor, .editorSection { padding: var(--space-3); }
+ .heading { flex-wrap: wrap; }
+ .actions { justify-content: flex-start; }
+ .workspace { --excel-control-height: 40px; --control-height: 40px; }
+}

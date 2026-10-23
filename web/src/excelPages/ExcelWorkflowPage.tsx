@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Play, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ListChecks, Play, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { PageCanvas, PageHeader, Section, FeedbackState } from '../ui'
+import { Drawer, FeedbackState } from '../ui'
+import { ExcelEditor, ExcelWorkspace, ExcelWorkspacePage } from './ExcelWorkspace'
 import type { ClientResponse } from '../api/client'
 import { SelectField, TextField } from './OperationField'
 import { WorkflowRunPanel } from './WorkflowRunPanel'
@@ -31,6 +32,7 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
  const [error, setError] = useState('')
  const [message, setMessage] = useState('')
  const [showIssues, setShowIssues] = useState(false)
+ const [libraryOpen, setLibraryOpen] = useState(false)
  const uploads = useExcelUploads(client)
  const jobs = useExcelJobs({ section: 'schemes', client, token, refreshVersion, setLoading, setResult })
  const canManage = permissions.includes('excel.manage')
@@ -64,6 +66,7 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
  }
  function select(id: number) {
   const workflow = workflows.find(item => item.id === id)
+  setLibraryOpen(false)
   setSelected(id); setName(workflow?.name || '')
   setSteps(workflow ? prepareWorkflowSteps(workflow.config.steps) : defaultWorkflowSteps())
   setFilesByStep({}); uploads.resetUploads(); setError(''); setMessage(''); setShowIssues(false)
@@ -111,24 +114,16 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
    jobs.registerCreatedJob(response, false)
   } catch (cause) { setError(cause instanceof Error ? cause.message : '任务创建失败') } finally { setBusy(false) }
  }
- return <PageCanvas className={styles.page}>
-  <PageHeader title="复杂操作台" description="为每一步选择方法和 Excel 来源；前一步成功后，才会开始下一步。" actions={<Badge variant="secondary">串行执行 · 失败即停</Badge>} />
-  <div className={styles.layout}>
+ return <ExcelWorkspacePage title="复杂操作台" description="为每一步选择方法和 Excel 来源；前一步成功后，才会开始下一步。">
+  <ExcelWorkspace title={name || '新建组合操作'} description={`${steps.length} 个步骤 · 每一步独立绑定文件与匹配结果`} actions={<><Badge variant="secondary">串行执行 · 失败即停</Badge><Button type="button" variant="outline" disabled={busy} onClick={() => setLibraryOpen(true)}><ListChecks aria-hidden="true" />方案库 {workflows.length}</Button></>}>
    <div className={styles.stack}>
-    <Section title="组合方案" actions={<Button type="button" variant="ghost" size="icon-sm" aria-label="刷新方法与组合方案" disabled={reading || busy} onClick={() => void load()}><RefreshCw aria-hidden="true" /></Button>}>
-     <div className={styles.stack}>
-      <SelectField label="已保存的组合操作" value={selected} disabled={busy || reading} onChange={e => select(Number(e.target.value))}><option value={0}>新建组合操作</option>{workflows.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-      <TextField label="组合操作名称" maxLength={100} value={name} disabled={busy || !canManage} onChange={e => setName(e.target.value)} placeholder="例如：订单导入与结算…" />
-      <div className={styles.actions}><Button type="button" variant="outline" disabled={busy || reading || !canManage || Boolean(catalogError)} onClick={() => void save()}><Save aria-hidden="true" />保存组合</Button><Button type="button" variant="ghost" size="icon" aria-label="删除当前组合操作" disabled={busy || !selected || !canManage} onClick={() => void remove()}><Trash2 aria-hidden="true" /></Button></div>
-      <p className={styles.note}>方案保存每一步的方法和来源关联，不保存本次选择的文件。</p>
-     </div>
-    </Section>
-    <Section title="方法准备" description="分别配置并保存，再由步骤独立调用。"><div className={styles.stack}>{operations.map(op => <div key={op} className={styles.toolbar}><a className={styles.methodLink} href={`#${links[op]}`}>{operationLabels[op]}</a><Badge variant="outline">{catalog[op].length} 个</Badge></div>)}</div></Section>
-   </div>
-   <Section title="执行步骤" description="每个步骤独立选择原始文件，或明确使用此前某一步的匹配结果。最多 20 步。">
-    <div className={styles.stack}>
-     {reading && <FeedbackState kind="loading" title="读取方法目录中…" />}
-     {catalogError && <FeedbackState kind="error" title="方法目录未就绪" description={catalogError} action={<Button type="button" variant="outline" onClick={() => void load()}>重试</Button>} />}
+    <div className={styles.methodToolbar}>
+     <TextField label="组合操作名称" maxLength={100} value={name} disabled={busy || !canManage} onChange={e => setName(e.target.value)} placeholder="例如：订单导入与结算…" />
+     <div className={styles.actions}><Button type="button" variant="outline" disabled={busy || reading || !canManage || Boolean(catalogError)} onClick={() => void save()}><Save aria-hidden="true" />保存组合</Button><Button type="button" variant="ghost" size="icon" aria-label="删除当前组合操作" disabled={busy || !selected || !canManage} onClick={() => void remove()}><Trash2 aria-hidden="true" /></Button></div>
+    </div>
+    {reading && <FeedbackState kind="loading" title="读取方法目录中…" />}
+    {catalogError && <FeedbackState kind="error" title="方法目录未就绪" description={catalogError} action={<Button type="button" variant="outline" onClick={() => void load()}>重试</Button>} />}
+    <ExcelEditor>
      <ol className={styles.steps}>{steps.map((step, index) => {
       const sourceIssue = workflowSourceIssue(step, index, steps)
       const sourceIndex = steps.findIndex(item => item.id === step.sourceStepId)
@@ -164,13 +159,21 @@ export function ExcelWorkflowPage({ client, token, permissions, refreshVersion, 
       </li>
      })}</ol>
      <div className={styles.toolbar}><SelectField label="添加操作类型" value={addOperation} disabled={busy || steps.length >= 20} onChange={e => setAddOperation(e.target.value as ExcelOperation)}>{operations.map(op => <option key={op} value={op}>{operationLabels[op]}</option>)}</SelectField><Button type="button" variant="outline" disabled={busy || steps.length >= 20} onClick={() => setSteps(current => [...current, newWorkflowStep(addOperation)])}><Plus aria-hidden="true" />添加步骤</Button></div>
+    </ExcelEditor>
+    <details className={styles.preparation}><summary>方法准备 · 配置并保存各步骤需要的方法</summary><div className={styles.methodLinks}>{operations.map(op => <div key={op} className={styles.toolbar}><a className={styles.methodLink} href={`#${links[op]}`}>{operationLabels[op]}</a><Badge variant="outline">{catalog[op].length} 个</Badge></div>)}</div></details>
      <div className={styles.note} aria-live="polite">{uploads.uploadProgress}</div>
      {hasWriteStep && !canManage && <p className={styles.sourceError} role="alert">Excel 写入会回写数据库，当前账号需要 Excel 管理权限后才能执行此流程。</p>}
      <div className={styles.footer}><p className={styles.note}>每个写入步骤独立提交，后续失败不会回滚此前成功的数据。<br />执行在后台继续，最终文件可在任务中下载。</p><Button type="button" disabled={busy || reading || Boolean(catalogError) || !canExecute || (hasWriteStep && !canManage) || running || invalidSource} onClick={() => void execute()}><Play aria-hidden="true" />{busy ? '提交任务中…' : running ? '任务执行中…' : '按顺序执行'}</Button></div>
-    </div>
-   </Section>
-  </div>
+   </div>
+  </ExcelWorkspace>
+  <Drawer open={libraryOpen} title="已保存的组合操作" description="加载方案继续配置；方案保存方法和来源关联，执行前需选择本次文件。" onClose={() => setLibraryOpen(false)}>
+   <div className={styles.library}>
+    <div className={styles.toolbar}><strong>组合方案</strong><Button type="button" variant="ghost" size="icon-sm" aria-label="刷新方法与组合方案" disabled={reading || busy} onClick={() => void load()}><RefreshCw aria-hidden="true" /></Button></div>
+    <SelectField label="已保存的组合操作" value={selected} disabled={busy || reading} onChange={e => select(Number(e.target.value))}><option value={0}>新建组合操作</option>{workflows.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
+    <Button type="button" variant="outline" disabled={busy} onClick={() => select(0)}><Plus aria-hidden="true" />新建组合操作</Button>
+   </div>
+  </Drawer>
   {error && <FeedbackState kind="error" title="操作未完成" description={error} />}{message && <p role="status" className={styles.note}>{message}</p>}
   <WorkflowRunPanel jobs={jobs} onNavigateToJobs={onNavigateToJobs} />
- </PageCanvas>
+ </ExcelWorkspacePage>
 }
