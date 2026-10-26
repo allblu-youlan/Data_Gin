@@ -26,6 +26,12 @@ type OracleExcelImportProgress struct {
 	SheetName     string `json:"sheetName"`
 	RowNumber     int    `json:"rowNumber"`
 	Identifier    string `json:"identifier"`
+	ElapsedMillis int64  `json:"elapsedMillis,omitempty"`
+	CountMillis   int64  `json:"countMillis,omitempty"`
+	ReadMillis    int64  `json:"readMillis,omitempty"`
+	WriteMillis   int64  `json:"writeMillis,omitempty"`
+	BatchRows     int    `json:"batchRows,omitempty"`
+	Batches       int    `json:"batches,omitempty"`
 }
 
 type oracleExcelImportProgressReporter struct {
@@ -33,6 +39,7 @@ type oracleExcelImportProgressReporter struct {
 	callback func(OracleExcelImportProgress)
 	last     time.Time
 	written  bool
+	started  time.Time
 }
 
 func (reporter *oracleExcelImportProgressReporter) emit(force bool) {
@@ -42,6 +49,9 @@ func (reporter *oracleExcelImportProgressReporter) emit(force bool) {
 	firstWrite := reporter.state.ProcessedRows > 0 && !reporter.written
 	if !force && !firstWrite && time.Since(reporter.last) < 2*time.Second {
 		return
+	}
+	if !reporter.started.IsZero() {
+		reporter.state.ElapsedMillis = time.Since(reporter.started).Milliseconds()
 	}
 	reporter.callback(reporter.state)
 	reporter.last = time.Now()
@@ -89,6 +99,9 @@ func (service *ExcelMatchJobService) oracleExcelImportProgressLogger(ctx context
 
 func oracleExcelImportProgressMessage(progress OracleExcelImportProgress) string {
 	prefix := fmt.Sprintf("第 %d 步 Oracle 导入", progress.StepIndex)
+	if progress.BatchRows > 0 {
+		prefix += fmt.Sprintf("（数组批量 %d 行，累计读取 %.1f 秒，Oracle 写入 %.1f 秒）", progress.BatchRows, float64(progress.ReadMillis)/1000, float64(progress.WriteMillis)/1000)
+	}
 	switch progress.Stage {
 	case "counting":
 		return fmt.Sprintf("%s：正在统计待导入行数，已扫描 %d 行（文件 %d/%d）", prefix, progress.ScannedRows, progress.FileIndex, progress.FileCount)

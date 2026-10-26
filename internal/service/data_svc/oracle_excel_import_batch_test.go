@@ -1,6 +1,7 @@
 package data_svc
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -43,7 +44,14 @@ func TestOracleExcelImportArrayBindsPreserveTypesPrecisionAndLeadingNulls(t *tes
 			t.Fatalf("dates lost NULL, timezone or fractional seconds: %v", arguments[index])
 		}
 	}
-	for index, want := range map[int]string{4: "中文🙂", 5: "备注"} {
+	if !reflect.DeepEqual(arguments[4], []string{"", "中文🙂", ""}) {
+		t.Fatalf("short CLOB did not use string array binding: %v", arguments[4])
+	}
+	reader := rows[1][4].(godror.Lob).Reader.(*strings.Reader)
+	if int64(reader.Len()) != reader.Size() {
+		t.Fatal("short CLOB conversion consumed the original reader")
+	}
+	for index, want := range map[int]string{5: "备注"} {
 		values, ok := arguments[index].([]godror.Lob)
 		if !ok || len(values) != 3 {
 			t.Fatalf("LOB binding has wrong type: %T", arguments[index])
@@ -60,6 +68,64 @@ func TestOracleExcelImportArrayBindsPreserveTypesPrecisionAndLeadingNulls(t *tes
 		if err != nil || string(text) != want {
 			t.Fatalf("LOB content changed: %q error=%v", text, err)
 		}
+	}
+}
+
+func TestOracleExcelImportShortClobBindsRespectByteBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		text string
+		fast bool
+	}{
+		{"ASCII boundary", strings.Repeat("x", 4000), true},
+		{"ASCII over boundary", strings.Repeat("x", 4001), false},
+		{"Chinese and emoji boundary", strings.Repeat("中", 1332) + "🙂", true},
+		{"Chinese and emoji over boundary", strings.Repeat("中", 1332) + "🙂x", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := strings.NewReader(test.text)
+			rows := [][]interface{}{{nil}, {godror.Lob{Reader: reader, IsClob: true}}, {nil}}
+			arguments, err := oracleExcelImportArrayBinds([]reportoracle.ResultColumn{{Name: "NOTES", DataType: "CLOB"}}, rows)
+			if err != nil {
+				t.Fatal(err)
+			}
+			texts, fast := arguments[0].([]string)
+			if fast != test.fast || fast && !reflect.DeepEqual(texts, []string{"", test.text, ""}) {
+				t.Fatalf("short CLOB binding=%T value=%v fast=%t", arguments[0], arguments[0], fast)
+			}
+			if int64(reader.Len()) != reader.Size() {
+				t.Fatal("CLOB binding consumed its reader")
+			}
+			if !fast {
+				values := arguments[0].([]godror.Lob)
+				if values[0].Reader != nil || !values[0].IsClob || values[1].Reader != reader || !values[2].IsClob {
+					t.Fatalf("fallback changed NULL or LOB binding: %+v", values)
+				}
+			}
+		})
+	}
+}
+
+func TestOracleExcelImportClobFallbackNeverConsumesReaders(t *testing.T) {
+	consumed := strings.NewReader("already partly read")
+	if _, err := consumed.ReadByte(); err != nil {
+		t.Fatal(err)
+	}
+	unknown := bytes.NewBufferString("unknown reader type")
+	for _, reader := range []io.Reader{strings.NewReader(strings.Repeat("L", 4001)), unknown, consumed, strings.NewReader("")} {
+		short := strings.NewReader("keep me intact")
+		rows := [][]interface{}{{nil}, {godror.Lob{Reader: short, IsClob: true}}, {godror.Lob{Reader: reader, IsClob: true}}}
+		arguments, err := oracleExcelImportArrayBinds([]reportoracle.ResultColumn{{Name: "NOTES", DataType: "CLOB"}}, rows)
+		if err != nil {
+			t.Fatal(err)
+		}
+		values, ok := arguments[0].([]godror.Lob)
+		if !ok || !values[0].IsClob || values[0].Reader != nil || values[1].Reader != short || values[2].Reader != reader || short.Len() != len("keep me intact") {
+			t.Fatalf("mixed CLOB fallback changed its readers: %T %v", arguments[0], arguments[0])
+		}
+	}
+	if unknown.Len() != len("unknown reader type") || consumed.Len() != len("already partly read")-1 {
+		t.Fatal("fallback consumed an unknown or previously consumed reader")
 	}
 }
 

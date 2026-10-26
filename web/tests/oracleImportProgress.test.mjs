@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { latestOracleImportProgress, oracleImportProgressView, parseOracleImportProgress } from '../.test-dist/excelPages/oracleImportProgress.js'
+import { latestOracleImportProgress, oracleImportProgressView, oracleImportTimingView, parseOracleImportProgress } from '../.test-dist/excelPages/oracleImportProgress.js'
 import { nextExcelJobPollState } from '../.test-dist/excelPages/excelJobPolling.js'
 
 const progress = { stepIndex: 1, stepName: '导入订单', stage: 'importing', processedRows: 250, totalRows: 1000, totalKnown: true, scannedRows: 1000, fileIndex: 2, fileCount: 3, fileName: '订单.xlsx', sheetName: '销售', rowNumber: 251, identifier: '42' }
@@ -26,6 +26,28 @@ test('counting and unknown totals stay indeterminate while reporting scanned or 
   assert.equal(unknown.percent, undefined)
   assert.match(unknown.headline, /已写入 250 行/)
   assert.match(unknown.note, /待事务提交/)
+})
+
+test('optional timing metrics preserve old payloads and accept non-negative integer metrics', () => {
+  assert.deepEqual(parseOracleImportProgress(progress), progress)
+  assert.deepEqual(oracleImportTimingView(progress), [])
+  const metrics = { elapsedMillis: 5000, countMillis: 1000, readMillis: 4000, writeMillis: 3000, batchRows: 1000, batches: 1 }
+  assert.deepEqual(parseOracleImportProgress({ ...progress, ...metrics, unknownMillis: 123 }), { ...progress, ...metrics })
+  assert.deepEqual(oracleImportTimingView({ ...progress, ...metrics }), [
+    '累计耗时 5 秒 · 平均写入速度 50 行/秒',
+    '统计 1 秒 · 读取 4 秒 · Oracle 写入 3 秒（耗时可能重叠，不相加）',
+    '批次行数 1,000 · 已执行 1 批',
+  ])
+  assert.deepEqual(oracleImportTimingView({ ...progress, elapsedMillis: 0, countMillis: 0, readMillis: 0, writeMillis: 0, batchRows: 0, batches: 0 }), [])
+})
+
+test('invalid optional timing metrics are ignored without hiding valid row progress', () => {
+  for (const key of ['elapsedMillis', 'countMillis', 'readMillis', 'writeMillis', 'batchRows', 'batches']) {
+    for (const value of [-1, 0.5, '100', null, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.deepEqual(parseOracleImportProgress({ ...progress, [key]: value }), progress)
+    }
+  }
+  assert.deepEqual(oracleImportTimingView({ ...progress, elapsedMillis: 3661000, processedRows: 0 }), ['累计耗时 1 小时 1 分 1 秒'])
 })
 
 test('importing shows row progress without claiming commit success, even at one hundred percent', () => {

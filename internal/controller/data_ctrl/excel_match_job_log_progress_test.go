@@ -57,6 +57,38 @@ func TestSafeExcelMatchJobLogsOmitMalformedImportProgress(t *testing.T) {
 	}
 }
 
+func TestSafeExcelMatchJobImportProgressTimingMetricsAreOptional(t *testing.T) {
+	legacy := safeOracleExcelImportProgress(`{"oracleImportProgress":{"stage":"importing","processedRows":50}}`)
+	if legacy == nil || legacy.ElapsedMillis != 0 || legacy.CountMillis != 0 || legacy.ReadMillis != 0 || legacy.WriteMillis != 0 || legacy.BatchRows != 0 || legacy.Batches != 0 {
+		t.Fatalf("legacy progress was rejected or gained fabricated timings: %+v", legacy)
+	}
+	encoded, err := json.Marshal(legacy)
+	if err != nil || strings.Contains(string(encoded), "Millis") || strings.Contains(string(encoded), "batchRows") || strings.Contains(string(encoded), "batches") {
+		t.Fatalf("legacy progress exposed absent metrics: %s error=%v", encoded, err)
+	}
+	progress := safeOracleExcelImportProgress(`{"oracleImportProgress":{"stage":"importing","elapsedMillis":4500,"countMillis":100,"readMillis":3000,"writeMillis":2000,"batchRows":1000,"batches":2,"unknownMillis":99}}`)
+	if progress == nil || progress.ElapsedMillis != 4500 || progress.CountMillis != 100 || progress.ReadMillis != 3000 || progress.WriteMillis != 2000 || progress.BatchRows != 1000 || progress.Batches != 2 {
+		t.Fatalf("timing metrics changed: %+v", progress)
+	}
+	encoded, err = json.Marshal(progress)
+	if err != nil || strings.Contains(string(encoded), "unknownMillis") || !strings.Contains(string(encoded), `"writeMillis":2000`) || !strings.Contains(string(encoded), `"batches":2`) {
+		t.Fatalf("timing metric allowlist changed: %s error=%v", encoded, err)
+	}
+}
+
+func TestSafeExcelMatchJobImportProgressRejectsInvalidTimingMetrics(t *testing.T) {
+	for _, key := range []string{"elapsedMillis", "countMillis", "readMillis", "writeMillis", "batchRows", "batches"} {
+		t.Run(key, func(t *testing.T) {
+			for _, invalid := range []string{"-1", "0.5", `"100"`} {
+				raw := `{"oracleImportProgress":{"stage":"importing","` + key + `":` + invalid + `}}`
+				if progress := safeOracleExcelImportProgress(raw); progress != nil {
+					t.Fatalf("invalid %s=%s metric was exposed: %+v", key, invalid, progress)
+				}
+			}
+		})
+	}
+}
+
 func TestSafeExcelMatchJobImportProgressRedactsSensitiveText(t *testing.T) {
 	logs := safeExcelMatchJobLogs([]model.ExcelMatchJobLog{{
 		Message:    "token=private-message",

@@ -79,6 +79,12 @@ type oracleExcelImportProgressResponse struct {
 	SheetName     string `json:"sheetName"`
 	RowNumber     int    `json:"rowNumber"`
 	Identifier    string `json:"identifier"`
+	ElapsedMillis int64  `json:"elapsedMillis,omitempty"`
+	CountMillis   int64  `json:"countMillis,omitempty"`
+	ReadMillis    int64  `json:"readMillis,omitempty"`
+	WriteMillis   int64  `json:"writeMillis,omitempty"`
+	BatchRows     int    `json:"batchRows,omitempty"`
+	Batches       int    `json:"batches,omitempty"`
 }
 
 func NewExcelMatchJobController() *ExcelMatchJobController {
@@ -414,7 +420,9 @@ func safeOracleExcelImportProgress(raw string) *oracleExcelImportProgressRespons
 		return nil
 	}
 	if progress.StepIndex < 0 || progress.ProcessedRows < 0 || progress.TotalRows < 0 || progress.ScannedRows < 0 ||
-		progress.FileIndex < 0 || progress.FileCount < 0 || progress.RowNumber < 0 {
+		progress.FileIndex < 0 || progress.FileCount < 0 || progress.RowNumber < 0 ||
+		progress.ElapsedMillis < 0 || progress.CountMillis < 0 || progress.ReadMillis < 0 || progress.WriteMillis < 0 ||
+		progress.BatchRows < 0 || progress.Batches < 0 {
 		return nil
 	}
 	if name := strings.TrimSpace(progress.FileName); name != "" {

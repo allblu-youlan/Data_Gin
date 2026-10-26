@@ -13,6 +13,12 @@ export type OracleImportProgress = {
   sheetName: string
   rowNumber: number
   identifier: string
+  elapsedMillis?: number
+  countMillis?: number
+  readMillis?: number
+  writeMillis?: number
+  batchRows?: number
+  batches?: number
 }
 
 const stages: OracleImportStage[] = ['counting', 'importing', 'committing', 'completed', 'failed']
@@ -24,12 +30,43 @@ export function parseOracleImportProgress(value: unknown): OracleImportProgress 
   if (!item || !stages.includes(item.stage as OracleImportStage) || !count(item.stepIndex) || item.stepIndex < 1 || typeof item.totalKnown !== 'boolean') return null
   if (!['processedRows', 'totalRows', 'scannedRows', 'fileIndex', 'fileCount', 'rowNumber'].every((key) => count(item[key]))) return null
   if (!['stepName', 'fileName', 'sheetName', 'identifier'].every((key) => typeof item[key] === 'string')) return null
+  const metrics: Partial<OracleImportProgress> = {}
+  for (const key of ['elapsedMillis', 'countMillis', 'readMillis', 'writeMillis', 'batchRows', 'batches'] as const) {
+    const value = item[key]
+    if (count(value)) metrics[key] = value
+  }
   return {
     stepIndex: item.stepIndex, stepName: item.stepName as string, stage: item.stage as OracleImportStage,
     processedRows: item.processedRows as number, totalRows: item.totalRows as number, totalKnown: item.totalKnown,
     scannedRows: item.scannedRows as number, fileIndex: item.fileIndex as number, fileCount: item.fileCount as number,
     fileName: item.fileName as string, sheetName: item.sheetName as string, rowNumber: item.rowNumber as number, identifier: item.identifier as string,
+    ...metrics,
   }
+}
+
+function durationLabel(milliseconds: number): string {
+  if (milliseconds < 60000) return `${(milliseconds / 1000).toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 秒`
+  const seconds = Math.floor(milliseconds / 1000)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor(seconds % 3600 / 60)
+  return `${hours ? `${hours} 小时 ` : ''}${minutes} 分 ${seconds % 60} 秒`
+}
+
+export function oracleImportTimingView(progress: OracleImportProgress): string[] {
+  const lines: string[] = []
+  if (progress.elapsedMillis !== undefined && progress.elapsedMillis > 0) {
+    const speed = progress.processedRows * 1000 / progress.elapsedMillis
+    lines.push(`累计耗时 ${durationLabel(progress.elapsedMillis)}${progress.processedRows > 0 ? ` · 平均写入速度 ${speed.toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 行/秒` : ''}`)
+  }
+  const phases = [['统计', progress.countMillis], ['读取', progress.readMillis], ['Oracle 写入', progress.writeMillis]] as const
+  if (phases.some(([, value]) => value !== undefined && value > 0)) {
+    lines.push(`${phases.flatMap(([name, value]) => value === undefined ? [] : [`${name} ${durationLabel(value)}`]).join(' · ')}（耗时可能重叠，不相加）`)
+  }
+  const batch: string[] = []
+  if (progress.batchRows !== undefined && progress.batchRows > 0) batch.push(`批次行数 ${progress.batchRows.toLocaleString('en-US')}`)
+  if (progress.batches !== undefined && progress.batches > 0) batch.push(`已执行 ${progress.batches.toLocaleString('en-US')} 批`)
+  if (batch.length) lines.push(batch.join(' · '))
+  return lines
 }
 
 export function latestOracleImportProgress(logs: readonly unknown[], jobID: number): OracleImportProgress | null {

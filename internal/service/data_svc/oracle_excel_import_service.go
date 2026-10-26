@@ -154,7 +154,7 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 	if len(paths) == 0 {
 		return 0, errors.New("请选择至少一个 Excel 文件")
 	}
-	reporter := oracleExcelImportProgressReporter{callback: progress, state: OracleExcelImportProgress{Stage: "counting", FileCount: len(paths)}}
+	reporter := oracleExcelImportProgressReporter{callback: progress, started: time.Now(), state: OracleExcelImportProgress{Stage: "counting", FileCount: len(paths), BatchRows: oracleExcelImportBatchRows}}
 	reporter.emit(true)
 	defer func() {
 		if importErr != nil {
@@ -171,13 +171,14 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 		return 0, err
 	}
 	if progress != nil {
-		// Count with the same reader used for writing, so blank rows, selected
-		// sheets and header mappings have identical semantics in the percentage.
+		countStarted := time.Now()
+		// Counting needs mapped nonempty cells, not display formatting or
+		// conversion of every value into an Oracle binding a second time.
 		for index, path := range paths {
 			reporter.state.FileIndex, reporter.state.FileName = index+1, filepath.Base(path)
 			reporter.state.SheetName, reporter.state.RowNumber = "", 0
 			reporter.emit(true)
-			_, err := readOracleExcelImportLocated(ctx, path, normalized, columns, func(_ []interface{}, location oracleExcelImportLocation) error {
+			_, err := countOracleExcelImportLocated(ctx, path, normalized, func(location oracleExcelImportLocation) error {
 				reporter.state.ScannedRows++
 				reporter.state.SheetName, reporter.state.RowNumber = location.sheet, location.row
 				if reporter.state.ScannedRows%1000 == 0 {
@@ -191,6 +192,7 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 			reporter.emit(true)
 		}
 		reporter.state.TotalRows, reporter.state.TotalKnown = reporter.state.ScannedRows, true
+		reporter.state.CountMillis = time.Since(countStarted).Milliseconds()
 	}
 	if fixed := normalized.FixedIdentifier; fixed != nil && fixed.Enabled {
 		// Allocate once per execution, before any Oracle insert. All files,
@@ -215,64 +217,48 @@ func executeOracleExcelImportFilesWithProgressOnConnection(ctx context.Context, 
 		return 0, fmt.Errorf("prepare Oracle Excel import: %w", err)
 	}
 	defer prepared.Close()
-	batchSize := oracleExcelImportBatchRows
-	batch := make([][]interface{}, 0, batchSize)
-	var first, last oracleExcelImportLocation
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
-		var err error
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if len(batch) == 1 {
-			_, err = prepared.ExecContext(ctx, batch[0]...)
-		} else {
-			var arguments []interface{}
-			arguments, err = oracleExcelImportArrayBinds(columns, batch)
-			if err == nil {
-				_, err = prepared.ExecContext(ctx, arguments...)
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("批量写入失败（%s 至 %s）: %w", first, last, err)
-		}
-		reporter.state.ProcessedRows += len(batch)
-		reporter.state.SheetName, reporter.state.RowNumber = last.sheet, last.row
-		reporter.emit(false)
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		clear(batch)
-		batch = batch[:0]
-		return nil
-	}
+	batches, stopReading := streamOracleExcelImportBatches(ctx, paths, normalized, columns, oracleExcelImportBatchRows)
+	defer stopReading()
+	var writeDuration time.Duration
 	count := 0
-	for index, path := range paths {
-		reporter.state.FileIndex, reporter.state.FileName = index+1, filepath.Base(path)
-		reporter.state.SheetName, reporter.state.RowNumber = "", 0
-		reporter.emit(true)
-		read, err := readOracleExcelImportLocated(ctx, path, normalized, columns, func(values []interface{}, location oracleExcelImportLocation) error {
-			if len(batch) == 0 {
-				first = location
-			}
-			last = location
-			batch = append(batch, values)
-			if len(batch) == batchSize {
-				return flush()
-			}
-			return nil
-		})
-		if err != nil {
+	lastProgressFileIndex := 0
+	for batch := range batches {
+		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		count += read
+		reporter.state.FileIndex, reporter.state.FileName = batch.FileIndex, batch.Last.file
+		reporter.state.SheetName, reporter.state.RowNumber = batch.Last.sheet, batch.Last.row
+		reporter.state.ReadMillis = batch.ReadDuration.Milliseconds()
+		var arguments []interface{}
+		if len(batch.Values) == 1 {
+			arguments = batch.Values[0]
+		} else {
+			arguments, err = oracleExcelImportArrayBinds(columns, batch.Values)
+			if err != nil {
+				return 0, err
+			}
+		}
+		writeStarted := time.Now()
+		_, err = prepared.ExecContext(ctx, arguments...)
+		writeDuration += time.Since(writeStarted)
+		reporter.state.WriteMillis = writeDuration.Milliseconds()
+		if err != nil {
+			return 0, fmt.Errorf("批量写入失败（%s 至 %s）: %w", batch.First, batch.Last, err)
+		}
+		count += len(batch.Values)
+		reporter.state.ProcessedRows, reporter.state.Batches = count, reporter.state.Batches+1
+		reporter.emit(batch.FileIndex != lastProgressFileIndex)
+		lastProgressFileIndex = batch.FileIndex
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 	}
-	if err := flush(); err != nil {
+	if err := stopReading(); err != nil {
 		return 0, err
 	}
+	// The actual reader is authoritative (for example, hidden display formats
+	// can make a raw nonempty cell look blank). Never finish above/below 100%.
+	reporter.state.TotalRows, reporter.state.TotalKnown = count, true
 	reporter.state.Stage = "committing"
 	reporter.emit(true)
 	if err := ctx.Err(); err != nil {

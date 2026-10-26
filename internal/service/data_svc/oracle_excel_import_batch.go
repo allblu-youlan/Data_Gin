@@ -2,6 +2,7 @@ package data_svc
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
@@ -33,6 +34,9 @@ func oracleExcelImportArrayBinds(columns []reportoracle.ResultColumn, rows [][]i
 				values[row].IsClob = true
 			}
 			arguments[index] = values
+			if kind == "CLOB" {
+				arguments[index] = oracleExcelImportShortClobValues(values)
+			}
 		default:
 			arguments[index], err = oracleExcelImportColumnValues[string](rows, index)
 		}
@@ -41,6 +45,34 @@ func oracleExcelImportArrayBinds(columns []reportoracle.ResultColumn, rows [][]i
 		}
 	}
 	return arguments, nil
+}
+
+// Short CLOBs can use ordinary string array binds instead of godror's per-value
+// LOB trim/write calls and 1 MiB scratch allocation. Leave NCLOB charset handling
+// and long/unknown readers on the existing LOB path.
+func oracleExcelImportShortClobValues(values []godror.Lob) interface{} {
+	for _, value := range values {
+		if value.Reader == nil {
+			continue
+		}
+		reader, ok := value.Reader.(*strings.Reader)
+		if !ok || reader.Size() == 0 || reader.Size() > 4000 || int64(reader.Len()) != reader.Size() {
+			return values
+		}
+	}
+	texts := make([]string, len(values))
+	for index, value := range values {
+		if value.Reader == nil {
+			continue
+		}
+		reader := value.Reader.(*strings.Reader)
+		content := make([]byte, reader.Len())
+		if n, err := reader.ReadAt(content, 0); err != nil || n != len(content) {
+			return values
+		}
+		texts[index] = string(content)
+	}
+	return texts
 }
 
 func oracleExcelImportColumnValues[T any](rows [][]interface{}, column int) ([]T, error) {
