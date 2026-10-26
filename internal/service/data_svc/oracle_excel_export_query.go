@@ -21,6 +21,7 @@ type OracleExcelExportFilter struct {
 	Field       string                        `json:"field"`
 	Op          string                        `json:"op"`
 	Value       string                        `json:"value"`
+	DateFormat  string                        `json:"dateFormat,omitempty"`
 	ValueSource *OracleExcelExportValueSource `json:"valueSource,omitempty"`
 }
 
@@ -113,6 +114,10 @@ func buildOracleExcelExportQueryAt(input OracleExcelExportConfig, schema []repor
 		}
 		field := `"` + filter.Field + `"`
 		filter.Op = strings.TrimSpace(filter.Op)
+		filter.DateFormat = strings.TrimSpace(filter.DateFormat)
+		if err := validateOracleExcelFilterDateFormat(*filter, column.DataType); err != nil {
+			return input, "", nil, fmt.Errorf("字段 %s 的日期格式无效: %w", filter.Field, err)
+		}
 		if filter.ValueSource != nil {
 			source := *filter.ValueSource
 			source.Kind = strings.ToUpper(strings.TrimSpace(source.Kind))
@@ -153,24 +158,10 @@ func buildOracleExcelExportQueryAt(input OracleExcelExportConfig, schema []repor
 		if strings.TrimSpace(filter.Value) == "" {
 			return input, "", nil, fmt.Errorf("筛选值不能为空，请使用为空/不为空操作")
 		}
-		parameter := OfficeQueryParameter{Code: filter.Field, ValueType: "string"}
-		switch oracleExcelValueType(column.DataType) {
-		case "number":
-			parameter.ValueType = "decimal"
-		case "datetime":
-			filter.Value = strings.Replace(strings.TrimSpace(filter.Value), "T", " ", 1)
-			if len(filter.Value) == 16 {
-				filter.Value += ":00"
-			}
-			parameter.ValueType, parameter.Format = "date", "yyyy-MM-dd HH:mm:ss"
-			if len(filter.Value) == 10 {
-				parameter.Format = "yyyy-MM-dd"
-			}
-		}
-		if filter.Op == "contains" && parameter.ValueType != "string" {
+		if filter.Op == "contains" && oracleExcelValueType(column.DataType) != "string" {
 			return input, "", nil, fmt.Errorf("包含筛选只支持文本字段")
 		}
-		value, normalizedValue, err := officeParameterValue(parameter, filter.Value)
+		value, normalizedValue, err := oracleExcelFilterParameterValue(*filter, column.DataType)
 		if err != nil {
 			return input, "", nil, fmt.Errorf("字段 %s 的筛选值无效: %w", filter.Field, err)
 		}

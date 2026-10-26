@@ -1,11 +1,12 @@
 import type { ComputedReportValue } from '../reportCenter/components/ReportQueryDesigner/computedValues'
 import { oracleExportComputedFilterError } from './oracleExportFilterSources.js'
+import { isOracleExportDateFormat, normalizeOracleExportDate, type OracleExportDateFormat } from './oracleExportDateFormats.js'
 
 export type OracleExportTable = { owner: string; name: string; columnCount: number }
 export type OracleExportColumn = { name: string; position: number; dataType: string; nullable: boolean; comment?: string }
 export type OracleExportColumnDraft = OracleExportColumn & { selected: boolean; title: string }
 export type OracleExportFilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'empty' | 'not_empty' | 'between'
-export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string; valueSource?: ComputedReportValue }
+export type OracleExportFilter = { field: string; op: OracleExportFilterOperator; value: string; valueSource?: ComputedReportValue; dateFormat?: OracleExportDateFormat }
 export type OracleExportFilterDraft = OracleExportFilter & { id: number }
 export type OracleExportTableConfig = { owner: string; tableName: string; columns: Array<{ field: string; title: string }>; filters: OracleExportFilter[] }
 export type OracleExportSheetConfig = OracleExportTableConfig & { sheetName: string }
@@ -122,6 +123,8 @@ export function buildOracleExportRequest(table: OracleExportTable, columns: Orac
   const fieldNames = new Set(columns.map((column) => column.name))
   for (const filter of filters) {
     if (!fieldNames.has(filter.field)) throw new Error('请选择有效的筛选字段。')
+    if (filter.dateFormat && !isOracleExportDateFormat(filter.dateFormat)) throw new Error('请选择有效的日期格式。')
+    if (filter.dateFormat && oracleExportFilterInputType(columns.find((column) => column.name === filter.field)?.dataType ?? '') === 'number' && filter.dateFormat !== 'yyyyMMdd') throw new Error('数字日期字段请使用 yyyyMMdd 格式。')
     if (oracleExportFilterOperatorForType(filter.op, columns.find((column) => column.name === filter.field)?.dataType ?? '') !== filter.op) throw new Error('“包含”筛选仅支持文本字段，请调整比较方式。')
     const issue = oracleExportComputedFilterError(filter, columns.find((column) => column.name === filter.field)?.dataType ?? '')
     if (issue) throw new Error(issue)
@@ -132,6 +135,6 @@ export function buildOracleExportRequest(table: OracleExportTable, columns: Orac
     owner: table.owner,
     tableName: table.name,
     columns: selected.map((column) => ({ field: column.name, title: column.title.trim() || oracleExportDefaultColumnTitle(column) })),
-    filters: filters.map(({ field, op, value, valueSource }) => ({ field, op, value: !valueSource && oracleExportFilterNeedsValue(op) ? normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '', ...(valueSource ? { valueSource: { ...valueSource } } : {}) })),
+    filters: filters.map(({ field, op, value, valueSource, dateFormat }) => ({ field, op, value: !valueSource && oracleExportFilterNeedsValue(op) ? dateFormat ? normalizeOracleExportDate(value, dateFormat) : normalizeOracleExportFilterValue(value, columns.find((column) => column.name === field)?.dataType ?? '') : '', ...(valueSource ? { valueSource: { ...valueSource } } : {}), ...(dateFormat && oracleExportFilterNeedsValue(op) && valueSource?.kind !== 'COLUMN_MAX' ? { dateFormat } : {}) })),
   }
 }

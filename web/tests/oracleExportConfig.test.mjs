@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildOracleExportRequest, buildOracleExportWorkbookRequest, defaultOracleExportSheetName, moveOracleExportColumn, normalizeOracleExportFilterValue, oracleExportFilterInputType, oracleExportFilterOperatorForType, parseOracleExportColumns, parseOracleExportTables } from '../.test-dist/excelPages/oracleExportConfig.js'
+import { formatOracleExportDate, normalizeOracleExportDate, oracleExportDateFormats, oracleExportFormattedTimePreview } from '../.test-dist/excelPages/oracleExportDateFormats.js'
 
 const table = { owner: 'ERP', name: 'ORDERS', columnCount: 2 }
 const rawColumns = [
@@ -140,4 +141,26 @@ test('dropdown column positions reorder selected exports without changing titles
   const moved = moveOracleExportColumn(subset, 'LAST', 2)
   assert.deepEqual(buildOracleExportRequest(table, moved, []).columns.map((column) => column.field), ['DOCNO', 'LAST'])
   assert.equal(moved.find((column) => column.name === 'TOTAL').selected, false)
+})
+
+test('date filter formats serialize consistently for DATE and text without changing numeric dates', () => {
+  const columns = parseOracleExportColumns({ columns: [...rawColumns, { name: 'CREATED_AT', position: 3, dataType: 'DATE', nullable: false }] })
+  for (const dateFormat of oracleExportDateFormats) {
+    const value = formatOracleExportDate('2026-10-01 08:30:00', dateFormat)
+    const request = buildOracleExportRequest(table, columns, [{ id: 1, field: 'CREATED_AT', op: 'gte', value, dateFormat }])
+    assert.deepEqual(request.filters, [{ field: 'CREATED_AT', op: 'gte', value, dateFormat }])
+  }
+  const text = buildOracleExportRequest(table, columns, [{ id: 1, field: 'DOCNO', op: 'between', value: '', dateFormat: 'yyyy/MM/dd', valueSource: { kind: 'TIME_RANGE', code: 'CURRENT_MONTH' } }])
+  assert.equal(text.filters[0].dateFormat, 'yyyy/MM/dd')
+  assert.throws(() => buildOracleExportRequest(table, columns, [{ id: 1, field: 'TOTAL', op: 'eq', value: '2026-10-01', dateFormat: 'yyyy-MM-dd' }]), /数字日期字段/)
+  assert.equal(buildOracleExportRequest(table, columns, [{ id: 1, field: 'TOTAL', op: 'gte', value: '20261001', dateFormat: 'yyyyMMdd' }]).filters[0].value, '20261001')
+})
+
+test('date format switching preserves the date and rejects wrong formats or impossible dates', () => {
+  assert.equal(formatOracleExportDate('20261001', 'yyyy/MM/dd'), '2026/10/01')
+  assert.equal(formatOracleExportDate('2026/10/01 08:30:59', 'yyyy-MM-dd HH:mm:ss'), '2026-10-01 08:30:59')
+  assert.equal(normalizeOracleExportDate('2026.10.01', 'yyyy.MM.dd'), '2026.10.01')
+  for (const value of ['2026/10/01', '20260230', '20261301']) assert.throws(() => normalizeOracleExportDate(value, 'yyyyMMdd'), /日期筛选值/)
+  assert.match(oracleExportFormattedTimePreview({ kind: 'TIME_RANGE', code: 'CURRENT_MONTH' }, 'yyyy/MM/dd', new Date('2026-10-26T03:00:00Z')), /2026\/10\/01 至 2026\/10\/31/)
+  assert.match(oracleExportFormattedTimePreview({ kind: 'TIME', code: 'PREVIOUS_MONTH' }, 'yyyy-MM-dd', new Date('2026-10-26T03:00:00Z')), /2026-09-01/)
 })

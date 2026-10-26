@@ -1,6 +1,7 @@
 import type { ExcelPageClient } from './useExcelUploads'
 import { buildOracleExportWorkbookRequest, defaultOracleExportSheetName, oracleExportDateInputValue, oracleExportDefaultColumnTitle, oracleExportFilterInputType, oracleExportFilterOperators, type OracleExportColumnDraft, type OracleExportFilterDraft, type OracleExportSheetConfig, type OracleExportTableConfig, type OracleExportWorkbookConfig } from './oracleExportConfig.js'
 import { parseOracleExportFilterSource } from './oracleExportFilterSources.js'
+import { isOracleExportDateFormat } from './oracleExportDateFormats.js'
 
 export type OracleExportConfig = OracleExportWorkbookConfig
 export type OracleExportScheme = { id: number; name: string; operation: 'oracle_export'; config: OracleExportConfig; updatedAt: number }
@@ -29,7 +30,8 @@ function parseSheet(value: unknown, legacy = false): OracleExportSheetConfig {
     const filter = record(value)
     const operator = oracleExportFilterOperators.find((item) => item.value === filter.op)
     if (typeof filter.field !== 'string' || !filter.field || !operator || typeof filter.value !== 'string') throw new Error('导出配置筛选条件格式不完整。')
-    return { field: filter.field, op: operator.value, value: filter.value, ...(filter.valueSource === undefined ? {} : { valueSource: parseOracleExportFilterSource(filter.valueSource) }) }
+    if (filter.dateFormat !== undefined && !isOracleExportDateFormat(filter.dateFormat)) throw new Error('导出配置日期格式无效。')
+    return { field: filter.field, op: operator.value, value: filter.value, ...(filter.valueSource === undefined ? {} : { valueSource: parseOracleExportFilterSource(filter.valueSource) }), ...(isOracleExportDateFormat(filter.dateFormat) ? { dateFormat: filter.dateFormat } : {}) }
   })
   const sheetName = legacy ? defaultOracleExportSheetName(config.tableName) : typeof config.sheetName === 'string' ? config.sheetName : ''
   return { sheetName, owner: config.owner, tableName: config.tableName, columns, filters }
@@ -73,7 +75,7 @@ export function restoreOracleExportConfig(config: OracleExportTableConfig, metad
   const missingFilters = config.filters.filter((filter) => !available.has(filter.field)).map((filter) => filter.field)
   const ordered = config.columns.length ? [...config.columns.flatMap((saved) => metadata.filter((column) => column.name === saved.field)), ...metadata.filter((column) => !selected.has(column.name))] : metadata
   const columns = ordered.map((column) => ({ ...column, selected: config.columns.length === 0 || selected.has(column.name), title: selected.get(column.name)?.trim() || oracleExportDefaultColumnTitle(column) }))
-  const filters: OracleExportFilterDraft[] = config.filters.map((filter, index) => ({ ...filter, id: index + 1, value: filter.valueSource ? '' : oracleExportFilterInputType(metadata.find((column) => column.name === filter.field)?.dataType ?? '') === 'datetime-local' ? oracleExportDateInputValue(filter.value) : filter.value }))
+  const filters: OracleExportFilterDraft[] = config.filters.map((filter, index) => ({ ...filter, id: index + 1, value: filter.valueSource ? '' : !filter.dateFormat && oracleExportFilterInputType(metadata.find((column) => column.name === filter.field)?.dataType ?? '') === 'datetime-local' ? oracleExportDateInputValue(filter.value) : filter.value }))
   const issues = [...(missingColumns.length ? [`导出字段已失效：${missingColumns.join('、')}`] : []), ...(missingFilters.length ? [`筛选字段已失效：${[...new Set(missingFilters)].join('、')}`] : [])]
   return { columns, filters, issues }
 }

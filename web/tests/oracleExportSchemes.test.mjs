@@ -88,3 +88,14 @@ test('restoring an export scheme follows its saved column order rather than Orac
   assert.deepEqual(restored.columns.map((column) => column.name), ['ADDED_LATER', 'DOCNO', 'CREATED_AT'])
   assert.deepEqual(restored.columns.filter((column) => column.selected).map((column) => column.title), ['第三字段放第一列', '订单号'])
 })
+
+test('date filter format survives saved scheme parsing, restoration and saving', async () => {
+  const filters = [{ field: 'CREATED_AT', op: 'gte', value: '2026/10/01', dateFormat: 'yyyy/MM/dd' }, { field: 'DOCNO', op: 'between', value: '', dateFormat: 'yyyy-MM-dd', valueSource: { kind: 'TIME_RANGE', code: 'CURRENT_MONTH' } }]
+  const workbook = { sheets: [{ sheetName: '日期格式', ...config, filters }] }
+  let submitted
+  const client = async (_path, options) => { submitted = options.body; return { ok: true, data: { data: { scheme: { ...scheme, config: workbook } } } } }
+  const saved = await saveOracleExportScheme(client, '日期格式', workbook)
+  assert.deepEqual(submitted.config, workbook)
+  assert.deepEqual(saved.config.sheets[0].filters, filters)
+  assert.deepEqual(restoreOracleExportConfig(saved.config.sheets[0], metadata).filters, filters.map((filter, index) => ({ ...filter, id: index + 1 })))
+})

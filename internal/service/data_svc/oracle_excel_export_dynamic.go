@@ -16,8 +16,8 @@ import (
 func oracleExcelDynamicFilter(filter OracleExcelExportFilter, column reportoracle.ResultColumn, now time.Time, index int) (string, []interface{}, error) {
 	source := filter.ValueSource
 	valueType := oracleExcelValueType(column.DataType)
-	if valueType != "number" && valueType != "datetime" {
-		return "", nil, fmt.Errorf("动态时间仅支持数值日期、DATE 和 DATETIME 字段")
+	if valueType != "number" && valueType != "datetime" && filter.DateFormat == "" {
+		return "", nil, fmt.Errorf("文本日期使用动态时间时须选择日期格式")
 	}
 	field := `"` + filter.Field + `"`
 	bindName := fmt.Sprintf("filter_%d", index)
@@ -25,6 +25,8 @@ func oracleExcelDynamicFilter(filter OracleExcelExportFilter, column reportoracl
 		logicalType := "decimal"
 		if valueType == "datetime" {
 			logicalType = "datetime"
+		} else if valueType == "string" {
+			logicalType = "string"
 		}
 		value, err := reportdataset.TypedValue(raw, reportdataset.Column{LogicalType: logicalType})
 		if err != nil {
@@ -46,11 +48,11 @@ func oracleExcelDynamicFilter(filter OracleExcelExportFilter, column reportoracl
 		if valueType == "number" {
 			end = end.AddDate(0, 0, -1)
 		}
-		lower, first, err := bind(oracleExcelFilterDateJSON(start, valueType), bindName+"_start")
+		lower, first, err := bind(oracleExcelFormattedDateJSON(start, valueType, filter.DateFormat), bindName+"_start")
 		if err != nil {
 			return "", nil, err
 		}
-		upper, last, err := bind(oracleExcelFilterDateJSON(end, valueType), bindName+"_end")
+		upper, last, err := bind(oracleExcelFormattedDateJSON(end, valueType, filter.DateFormat), bindName+"_end")
 		if err != nil {
 			return "", nil, err
 		}
@@ -62,6 +64,20 @@ func oracleExcelDynamicFilter(filter OracleExcelExportFilter, column reportoracl
 	operator := map[string]string{"eq": "=", "neq": "<>", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[filter.Op]
 	if source.Kind != "TIME" || operator == "" {
 		return "", nil, fmt.Errorf("动态时间仅支持单值比较")
+	}
+	if filter.DateFormat != "" {
+		resolved, err := oracleExcelFormattedTime(source.Code, now)
+		if err != nil {
+			return "", nil, err
+		}
+		if valueType != "number" && filter.Op == "lte" && (source.Code == "MONTH_END" || source.Code == "YEAR_END") {
+			resolved, operator = resolved.AddDate(0, 0, 1), "<"
+		}
+		bound, argument, err := bind(oracleExcelFormattedDateJSON(resolved, valueType, filter.DateFormat), bindName)
+		if err != nil {
+			return "", nil, err
+		}
+		return field + " " + operator + " " + bound, []interface{}{argument}, nil
 	}
 	fieldType, control, format := "number", "NUMBER", ""
 	if valueType == "datetime" {

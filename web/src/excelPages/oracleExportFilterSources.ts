@@ -25,5 +25,6 @@ export function oracleExportComputedFilterError(filter: OracleExportFilter, data
   if (source.kind === 'COLUMN_MAX' && /^(CLOB|NCLOB|BLOB|LONG|RAW)(?:\b|\()/i.test(dataType.trim())) return '该字段类型不支持本列最大值。'
   const operators: Partial<Record<OracleExportFilter['op'], ReportQueryOperator>> = { eq: 'EQ', neq: 'NE', gt: 'GT', gte: 'GTE', lt: 'LT', lte: 'LTE', between: 'BETWEEN', contains: 'CONTAINS', empty: 'IS_NULL', not_empty: 'IS_NOT_NULL' }
   const operator = operators[filter.op]
-  return operator ? computedReportValueError(source, operator, oracleExportFilterLogicalType(dataType)) : '不支持的比较方式。'
+  const logicalType = filter.dateFormat && source.kind !== 'COLUMN_MAX' && oracleExportFilterLogicalType(dataType) === 'string' && /^(?:N?VARCHAR2?|N?CHAR)(?:\b|\()/i.test(dataType.trim()) ? 'decimal' : oracleExportFilterLogicalType(dataType)
+  return operator ? computedReportValueError(source, operator, logicalType) : '不支持的比较方式。'
 }
