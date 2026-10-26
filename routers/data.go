@@ -27,6 +27,7 @@ func apiData(api *gin.RouterGroup) {
 		data_ctrl.NewOpenBojunSyncStatusController(),
 		data_ctrl.NewOpenBojunStoreControllerWithService(data_svc.NewOpenBojunStoreQueryService(bojunOracleProvider)),
 		data_ctrl.NewOpenBojunStockControllerWithService(data_svc.NewOpenBojunStockQueryService(bojunOracleProvider)),
+		data_ctrl.NewOpenBojunProductInfoControllerWithService(data_svc.NewOpenBojunProductInfoQueryService(bojunOracleProvider)),
 	)
 	registerMallWeatherRefreshRoutes(api, data_ctrl.NewMallWeatherRefreshController())
 	registerMallWeatherExportProfileRoutes(api, data_ctrl.NewMallWeatherExportProfileController())
@@ -399,8 +400,9 @@ func registerOpenBojunRoutes(
 	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
 	storeController *data_ctrl.OpenBojunStoreController,
 	stockController *data_ctrl.OpenBojunStockController,
+	productInfoController *data_ctrl.OpenBojunProductInfoController,
 ) {
-	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController,
+	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController, productInfoController,
 		middleware.LimitOpenAPIIP("bojun", openBojunPreAuthIPRateLimit),
 		middleware.LimitOpenAPIUserRoute)
 }
@@ -413,6 +415,7 @@ func registerOpenBojunRoutesWithLimiters(
 	syncStatusController *data_ctrl.OpenBojunSyncStatusController,
 	storeController *data_ctrl.OpenBojunStoreController,
 	stockController *data_ctrl.OpenBojunStockController,
+	productInfoController *data_ctrl.OpenBojunProductInfoController,
 	preAuthLimiter gin.HandlerFunc,
 	newUserRouteLimiter func(module, limit string) gin.HandlerFunc,
 ) {
@@ -431,6 +434,7 @@ func registerOpenBojunRoutesWithLimiters(
 	orderGroup.POST("/orders/query", orderController.Query)
 	orderGroup.POST("/orders/details/query", detailController.Query)
 	orderGroup.POST("/products/query", productController.Query)
+	orderGroup.POST("/product-infos/query", productInfoController.Query)
 	orderGroup.POST("/sync-status/query", syncStatusController.Query)
 	storeGroup := bojunGroup.Group("")
 	storeGroup.Use(middleware.RequirePermission(model.PermissionBojunStoreRead), userRouteLimiter)

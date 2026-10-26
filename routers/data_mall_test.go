@@ -27,6 +27,7 @@ func TestAPIDataRegistersMallCRUDRoutes(t *testing.T) {
 		&data_ctrl.OpenBojunSyncStatusController{},
 		&data_ctrl.OpenBojunStoreController{},
 		&data_ctrl.OpenBojunStockController{},
+		&data_ctrl.OpenBojunProductInfoController{},
 	)
 	registerOpenBusinessOverviewRoutes(router.Group("/api"), &data_ctrl.BusinessOverviewController{})
 	registerMallWeatherRefreshRoutes(router.Group("/api"), &data_ctrl.MallWeatherRefreshController{})

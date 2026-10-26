@@ -142,6 +142,16 @@ func (service bojunRouteStoreService) Query(_ context.Context, actor uint, _ req
 
 type bojunRouteStockService struct{ state *bojunRouteTestState }
 
+type bojunRouteProductInfoService struct{ state *bojunRouteTestState }
+
+func (service bojunRouteProductInfoService) Query(_ context.Context, actor uint, _ requestbody.OpenBojunProductInfoQueryRequest) (*data_svc.OpenBojunProductInfoQueryDTO, error) {
+	if actor != 17 {
+		service.state.t.Fatalf("product info service actor = %d", actor)
+	}
+	service.state.events = append(service.state.events, "product-infos")
+	return &data_svc.OpenBojunProductInfoQueryDTO{Items: []data_svc.OpenBojunProductInfoDTO{}}, nil
+}
+
 func (service bojunRouteStockService) Query(_ context.Context, actor uint, _ requestbody.OpenBojunStockQueryRequest) (*data_svc.OpenBojunStockQueryDTO, error) {
 	if actor != 17 {
 		service.state.t.Fatalf("stock service actor = %d", actor)
@@ -177,6 +187,7 @@ func newBojunRouteTestRouter(t *testing.T) (*gin.Engine, *bojunRouteTestState) {
 		&data_ctrl.OpenBojunProductController{}, &data_ctrl.OpenBojunSyncStatusController{},
 		data_ctrl.NewOpenBojunStoreControllerWithService(bojunRouteStoreService{state: state}),
 		data_ctrl.NewOpenBojunStockControllerWithService(bojunRouteStockService{state: state}),
+		data_ctrl.NewOpenBojunProductInfoControllerWithService(bojunRouteProductInfoService{state: state}),
 		func(c *gin.Context) {
 			state.events = append(state.events, "ip")
 			if _, authenticated := c.Get(constant.CurrentUserID); authenticated {
@@ -248,15 +259,16 @@ func requestBojunRoute(t *testing.T, router *gin.Engine, path, token, body strin
 	}
 }
 
-func TestOpenBojunRoutesRegisterSixPOSTEndpoints(t *testing.T) {
+func TestOpenBojunRoutesRegisterSevenPOSTEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	registerOpenBojunRoutes(router.Group("/api"),
 		&data_ctrl.OpenBojunOrderController{}, &data_ctrl.OpenBojunOrderDetailController{},
 		&data_ctrl.OpenBojunProductController{}, &data_ctrl.OpenBojunSyncStatusController{},
 		&data_ctrl.OpenBojunStoreController{}, &data_ctrl.OpenBojunStockController{},
+		&data_ctrl.OpenBojunProductInfoController{},
 	)
-	want := map[string]bool{"orders": true, "orders/details": true, "products": true, "sync-status": true, "stores": true, "stocks": true}
+	want := map[string]bool{"orders": true, "orders/details": true, "products": true, "product-infos": true, "sync-status": true, "stores": true, "stocks": true}
 	for _, route := range router.Routes() {
 		path := strings.TrimSuffix(strings.TrimPrefix(route.Path, "/api/open/bojun/"), "/query")
 		if route.Method != http.MethodPost || !want[path] {
@@ -270,7 +282,7 @@ func TestOpenBojunRoutesRegisterSixPOSTEndpoints(t *testing.T) {
 }
 
 func TestOpenBojunRoutesRejectMissingTokenBeforePermissionLookup(t *testing.T) {
-	for _, path := range []string{"stores", "stocks"} {
+	for _, path := range []string{"stores", "stocks", "product-infos"} {
 		t.Run(path, func(t *testing.T) {
 			router, state := newBojunRouteTestRouter(t)
 			requestBojunRoute(t, router, path, "", "{}", http.StatusUnauthorized)
@@ -289,6 +301,7 @@ func TestOpenBojunRoutesKeepOldAndNewPermissionsIndependent(t *testing.T) {
 			for _, route := range []struct{ path, permission string }{
 				{"orders", model.PermissionBojunOrderRead}, {"orders/details", model.PermissionBojunOrderRead},
 				{"products", model.PermissionBojunOrderRead}, {"sync-status", model.PermissionBojunOrderRead},
+				{"product-infos", model.PermissionBojunOrderRead},
 				{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead},
 			} {
 				state.events = nil
@@ -317,6 +330,7 @@ func TestOpenBojunRoutesKeepOldAndNewPermissionsIndependent(t *testing.T) {
 func TestOpenBojunRoutesObserveRevokedAndExpiredGrants(t *testing.T) {
 	for _, route := range []struct{ path, permission string }{
 		{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead},
+		{"product-infos", model.PermissionBojunOrderRead},
 	} {
 		t.Run(route.path, func(t *testing.T) {
 			router, state := newBojunRouteTestRouter(t)

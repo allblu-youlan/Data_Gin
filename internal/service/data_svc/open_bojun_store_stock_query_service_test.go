@@ -18,13 +18,16 @@ import (
 )
 
 type fakeOpenBojunOracle struct {
-	stores     []reportoracle.BojunStoreRow
-	stocks     []reportoracle.BojunStockRow
-	storeQuery reportoracle.BojunStoreQuery
-	stockQuery reportoracle.BojunStockQuery
-	stockCalls int
-	ctx        context.Context
-	err        error
+	stores           []reportoracle.BojunStoreRow
+	stocks           []reportoracle.BojunStockRow
+	productInfos     []reportoracle.BojunProductInfoRow
+	storeQuery       reportoracle.BojunStoreQuery
+	stockQuery       reportoracle.BojunStockQuery
+	stockCalls       int
+	productInfoQuery reportoracle.BojunProductInfoQuery
+	productInfoCalls int
+	ctx              context.Context
+	err              error
 }
 
 func (f *fakeOpenBojunOracle) QueryBojunStores(ctx context.Context, q reportoracle.BojunStoreQuery) ([]reportoracle.BojunStoreRow, error) {
@@ -35,6 +38,11 @@ func (f *fakeOpenBojunOracle) QueryBojunStocks(ctx context.Context, q reportorac
 	f.stockCalls++
 	f.stockQuery, f.ctx = q, ctx
 	return f.stocks, f.err
+}
+func (f *fakeOpenBojunOracle) QueryBojunProductInfos(ctx context.Context, q reportoracle.BojunProductInfoQuery) ([]reportoracle.BojunProductInfoRow, error) {
+	f.productInfoCalls++
+	f.productInfoQuery, f.ctx = q, ctx
+	return f.productInfos, f.err
 }
 func newTestBojunProvider(oracle *fakeOpenBojunOracle, opened *int) *OpenBojunOracleProvider {
 	return newOpenBojunOracleProvider(openBojunProductOracleConfig(), func(context.Context, reportoracle.Config) (openBojunOracle, error) {
