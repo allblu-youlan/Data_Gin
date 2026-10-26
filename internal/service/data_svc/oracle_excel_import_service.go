@@ -35,6 +35,7 @@ type OracleExcelImportConfig struct {
 	Mappings        []OracleExcelImportMapping        `json:"mappings"`
 	FixedIdentifier *OracleExcelImportFixedIdentifier `json:"fixedIdentifier,omitempty"`
 	AllSheets       bool                              `json:"allSheets,omitempty"`
+	RawCellValues   bool                              `json:"rawCellValues,omitempty"`
 }
 
 func NormalizeOracleExcelImportConfig(ctx context.Context, input OracleExcelImportConfig) (OracleExcelImportConfig, error) {
@@ -310,6 +311,14 @@ func readOracleExcelImportLocated(ctx context.Context, path string, config Oracl
 }
 
 func readOracleExcelImportSheet(ctx context.Context, file *excelize.File, sheet string, config OracleExcelImportConfig, columns []reportoracle.ResultColumn, write func([]interface{}, int) error) (int, error) {
+	date1904 := false
+	if config.RawCellValues {
+		properties, err := file.GetWorkbookProps()
+		if err != nil {
+			return 0, fmt.Errorf("读取 Excel 日期系统失败: %w", err)
+		}
+		date1904 = properties.Date1904 != nil && *properties.Date1904
+	}
 	rows, err := file.Rows(sheet)
 	if err != nil {
 		return 0, fmt.Errorf("read import sheet: %w", err)
@@ -325,7 +334,7 @@ func readOracleExcelImportSheet(ctx context.Context, file *excelize.File, sheet 
 		if rowNumber < config.HeaderRow {
 			continue
 		}
-		cells, err := rows.Columns()
+		cells, err := rows.Columns(excelize.Options{RawCellValue: config.RawCellValues && rowNumber != config.HeaderRow})
 		if err != nil {
 			return 0, err
 		}
@@ -363,7 +372,16 @@ func readOracleExcelImportSheet(ctx context.Context, file *excelize.File, sheet 
 			value, err := reportoracle.OperationValue(columns[index].DataType, cell)
 			if err != nil && oracleExcelValueType(columns[index].DataType) == "datetime" {
 				if serial, parseErr := strconv.ParseFloat(cell, 64); parseErr == nil {
-					value, err = excelize.ExcelDateToTime(serial, false)
+					if config.RawCellValues {
+						var date time.Time
+						date, err = excelize.ExcelDateToTime(serial, date1904)
+						if err == nil {
+							// Excel serials describe wall-clock components, not UTC instants.
+							value, err = reportoracle.OperationValue(columns[index].DataType, date.Format("2006-01-02 15:04:05.999999999"))
+						}
+					} else {
+						value, err = excelize.ExcelDateToTime(serial, false)
+					}
 				}
 			}
 			if err != nil {

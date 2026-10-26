@@ -18,6 +18,7 @@ export function OracleImportEditor({ config, onChange: commitChange, disabled, c
  const [reading, setReading] = useState(false)
  const request = useRef<AbortController | null>(null)
  const allSheetsID = useId()
+ const rawCellValuesID = useId()
  const identifierID = useId()
  const identifier = normalizeOracleImportConfig(config).fixedIdentifier
  function onChange(next: OracleImportConfig) { commitChange(normalizeOracleImportConfig(next)) }
@@ -43,6 +44,8 @@ export function OracleImportEditor({ config, onChange: commitChange, disabled, c
   <ExcelEditorSection title="目标配置" description="选择目标 Oracle 表、工作表范围与表头行。"><div className={styles.stack}>
   <div className={styles.fields}><TextField label="Oracle 用户 / Owner" required value={config.owner} disabled={disabled} spellCheck={false} onChange={e => { setColumns([]); onChange({ ...config, owner: e.target.value.toUpperCase() }) }} placeholder="例如：ERP…" /><TextField label="目标表名" required value={config.tableName} disabled={disabled} spellCheck={false} onChange={e => { setColumns([]); onChange({ ...config, tableName: e.target.value.toUpperCase() }) }} placeholder="例如：IMPORT_ORDERS…" /></div>
   <div className={styles.checkOption}><input id={allSheetsID} type="checkbox" checked={Boolean(config.allSheets)} disabled={disabled} onChange={e => onChange({ ...config, allSheets: e.target.checked })} /><FieldLabel htmlFor={allSheetsID}>逐个导入所有工作表</FieldLabel></div>
+  <div className={styles.checkOption}><input id={rawCellValuesID} type="checkbox" checked={config.rawCellValues ?? false} disabled={disabled} aria-describedby={`${rawCellValuesID}-hint`} onChange={e => onChange({ ...config, rawCellValues: e.target.checked })} /><FieldLabel htmlFor={rawCellValuesID}>快速读取原始值</FieldLabel></div>
+  <p id={`${rawCellValuesID}-hint`} className={styles.note}>跳过数字和日期的显示格式以加快导入；文本编号的前导零保留。若编号依赖数字补零格式（如000123），请关闭。</p>
   <div className={styles.fields}><TextField label="工作表名称" required={!config.allSheets} value={config.sheetName} disabled={disabled || config.allSheets} onChange={e => onChange({ ...config, sheetName: e.target.value })} hint={config.allSheets ? '按工作簿顺序导入全部工作表，所有工作表使用相同表头行与字段映射。' : '只导入指定工作表；操作台使用匹配结果时自动导入全部结果文件与工作表。'} /><TextField label="表头所在行" type="number" min={1} required value={config.headerRow} disabled={disabled} onChange={e => onChange({ ...config, headerRow: Number(e.target.value) })} hint="表头后的非空行逐行导入。" /></div>
   </div></ExcelEditorSection>
   <ExcelEditorSection title="字段映射" description="Excel 列填写表头名称；Oracle 列可读取后选择。" actions={<Button type="button" variant="outline" disabled={disabled || reading || !config.owner || !config.tableName} onClick={() => void loadColumns()}><Search aria-hidden="true" />{reading ? '读取中…' : '读取 Oracle 字段'}</Button>}><div className={styles.stack}>

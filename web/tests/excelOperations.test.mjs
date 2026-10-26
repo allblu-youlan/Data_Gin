@@ -33,7 +33,30 @@ test('new Oracle import methods retain specified-sheet behavior until all sheets
  const config = emptyImportConfig()
  assert.equal(config.sheetName, 'Sheet1')
  assert.equal(config.allSheets, false)
+ assert.equal(config.rawCellValues, true)
  assert.deepEqual(config.fixedIdentifier, { enabled: false, field: '', value: '' })
+})
+
+test('Oracle raw reading defaults only new methods to true and preserves legacy saved display semantics', () => {
+ const fresh = emptyImportConfig()
+ assert.equal(normalizeOracleImportConfig(fresh).rawCellValues, true)
+ const legacy = { ...fresh }
+ delete legacy.rawCellValues
+ assert.equal(normalizeOracleImportConfig(legacy).rawCellValues, false)
+ assert.equal(legacy.rawCellValues, undefined)
+})
+
+test('Oracle raw reading saves and restores explicit false and true through method configuration payloads', () => {
+ for (const rawCellValues of [false, true]) {
+  const draft = normalizeOracleImportConfig({ ...emptyImportConfig(), rawCellValues, owner: 'DEMO', tableName: 'ORDERS', mappings: [{ excelColumn: '编号', field: 'CODE' }] })
+  const payload = JSON.parse(JSON.stringify({ name: '导入方法', config: draft }))
+  assert.equal(payload.config.rawCellValues, rawCellValues)
+  const restored = normalizeOracleImportConfig(structuredClone(payload.config))
+  assert.equal(restored.rawCellValues, rawCellValues)
+  const edited = normalizeOracleImportConfig({ ...restored, sheetName: '订单', allSheets: true })
+  assert.equal(edited.rawCellValues, rawCellValues)
+  assert.deepEqual(edited.mappings, [{ excelColumn: '编号', field: 'CODE' }])
+ }
 })
 
 test('Oracle import configuration retains only automatic identifier settings and ignores legacy or runtime values', () => {

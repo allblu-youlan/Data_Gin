@@ -241,6 +241,11 @@ func (s *ExcelMatchJobService) executeExcelWorkflowFilesStep(ctx context.Context
 		if err != nil {
 			return nil, err
 		}
+		readMode := "按单元格显示格式读取"
+		if config.RawCellValues {
+			readMode = "快速读取原始值"
+		}
+		s.logJob(ctx, record.ID, "info", "Oracle 导入读取模式："+readMode, nil)
 		count, err := ExecuteOracleExcelImportFilesWithProgress(ctx, sources, config, s.oracleExcelImportProgressLogger(ctx, record.ID, index, step.Name, cancel))
 		if err == nil {
 			s.logJob(ctx, record.ID, "info", fmt.Sprintf("Oracle 已导入 %d 个文件，共 %d 行", len(sources), count), nil)

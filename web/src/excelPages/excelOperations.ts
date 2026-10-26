@@ -1,6 +1,6 @@
 export type ExcelOperation = 'export_match' | 'import_update' | 'oracle_import' | 'oracle_procedure' | 'oracle_export'
 export type OracleMethodOperation = 'oracle_import' | 'oracle_procedure'
-export type OracleImportConfig = { operation: 'oracle_import'; owner: string; tableName: string; sheetName: string; allSheets?: boolean; headerRow: number; mappings: Array<{ excelColumn: string; field: string }>; fixedIdentifier?: { enabled: boolean; field: string; value: string } }
+export type OracleImportConfig = { operation: 'oracle_import'; owner: string; tableName: string; sheetName: string; allSheets?: boolean; rawCellValues?: boolean; headerRow: number; mappings: Array<{ excelColumn: string; field: string }>; fixedIdentifier?: { enabled: boolean; field: string; value: string } }
 export type ProcedureParameter = { name: string; direction: 'IN' | 'OUT' | 'IN OUT'; dataType: string; value: string }
 export type ProcedureConfig = { operation: 'oracle_procedure'; owner: string; packageName: string; procedureName: string; parameters: ProcedureParameter[]; success: { parameter: string; operator: 'eq' | 'contains'; value: string } }
 export type OracleMethodConfig = OracleImportConfig | ProcedureConfig
@@ -17,9 +17,9 @@ export const operationPaths: Record<ExcelOperation, string> = {
  oracle_procedure: '/v1/excel-match-jobs/operation-schemes/oracle_procedure',
  oracle_export: '/v1/excel-match-jobs/oracle-export-schemes',
 }
-export const emptyImportConfig = (): OracleImportConfig => ({ operation: 'oracle_import', owner: '', tableName: '', sheetName: 'Sheet1', allSheets: false, headerRow: 1, mappings: [{ excelColumn: '', field: '' }], fixedIdentifier: { enabled: false, field: '', value: '' } })
+export const emptyImportConfig = (): OracleImportConfig => ({ operation: 'oracle_import', owner: '', tableName: '', sheetName: 'Sheet1', allSheets: false, rawCellValues: true, headerRow: 1, mappings: [{ excelColumn: '', field: '' }], fixedIdentifier: { enabled: false, field: '', value: '' } })
 export function normalizeOracleImportConfig(config: OracleImportConfig) {
- return { ...config, fixedIdentifier: { enabled: config.fixedIdentifier?.enabled ?? false, field: config.fixedIdentifier?.field ?? '', value: '' } }
+ return { ...config, rawCellValues: config.rawCellValues ?? false, fixedIdentifier: { enabled: config.fixedIdentifier?.enabled ?? false, field: config.fixedIdentifier?.field ?? '', value: '' } }
 }
 export const emptyProcedureConfig = (): ProcedureConfig => ({ operation: 'oracle_procedure', owner: '', packageName: '', procedureName: '', parameters: [], success: { parameter: '', operator: 'eq', value: '' } })
 export const defaultWorkflowSteps = (): WorkflowEditorStep[] => prepareWorkflowSteps([
