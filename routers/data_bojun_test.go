@@ -142,6 +142,16 @@ func (service bojunRouteStoreService) Query(_ context.Context, actor uint, _ req
 
 type bojunRouteStockService struct{ state *bojunRouteTestState }
 
+type bojunRouteStockSnapshotService struct{ state *bojunRouteTestState }
+
+func (service bojunRouteStockSnapshotService) Query(_ context.Context, actor uint, _ requestbody.OpenBojunStockSnapshotQueryRequest) (*data_svc.OpenBojunStockSnapshotQueryDTO, error) {
+	if actor != 17 {
+		service.state.t.Fatalf("stock snapshot service actor = %d", actor)
+	}
+	service.state.events = append(service.state.events, "stock-snapshots")
+	return &data_svc.OpenBojunStockSnapshotQueryDTO{Items: []data_svc.OpenBojunStockSnapshotDTO{}}, nil
+}
+
 type bojunRouteProductInfoService struct{ state *bojunRouteTestState }
 
 func (service bojunRouteProductInfoService) Query(_ context.Context, actor uint, _ requestbody.OpenBojunProductInfoQueryRequest) (*data_svc.OpenBojunProductInfoQueryDTO, error) {
@@ -188,6 +198,7 @@ func newBojunRouteTestRouter(t *testing.T) (*gin.Engine, *bojunRouteTestState) {
 		data_ctrl.NewOpenBojunStoreControllerWithService(bojunRouteStoreService{state: state}),
 		data_ctrl.NewOpenBojunStockControllerWithService(bojunRouteStockService{state: state}),
 		data_ctrl.NewOpenBojunProductInfoControllerWithService(bojunRouteProductInfoService{state: state}),
+		data_ctrl.NewOpenBojunStockSnapshotControllerWithService(bojunRouteStockSnapshotService{state: state}),
 		func(c *gin.Context) {
 			state.events = append(state.events, "ip")
 			if _, authenticated := c.Get(constant.CurrentUserID); authenticated {
@@ -218,6 +229,7 @@ func TestOpenBojunStockRouteUses60PerMinuteWithoutChangingStoreQuota(t *testing.
 	state.grants[model.PermissionBojunStoreRead] = nil
 	for _, route := range []struct{ path, limit string }{
 		{"stocks", "60-M"},
+		{"stock-snapshots", "60-M"},
 		{"stores", "30-M"},
 	} {
 		t.Run(route.path, func(t *testing.T) {
@@ -259,7 +271,7 @@ func requestBojunRoute(t *testing.T, router *gin.Engine, path, token, body strin
 	}
 }
 
-func TestOpenBojunRoutesRegisterSevenPOSTEndpoints(t *testing.T) {
+func TestOpenBojunRoutesRegisterEightPOSTEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	registerOpenBojunRoutes(router.Group("/api"),
@@ -267,8 +279,9 @@ func TestOpenBojunRoutesRegisterSevenPOSTEndpoints(t *testing.T) {
 		&data_ctrl.OpenBojunProductController{}, &data_ctrl.OpenBojunSyncStatusController{},
 		&data_ctrl.OpenBojunStoreController{}, &data_ctrl.OpenBojunStockController{},
 		&data_ctrl.OpenBojunProductInfoController{},
+		&data_ctrl.OpenBojunStockSnapshotController{},
 	)
-	want := map[string]bool{"orders": true, "orders/details": true, "products": true, "product-infos": true, "sync-status": true, "stores": true, "stocks": true}
+	want := map[string]bool{"orders": true, "orders/details": true, "products": true, "product-infos": true, "sync-status": true, "stores": true, "stocks": true, "stock-snapshots": true}
 	for _, route := range router.Routes() {
 		path := strings.TrimSuffix(strings.TrimPrefix(route.Path, "/api/open/bojun/"), "/query")
 		if route.Method != http.MethodPost || !want[path] {
@@ -282,7 +295,7 @@ func TestOpenBojunRoutesRegisterSevenPOSTEndpoints(t *testing.T) {
 }
 
 func TestOpenBojunRoutesRejectMissingTokenBeforePermissionLookup(t *testing.T) {
-	for _, path := range []string{"stores", "stocks", "product-infos"} {
+	for _, path := range []string{"stores", "stocks", "stock-snapshots", "product-infos"} {
 		t.Run(path, func(t *testing.T) {
 			router, state := newBojunRouteTestRouter(t)
 			requestBojunRoute(t, router, path, "", "{}", http.StatusUnauthorized)
@@ -302,7 +315,7 @@ func TestOpenBojunRoutesKeepOldAndNewPermissionsIndependent(t *testing.T) {
 				{"orders", model.PermissionBojunOrderRead}, {"orders/details", model.PermissionBojunOrderRead},
 				{"products", model.PermissionBojunOrderRead}, {"sync-status", model.PermissionBojunOrderRead},
 				{"product-infos", model.PermissionBojunOrderRead},
-				{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead},
+				{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead}, {"stock-snapshots", model.PermissionBojunStockRead},
 			} {
 				state.events = nil
 				wantStatus, body := http.StatusForbidden, "{}"
@@ -329,7 +342,7 @@ func TestOpenBojunRoutesKeepOldAndNewPermissionsIndependent(t *testing.T) {
 
 func TestOpenBojunRoutesObserveRevokedAndExpiredGrants(t *testing.T) {
 	for _, route := range []struct{ path, permission string }{
-		{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead},
+		{"stores", model.PermissionBojunStoreRead}, {"stocks", model.PermissionBojunStockRead}, {"stock-snapshots", model.PermissionBojunStockRead},
 		{"product-infos", model.PermissionBojunOrderRead},
 	} {
 		t.Run(route.path, func(t *testing.T) {
@@ -353,7 +366,7 @@ func TestOpenBojunRoutesObserveRevokedAndExpiredGrants(t *testing.T) {
 }
 
 func TestOpenBojunRoutesFailSafelyWhenCredentialsOrDependenciesFail(t *testing.T) {
-	for _, path := range []string{"stores", "stocks"} {
+	for _, path := range []string{"stores", "stocks", "stock-snapshots"} {
 		t.Run(path, func(t *testing.T) {
 			router, state := newBojunRouteTestRouter(t)
 			state.credentialRevoked = true

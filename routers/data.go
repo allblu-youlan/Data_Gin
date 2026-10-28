@@ -28,6 +28,7 @@ func apiData(api *gin.RouterGroup) {
 		data_ctrl.NewOpenBojunStoreControllerWithService(data_svc.NewOpenBojunStoreQueryService(bojunOracleProvider)),
 		data_ctrl.NewOpenBojunStockControllerWithService(data_svc.NewOpenBojunStockQueryService(bojunOracleProvider)),
 		data_ctrl.NewOpenBojunProductInfoControllerWithService(data_svc.NewOpenBojunProductInfoQueryService(bojunOracleProvider)),
+		data_ctrl.NewOpenBojunStockSnapshotControllerWithService(data_svc.NewOpenBojunStockSnapshotQueryService(bojunOracleProvider)),
 	)
 	registerMallWeatherRefreshRoutes(api, data_ctrl.NewMallWeatherRefreshController())
 	registerMallWeatherExportProfileRoutes(api, data_ctrl.NewMallWeatherExportProfileController())
@@ -401,8 +402,9 @@ func registerOpenBojunRoutes(
 	storeController *data_ctrl.OpenBojunStoreController,
 	stockController *data_ctrl.OpenBojunStockController,
 	productInfoController *data_ctrl.OpenBojunProductInfoController,
+	stockSnapshotController *data_ctrl.OpenBojunStockSnapshotController,
 ) {
-	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController, productInfoController,
+	registerOpenBojunRoutesWithLimiters(api, orderController, detailController, productController, syncStatusController, storeController, stockController, productInfoController, stockSnapshotController,
 		middleware.LimitOpenAPIIP("bojun", openBojunPreAuthIPRateLimit),
 		middleware.LimitOpenAPIUserRoute)
 }
@@ -416,6 +418,7 @@ func registerOpenBojunRoutesWithLimiters(
 	storeController *data_ctrl.OpenBojunStoreController,
 	stockController *data_ctrl.OpenBojunStockController,
 	productInfoController *data_ctrl.OpenBojunProductInfoController,
+	stockSnapshotController *data_ctrl.OpenBojunStockSnapshotController,
 	preAuthLimiter gin.HandlerFunc,
 	newUserRouteLimiter func(module, limit string) gin.HandlerFunc,
 ) {
@@ -442,6 +445,7 @@ func registerOpenBojunRoutesWithLimiters(
 	stockGroup := bojunGroup.Group("")
 	stockGroup.Use(middleware.RequirePermission(model.PermissionBojunStockRead), stockRouteLimiter)
 	stockGroup.POST("/stocks/query", stockController.Query)
+	stockGroup.POST("/stock-snapshots/query", stockSnapshotController.Query)
 }
 
 const (
