@@ -620,6 +620,7 @@ function MallModulePage({
                 <div><dt>行政区</dt><dd>{selectedMall.district || '待完善'}</dd></div>
                 <div><dt>地址</dt><dd>{selectedMall.address || '待完善'}</dd></div>
                 <div><dt>坐标状态</dt><dd>{selectedMall.geocodeStatus === 'confirmed' ? '已确认' : '待确认'}</dd></div>
+                <div><dt>开域店铺 ID</dt><dd>{selectedMall.kaiyuShopId || '未绑定'}</dd></div>
                 <div><dt>天气服务</dt><dd>{selectedMall.weatherEnabled ? '已启用' : '未启用'}</dd></div>
               </dl>
             </aside>

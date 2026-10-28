@@ -33,7 +33,7 @@
     "test:pipeline-run": "tsc src/pipelineRun.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/pipelineRun.test.mjs",
     "test:pipeline-composer": "tsc src/pipelineComposer.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/pipelineComposer.test.mjs",
     "test:push-policy": "tsc src/orderPushPolicy.ts src/singleFlight.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/orderPushPolicy.test.mjs",
-    "test:weather": "tsc src/mallWeather.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeather.test.mjs",
+    "test:weather": "tsc src/mallWeather.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeather.test.mjs tests/mallKaiyu.test.mjs",
     "test:weather-navigation": "tsc src/mallWeatherNavigation.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeatherNavigation.test.mjs",
     "test:weather-export": "tsc src/mallWeatherExport.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeatherExport.test.mjs",
     "test:weather-profiles": "tsc src/mallWeatherExportProfiles.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/mallWeatherExportProfiles.test.mjs",

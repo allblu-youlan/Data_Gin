@@ -1,4 +1,5 @@
 export type MallWeatherMall = {
+  kaiyuShopId?: string
   id: number
   mallCode: string
   nameCn: string
@@ -29,6 +30,7 @@ export type MallWeatherMallList = {
 }
 
 export type MallWeatherCreateInput = {
+  kaiyuShopId?: string
   mallCode: string
   nameCn: string
   province: string
@@ -38,6 +40,7 @@ export type MallWeatherCreateInput = {
 }
 
 export type MallWeatherCreateRequest = {
+  kaiyuShopId?: string
   mallCode: string
   nameCn: string
   province: string
@@ -57,6 +60,7 @@ export type MallWeatherCreateResult = {
 }
 
 export type MallWeatherPatchRequest = {
+  kaiyuShopId?: string
   expectedMallVersion: number
   nameCn?: string
   province?: string
@@ -656,6 +660,7 @@ function mallWeatherMall(value: unknown): MallWeatherMall | null {
     id,
     mallCode,
     nameCn,
+    ...((typeof value.kaiyuShopId === 'string' || typeof value.kaiyu_shop_id === 'string') ? { kaiyuShopId: aliasedTextValue(value, 'kaiyuShopId', 'kaiyu_shop_id').trim() } : {}),
     province: textValue(value, 'province'),
     city: textValue(value, 'city'),
     district: textValue(value, 'district'),
@@ -941,6 +946,8 @@ export function mallWeatherCreateRequest(input: MallWeatherCreateInput): MallWea
   const city = input.city.trim()
   const district = input.district.trim()
   const address = input.address.trim()
+  const kaiyuShopId = input.kaiyuShopId?.trim()
+  if (kaiyuShopId && kaiyuShopId.length > 64) throw new Error('invalid kaiyu shop id')
   if (!/^[A-Z0-9][A-Z0-9_-]{1,63}$/.test(mallCode) || !nameCn || !province || !city || !address ||
     nameCn.length > 255 || province.length > 128 || city.length > 128 || district.length > 128 || address.length > 1000) {
     throw new Error('invalid mall create request')
@@ -952,6 +959,7 @@ export function mallWeatherCreateRequest(input: MallWeatherCreateInput): MallWea
     city,
     ...(district ? { district } : {}),
     address,
+    ...(kaiyuShopId ? { kaiyuShopId } : {}),
     weather: { detailProfile: 'full', coverageRadiusM: 1000 },
   }
 }
@@ -967,6 +975,7 @@ export function mallWeatherMallPatchRequest(
   if (!positiveSafeInteger(mall.id) || !positiveSafeInteger(mall.version)) throw new Error('invalid mall patch request')
   const normalized = mallWeatherCreateRequest({ mallCode: mall.mallCode, ...input })
   const request: MallWeatherPatchRequest = { expectedMallVersion: mall.version }
+  if (input.kaiyuShopId !== undefined && (normalized.kaiyuShopId || '') !== (mall.kaiyuShopId || '')) request.kaiyuShopId = normalized.kaiyuShopId || ''
   if (normalized.nameCn !== mall.nameCn.trim()) request.nameCn = normalized.nameCn
   if (normalized.province !== mall.province.trim()) request.province = normalized.province
   if (normalized.city !== mall.city.trim()) request.city = normalized.city
