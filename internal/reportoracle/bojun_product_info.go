@@ -56,7 +56,10 @@ SELECT a.ID,
        a.PRO_M_DIM15_ID,
        a.PRO_M_DIM16_ID,
        TO_CHAR(a.CREATED, 'YYYY-MM-DD HH24:MI:SS'),
-       TO_CHAR(a.MODIFIED, 'YYYY-MM-DD HH24:MI:SS')
+       TO_CHAR(a.MODIFIED, 'YYYY-MM-DD HH24:MI:SS'),
+       a.M_PRODUCT_ID,
+       a.M_PRODUCT_COLOR_ID,
+       a.M_PRODUCT_ALIAS_ID
 FROM ` + BojunProductInfoTable + ` a`
 
 type BojunProductInfoQuery struct {
@@ -112,6 +115,9 @@ type BojunProductInfoRow struct {
 	ProductStyle            *string
 	Created                 *string
 	Modified                *string
+	ProductID               *string
+	ProductColorID          *string
+	ProductAliasID          *string
 }
 
 func (adapter *Adapter) QueryBojunProductInfos(ctx context.Context, query BojunProductInfoQuery) ([]BojunProductInfoRow, error) {
@@ -142,6 +148,7 @@ func (adapter *Adapter) QueryBojunProductInfos(ctx context.Context, query BojunP
 		var seriesDescription, costPrice, costRate, sellingPointDescription, spu8, skc12, nickname sql.NullString
 		var innerOuter, analysisCategoryLarge, analysisCategoryMiddle, supplierName, offlineWave sql.NullString
 		var ageRange, productLevel, productStyle, created, modified sql.NullString
+		var productID, productColorID, productAliasID sql.NullString
 		if err := rows.Scan(
 			&id, &noIsActive, &productCode, &nicknameDescription, &structureName,
 			&productName, &productColor, &colorName, &colorCode, &sizeName, &sizeCode,
@@ -151,6 +158,7 @@ func (adapter *Adapter) QueryBojunProductInfos(ctx context.Context, query BojunP
 			&seriesDescription, &costPrice, &costRate, &sellingPointDescription, &spu8, &skc12, &nickname,
 			&innerOuter, &analysisCategoryLarge, &analysisCategoryMiddle, &supplierName, &offlineWave,
 			&ageRange, &productLevel, &productStyle, &created, &modified,
+			&productID, &productColorID, &productAliasID,
 		); err != nil {
 			return nil, fmt.Errorf("scan bojun product info: %w", err)
 		}
@@ -176,6 +184,8 @@ func (adapter *Adapter) QueryBojunProductInfos(ctx context.Context, query BojunP
 			OfflineWave: nullableBojunString(offlineWave), AgeRange: nullableBojunString(ageRange),
 			ProductLevel: nullableBojunString(productLevel), ProductStyle: nullableBojunString(productStyle),
 			Created: nullableBojunString(created), Modified: nullableBojunString(modified),
+			ProductID: nullableBojunString(productID), ProductColorID: nullableBojunString(productColorID),
+			ProductAliasID: nullableBojunString(productAliasID),
 		})
 	}
 	if err := rows.Err(); err != nil {

@@ -71,6 +71,9 @@ type OpenBojunProductInfoDTO struct {
 	ProductStyle            *string `json:"productStyle"`            // 产品风格（PRO_M_DIM16_ID）。
 	Created                 *string `json:"created"`                 // CREATED（数据库未设置备注），YYYY-MM-DD HH:mm:ss。
 	Modified                *string `json:"modified"`                // MODIFIED（数据库未设置备注），YYYY-MM-DD HH:mm:ss。
+	ProductID               *string `json:"productId"`               // 款号ID（M_PRODUCT_ID）。
+	ProductColorID          *string `json:"productColorId"`          // 款色ID（M_PRODUCT_COLOR_ID）。
+	ProductAliasID          *string `json:"productAliasId"`          // 条码ID（M_PRODUCT_ALIAS_ID）。
 }
 
 type OpenBojunProductInfoQueryDTO struct {

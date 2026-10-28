@@ -25,6 +25,7 @@ type fakeOpenBojunProductInfoQueryService struct {
 	actor   uint
 	calls   int
 	err     error
+	items   []data_svc.OpenBojunProductInfoDTO
 }
 
 func (service *fakeOpenBojunProductInfoQueryService) Query(_ context.Context, actor uint, request requestbody.OpenBojunProductInfoQueryRequest) (*data_svc.OpenBojunProductInfoQueryDTO, error) {
@@ -33,10 +34,44 @@ func (service *fakeOpenBojunProductInfoQueryService) Query(_ context.Context, ac
 	if service.err != nil {
 		return nil, service.err
 	}
+	items := service.items
+	if items == nil {
+		items = []data_svc.OpenBojunProductInfoDTO{}
+	}
 	return &data_svc.OpenBojunProductInfoQueryDTO{
-		Items:      []data_svc.OpenBojunProductInfoDTO{},
+		Items:      items,
 		Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50},
 	}, nil
+}
+
+func TestOpenBojunProductInfoControllerReturnsProductIDsAsStringsAndNulls(t *testing.T) {
+	productID, productColorID, productAliasID := "9007199254740993", "9007199254740994", "9007199254740995"
+	service := &fakeOpenBojunProductInfoQueryService{items: []data_svc.OpenBojunProductInfoDTO{
+		{ProductID: &productID, ProductColorID: &productColorID, ProductAliasID: &productAliasID},
+		{},
+	}}
+	recorder := performOpenBojunProductInfoControllerRequest(t, service, openBojunProductInfoTestPath, `{}`)
+	var response struct {
+		Data struct {
+			Items []map[string]any `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusOK || len(response.Data.Items) != 2 {
+		t.Fatalf("unexpected response: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	for _, field := range []struct{ name, value string }{
+		{"productId", productID}, {"productColorId", productColorID}, {"productAliasId", productAliasID},
+	} {
+		if response.Data.Items[0][field.name] != field.value {
+			t.Fatalf("ID precision or JSON string type changed for %s: %s", field.name, recorder.Body.String())
+		}
+		if value, exists := response.Data.Items[1][field.name]; !exists || value != nil {
+			t.Fatalf("NULL ID omitted or converted for %s: %s", field.name, recorder.Body.String())
+		}
+	}
 }
 
 func TestOpenBojunProductInfoControllerParsesProductFiltersAndFullQuery(t *testing.T) {

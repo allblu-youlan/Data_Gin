@@ -17,6 +17,7 @@ import (
 
 func TestOpenBojunProductInfoQueryDefaultsAndPreservesValues(t *testing.T) {
 	productCode, priceList, costRate := "000SKU", "123456789012345678.1234567890", "-0.0000000001"
+	productID, productColorID, productAliasID := "9007199254740993", "9007199254740994", "9007199254740995"
 	oracle := &fakeOpenBojunOracle{}
 	opened := 0
 	service := newOpenBojunProductInfoQueryService(newTestBojunProvider(oracle, &opened), &fakeOpenBojunProductPermissionReader{allowed: true}, time.Now)
@@ -33,7 +34,8 @@ func TestOpenBojunProductInfoQueryDefaultsAndPreservesValues(t *testing.T) {
 
 	size := 1
 	oracle.productInfos = []reportoracle.BojunProductInfoRow{
-		{ProductCode: &productCode, PriceList: &priceList, CostRate: &costRate},
+		{ProductCode: &productCode, PriceList: &priceList, CostRate: &costRate,
+			ProductID: &productID, ProductColorID: &productColorID, ProductAliasID: &productAliasID},
 		{},
 	}
 	result, err = service.Query(t.Context(), 17, requestbody.OpenBojunProductInfoQueryRequest{PageSize: &size})
@@ -42,6 +44,9 @@ func TestOpenBojunProductInfoQueryDefaultsAndPreservesValues(t *testing.T) {
 	}
 	if result.Items[0].ProductCode == nil || *result.Items[0].ProductCode != productCode ||
 		result.Items[0].PriceList == nil || *result.Items[0].PriceList != priceList ||
+		result.Items[0].ProductID == nil || *result.Items[0].ProductID != productID ||
+		result.Items[0].ProductColorID == nil || *result.Items[0].ProductColorID != productColorID ||
+		result.Items[0].ProductAliasID == nil || *result.Items[0].ProductAliasID != productAliasID ||
 		result.Items[0].CostRate == nil || *result.Items[0].CostRate != costRate || result.Items[0].ColorName != nil {
 		t.Fatalf("decimal, identifier or NULL changed: %+v", result.Items[0])
 	}
@@ -50,10 +55,31 @@ func TestOpenBojunProductInfoQueryDefaultsAndPreservesValues(t *testing.T) {
 		!strings.Contains(string(encoded), `"costRate":"`+costRate+`"`) || !strings.Contains(string(encoded), `"colorName":null`) {
 		t.Fatalf("public values changed: JSON=%s error=%v", encoded, err)
 	}
+	for _, field := range []struct{ name, value string }{
+		{"productId", productID}, {"productColorId", productColorID}, {"productAliasId", productAliasID},
+	} {
+		if !strings.Contains(string(encoded), `"`+field.name+`":"`+field.value+`"`) {
+			t.Fatalf("ID did not remain a JSON string: %s", encoded)
+		}
+	}
 	oracle.productInfos = oracle.productInfos[:1]
 	result, err = service.Query(t.Context(), 17, requestbody.OpenBojunProductInfoQueryRequest{PageSize: &size})
 	if err != nil || len(result.Items) != 1 || result.Pagination.HasMore || opened != 1 {
 		t.Fatalf("last page result=%+v opened=%d error=%v", result, opened, err)
+	}
+	oracle.productInfos = []reportoracle.BojunProductInfoRow{{}}
+	result, err = service.Query(t.Context(), 17, requestbody.OpenBojunProductInfoQueryRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err = json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"productId", "productColorId", "productAliasId"} {
+		if !strings.Contains(string(encoded), `"`+field+`":null`) {
+			t.Fatalf("NULL ID was not preserved in JSON: %s", encoded)
+		}
 	}
 }
 

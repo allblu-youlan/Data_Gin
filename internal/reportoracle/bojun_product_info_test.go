@@ -22,19 +22,20 @@ func TestBojunProductInfoQueryUsesExactProjection(t *testing.T) {
 		"PRO_M_DIM11_ID", "PRO_M_DIM12_ID", "PRO_M_DIM13_ID", "SUPPLIER_NAME", "OFFLINE_WAVE",
 		"PRO_M_DIM14_ID", "PRO_M_DIM15_ID", "PRO_M_DIM16_ID",
 	}
-	projection := make([]string, 0, 44)
+	projection := make([]string, 0, 47)
 	for _, column := range columns {
 		projection = append(projection, "a."+column)
 	}
 	projection = append(projection,
 		"TO_CHAR(a.CREATED, 'YYYY-MM-DD HH24:MI:SS')",
-		"TO_CHAR(a.MODIFIED, 'YYYY-MM-DD HH24:MI:SS')")
+		"TO_CHAR(a.MODIFIED, 'YYYY-MM-DD HH24:MI:SS')",
+		"a.M_PRODUCT_ID", "a.M_PRODUCT_COLOR_ID", "a.M_PRODUCT_ALIAS_ID")
 	statement, arguments, err := buildBojunProductInfoQuery(BojunProductInfoQuery{PageSize: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := strings.Join(strings.Fields(strings.Split(statement, "\nFROM ")[0]), " ")
-	if len(projection) != 44 || got != "SELECT "+strings.Join(projection, ", ") {
+	if len(projection) != 47 || got != "SELECT "+strings.Join(projection, ", ") {
 		t.Fatalf("unexpected product info projection: %s", got)
 	}
 	if !strings.Contains(statement, "\nFROM YL_DBS.DIM_PRODUCT_INFO_INTERFACE a\nORDER BY a.ID\nOFFSET :1 ROWS FETCH NEXT :2 ROWS ONLY") ||
@@ -52,8 +53,9 @@ func TestQueryBojunProductInfosMapsAllColumnsAndPreservesNulls(t *testing.T) {
 		"ProductGender", "ColorGender", "ProductSizeRange", "ColorSizeRange", "SeriesDescription", "CostPrice", "CostRate",
 		"SellingPointDescription", "Spu8", "Skc12", "Nickname", "InnerOuter", "AnalysisCategoryLarge", "AnalysisCategoryMiddle",
 		"SupplierName", "OfflineWave", "AgeRange", "ProductLevel", "ProductStyle", "Created", "Modified",
+		"ProductID", "ProductColorID", "ProductAliasID",
 	}
-	values := make([]driver.Value, 44)
+	values := make([]driver.Value, 47)
 	for index := range values {
 		values[index] = fmt.Sprintf(" value-%02d ", index)
 	}
@@ -61,7 +63,8 @@ func TestQueryBojunProductInfosMapsAllColumnsAndPreservesNulls(t *testing.T) {
 	values[11] = "123456789012345678.1234567890"
 	values[28], values[29] = "-12.5000000001", "0.0000000001"
 	values[22], values[42], values[43] = "20261026", "2026-10-26 01:02:03", "2026-10-26 04:05:06"
-	rows := &bojunQueryTestRows{columns: make([]string, 44), values: [][]driver.Value{values, make([]driver.Value, 44)}}
+	values[44], values[45], values[46] = "9007199254740993", "9007199254740994", "9007199254740995"
+	rows := &bojunQueryTestRows{columns: make([]string, 47), values: [][]driver.Value{values, make([]driver.Value, 47)}}
 	adapter := newBojunQueryTestAdapter(t, func(ctx context.Context, statement string, arguments []driver.NamedValue) (driver.Rows, error) {
 		if ctx != t.Context() || len(arguments) != 3 || arguments[0].Value != 25 || arguments[1].Value != 2 ||
 			!strings.Contains(statement, "ORDER BY a.ID\nOFFSET :1 ROWS FETCH NEXT :2 ROWS ONLY") {
@@ -80,7 +83,7 @@ func TestQueryBojunProductInfosMapsAllColumnsAndPreservesNulls(t *testing.T) {
 		t.Fatalf("extra row, nulls or row close lost: items=%+v closed=%v", items, rows.closed)
 	}
 	item := reflect.ValueOf(items[0])
-	if item.NumField() != 44 || len(fieldNames) != 44 {
+	if item.NumField() != 47 || len(fieldNames) != 47 {
 		t.Fatalf("unexpected field count: %d", item.NumField())
 	}
 	for index, fieldName := range fieldNames {
@@ -125,7 +128,7 @@ func TestQueryBojunProductInfosBindsProductFiltersInSQLOrder(t *testing.T) {
 				if option, ok := arguments[len(wantArguments)].Value.(godror.Option); !ok || option == nil {
 					t.Fatal("missing godror number option")
 				}
-				return &bojunQueryTestRows{columns: make([]string, 44)}, nil
+				return &bojunQueryTestRows{columns: make([]string, 47)}, nil
 			})
 			test.query.PageSize, test.query.Offset = 50, 100
 			items, err := adapter.QueryBojunProductInfos(t.Context(), test.query)
@@ -180,7 +183,7 @@ func TestQueryBojunProductInfosLimitsListsBeforeDeduplication(t *testing.T) {
 					if len(arguments) != unique+3 {
 						t.Fatalf("unexpected argument count: %d", len(arguments))
 					}
-					return &bojunQueryTestRows{columns: make([]string, 44)}, nil
+					return &bojunQueryTestRows{columns: make([]string, 47)}, nil
 				})
 				_, err := adapter.QueryBojunProductInfos(t.Context(), filter.query(values))
 				if batch.count > filter.limit {
