@@ -40,7 +40,7 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 }
 
 func TestSchemaMigrationVersionIncludesFeishuMention(t *testing.T) {
-	if schemaMigrationVersion != "2026-10-20-bojun-custom-report-v25" {
+	if schemaMigrationVersion != "2026-10-28-table-email-notification-v26" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
 	}
 	if feishuMentionMigrationVersion != "2026-10-13-feishu-mention-v23" {
@@ -197,6 +197,8 @@ func TestIncrementalSchemaMigrationIncludesReportCategoryAccessTables(t *testing
 		reflect.TypeOf(&model.ReportRun{}),
 		reflect.TypeOf(&model.ReportCategoryAccess{}),
 		reflect.TypeOf(&model.ReportCategoryGrant{}),
+		reflect.TypeOf(&model.TableEmailRule{}),
+		reflect.TypeOf(&model.TableEmailDelivery{}),
 	}
 	if len(models) != len(want) {
 		t.Fatalf("incrementalSchemaMigrationModels() count = %d, want %d", len(models), len(want))
