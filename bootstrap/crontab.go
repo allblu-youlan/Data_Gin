@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	appConfig "gin-biz-web-api/config"
 	"os"
 	"strings"
 
@@ -67,6 +68,15 @@ func addScheduleTask(ctx context.Context, locker weather.TaskLocker) {
 		newDistributedCronJob(ctx, "bojun_order", locker, databaseBackedCronJob(crontabTask.BojunOrderCrontab{})),
 	)
 	ifError(err, int(bojunOrderCrontabEntryID), "BojunOrderCrontab")
+
+	kaiyuConfig, kaiyuErr := appConfig.LoadKaiyuConfig()
+	if kaiyuErr != nil {
+		logger.Error("开域客流调度配置无效", zap.Error(kaiyuErr))
+	} else if kaiyuConfig.Enabled {
+		entryID, err := global.Crontab.AddJob(appConfig.KaiyuHourlyCron,
+			newDistributedCronJob(ctx, "kaiyu_passenger", locker, databaseBackedCronJob(crontabTask.KaiyuPassengerCrontab{})))
+		ifError(err, int(entryID), "KaiyuPassengerCrontab")
+	}
 
 }
 

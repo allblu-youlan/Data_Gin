@@ -53,6 +53,7 @@ func registerChildrenCmd() {
 		cmd.BackfillCmd,  // 数据补拉命令（有赞订单/退款）
 		cmd.MallWeatherCmd,
 		cmd.ReportSnapshotCmd,
+		cmd.KaiyuCmd,
 	)
 }
 
