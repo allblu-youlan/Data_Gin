@@ -1,0 +1,39 @@
+.lookupFields { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-3); align-items: end; }
+.lookupFields label,
+.fieldHeading label,
+.previewContent label { display: grid; gap: var(--space-1); color: var(--color-text-secondary); font-size: 12px; }
+.lookupFields svg,
+.toolbar svg { width: 15px; height: 15px; }
+.lookupFields button,
+.toolbar { display: flex; align-items: center; gap: var(--space-2); }
+.fieldHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.fieldHeading h3 { margin: 0; font-size: 14px; }
+.fieldHeading label { min-width: 150px; }
+.fieldButtons { display: flex; gap: var(--space-2); flex-wrap: wrap; max-height: 220px; overflow-y: auto; }
+.fieldButtons button { display: grid; gap: var(--space-1); text-align: start; height: auto; padding-block: var(--space-2); }
+.fieldButtons small { color: var(--color-text-secondary); }
+.previewPanel { border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.previewPanel summary { padding: var(--space-3); cursor: pointer; font-weight: 600; }
+.previewContent { display: grid; gap: var(--space-3); padding: var(--space-4); border-top: 1px solid var(--color-border); }
+.previewResult { padding: var(--space-3); background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-panel); overflow-wrap: anywhere; }
+.previewResult dl { margin: 0; display: grid; gap: var(--space-2); }
+.previewResult dt { color: var(--color-text-secondary); font-size: 12px; }
+.previewResult dd { margin: 0 0 var(--space-3); }
+.bodyText { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.cellText { display: block; max-width: 320px; overflow-wrap: anywhere; white-space: normal; line-height: 1.6; }
+.statusError { display: block; color: var(--color-danger); max-width: 280px; white-space: normal; overflow-wrap: anywhere; margin-top: var(--space-1); }
+.deliveryList { display: grid; gap: var(--space-4); }
+.deliveryItem { padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.deliveryHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+.deliveryMeta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--color-text-secondary); font-size: 12px; }
+.deliveryItem h3 { margin: var(--space-3) 0 var(--space-2); font-size: 14px; overflow-wrap: anywhere; }
+.deliveryItem p { font-size: 13px; }
+.deliveryItem details { margin-top: var(--space-3); }
+.deliveryItem summary { cursor: pointer; font-size: 12px; color: var(--color-text-secondary); }
+@media (max-width: 699px) {
+  .lookupFields { grid-template-columns: 1fr; }
+  .fieldHeading { display: grid; }
+  .fieldHeading label { min-width: 0; }
+  .toolbar { flex-wrap: wrap; }
+  .deliveryHeading { align-items: flex-start; }
+}
