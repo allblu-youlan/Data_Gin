@@ -296,7 +296,7 @@ func normalizePageSize(limit int) int {
 
 func sanitizeMallUpdates(updates map[string]interface{}) (map[string]interface{}, error) {
 	allowed := map[string]struct{}{
-		"name_cn": {}, "name_en": {}, "aliases_json": {}, "brand_name": {}, "group_name": {},
+		"kaiyu_shop_id": {}, "name_cn": {}, "name_en": {}, "aliases_json": {}, "brand_name": {}, "group_name": {},
 		"management_company": {}, "business_status": {}, "opening_date": {}, "renovation_date": {},
 		"mall_type": {}, "positioning": {}, "tags_json": {}, "country": {}, "province": {},
 		"city": {}, "district": {}, "township": {}, "street": {}, "street_number": {},
