@@ -14,6 +14,9 @@ import (
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/kaiyu"
+	"gin-biz-web-api/pkg/providerhttp"
+
+	"go.uber.org/zap"
 )
 
 const kaiyuBackfillBatchDays = 5
@@ -233,6 +236,7 @@ func fillKaiyuMissingDays(ctx context.Context, groups []kaiyuMissingDay, missing
 		if readErr != nil {
 			result.FailedDays++
 			result.FailedHours += len(group.hours)
+			logKaiyuBackfillDayFailure("provider", group, group.hours[0], readErr)
 			cancel()
 			continue
 		}
@@ -248,6 +252,9 @@ func fillKaiyuMissingDays(ctx context.Context, groups []kaiyuMissingDay, missing
 				result.SourceMissingHours++
 			default:
 				result.FailedHours++
+				if !failedDay {
+					logKaiyuBackfillDayFailure("store", group, hour, err)
+				}
 				failedDay = true
 			}
 		}
@@ -257,6 +264,23 @@ func fillKaiyuMissingDays(ctx context.Context, groups []kaiyuMissingDay, missing
 		cancel()
 	}
 	return result, nil
+}
+
+// Keep one diagnostic per failed shop-day. Missing source records are normal
+// during provider delays and do not produce failure logs.
+func logKaiyuBackfillDayFailure(phase string, group kaiyuMissingDay, hour time.Time, err error) {
+	fields := []zap.Field{
+		zap.String("phase", phase),
+		zap.Uint("mall_id", group.mall.MallID),
+		zap.String("date", group.day.Format(time.DateOnly)),
+		zap.Time("hour", hour),
+		zap.String("error", providerhttp.RedactText(err.Error())),
+	}
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		fields = append(fields, zap.Int("error_code", coded.Code()))
+	}
+	zap.L().Warn("开域客流补拉门店日期失败", fields...)
 }
 
 func parseKaiyuBackfillCursor(cursor string) (time.Time, uint, error) {

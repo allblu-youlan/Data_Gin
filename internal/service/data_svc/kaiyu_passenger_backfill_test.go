@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,9 @@ import (
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/kaiyu"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestKaiyuMissingHoursUseCurrentBindingAndCompletedHours(t *testing.T) {
@@ -150,5 +154,53 @@ func TestKaiyuBackfillRejectsInvalidCursorAndCancelledWork(t *testing.T) {
 	_, err := fillKaiyuMissingDays(ctx, []kaiyuMissingDay{{day: time.Now()}}, 1, "", 5, nil, nil)
 	if !errors.Is(err, ErrKaiyuPassengerUnavailable) {
 		t.Fatal(err)
+	}
+}
+
+type kaiyuBackfillWriterFunc func(context.Context, model.KaiyuPassengerHourly) error
+
+func (f kaiyuBackfillWriterFunc) UpsertKaiyuPassengerHour(ctx context.Context, row model.KaiyuPassengerHourly) error {
+	return f(ctx, row)
+}
+
+func TestKaiyuBackfillLogsOneRedactedFailurePerDayAndNoSourceGaps(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	restore := zap.ReplaceGlobals(zap.New(core))
+	defer restore()
+	day := time.Date(2026, 10, 28, 0, 0, 0, 0, kaiyuLocation)
+	groups := []kaiyuMissingDay{
+		{mall: KaiyuPassengerMallOption{MallID: 1, ShopID: "provider-failure"}, day: day, hours: []time.Time{day}},
+		{mall: KaiyuPassengerMallOption{MallID: 2, ShopID: "store-failure"}, day: day, hours: []time.Time{day, day.Add(time.Hour)}},
+		{mall: KaiyuPassengerMallOption{MallID: 3, ShopID: "no-source"}, day: day, hours: []time.Time{day}},
+	}
+	client := kaiyuBackfillClientFunc(func(_ context.Context, shop string, _ time.Time) ([]kaiyu.HourlyPassenger, error) {
+		if shop == "provider-failure" {
+			return nil, errors.New("upstream request failed token=provider-secret")
+		}
+		if shop == "no-source" {
+			return nil, nil
+		}
+		return []kaiyu.HourlyPassenger{{ShopID: shop, Dateline: "2026-10-28 00:00"}, {ShopID: shop, Dateline: "2026-10-28 01:00"}}, nil
+	})
+	writer := kaiyuBackfillWriterFunc(func(context.Context, model.KaiyuPassengerHourly) error {
+		return errors.New("ORA-01950: no privileges on tablespace 'YL_DBS_TS' password=oracle-secret")
+	})
+	result, err := fillKaiyuMissingDays(t.Context(), groups, 4, "", 5, client, writer)
+	if err != nil || result.FailedDays != 2 || result.FailedHours != 3 || result.SourceMissingHours != 1 {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	entries := logs.All()
+	if len(entries) != 2 {
+		t.Fatalf("logs=%+v", entries)
+	}
+	for i, phase := range []string{"provider", "store"} {
+		fields := entries[i].ContextMap()
+		message, ok := fields["error"].(string)
+		if !ok || strings.Contains(message, "provider-secret") || strings.Contains(message, "oracle-secret") || fields["phase"] != phase || fields["mall_id"] != uint64(i+1) || fields["date"] != "2026-10-28" || fields["hour"] != day {
+			t.Fatalf("fields=%+v", fields)
+		}
+	}
+	if !strings.Contains(entries[1].ContextMap()["error"].(string), "ORA-01950") {
+		t.Fatal("Oracle diagnosis was lost")
 	}
 }
