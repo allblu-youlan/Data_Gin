@@ -25,6 +25,60 @@ function clientOptions(overrides = {}) {
   }
 }
 
+test('write requests use POST action routes and preserve payload, query and headers', async (t) => {
+  for (const [method, suffix] of [['PUT', '/update'], ['PATCH', '/patch'], ['DELETE', '/delete'], ['POST', '']]) {
+    await t.test(method, async () => {
+      let received
+      const client = createApiClient(clientOptions({
+        baseURL: 'https://example.test',
+        fetch: async (input, init) => {
+          received = { input, init }
+          return response(200, payload({ saved: true }))
+        },
+      }))
+      const body = { kaiyuShopId: 'shop-123', expectedMallVersion: 4 }
+
+      const result = await client.request('/v1/malls/3?expectedMallVersion=4', {
+        method,
+        body,
+        headers: { 'Idempotency-Key': 'save-mall-3' },
+      })
+
+      assert.equal(result.ok, true)
+      assert.equal(received.input, `https://example.test/api/v1/malls/3${suffix}?expectedMallVersion=4`)
+      assert.equal(received.init.method, 'POST')
+      assert.deepEqual(JSON.parse(received.init.body), body)
+      assert.equal(received.init.headers['Content-Type'], 'application/json')
+      assert.equal(received.init.headers['Idempotency-Key'], 'save-mall-3')
+      assert.equal(received.init.headers.token, 'secret-token-that-must-not-leak')
+      assert.equal(received.init.headers.Authorization, 'Bearer secret-token-that-must-not-leak')
+    })
+  }
+})
+
+test('POST action routes never retry writes or refresh and replay them', async (t) => {
+  for (const method of ['PUT', 'PATCH', 'DELETE']) {
+    for (const status of [401, 503]) {
+      await t.test(`${method} receives ${status}`, async () => {
+        let calls = 0
+        const client = createApiClient(clientOptions({
+          maxGetRetries: 2,
+          fetch: async () => {
+            calls += 1
+            return response(status, { code: status === 401 ? 100401 : 100503 })
+          },
+        }))
+
+        const result = await client.request('/v1/malls/3', { method, body: {}, retry: true })
+
+        assert.equal(result.ok, false)
+        assert.equal(result.status, status)
+        assert.equal(calls, 1)
+      })
+    }
+  }
+})
+
 test('GET requests discard supplied bodies and content types', async () => {
   let received
   const client = createApiClient(clientOptions({

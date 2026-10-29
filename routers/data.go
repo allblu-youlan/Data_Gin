@@ -1,6 +1,8 @@
 package routers
 
 import (
+	"net/http"
+
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/controller/data_ctrl"
 	"gin-biz-web-api/internal/middleware"
@@ -49,8 +51,8 @@ func apiData(api *gin.RouterGroup) {
 		sourceGroup.GET("", middleware.RequirePermission(model.PermissionSourceRead), sourceCtrl.ListSources)
 		sourceGroup.GET("/:id", middleware.RequirePermission(model.PermissionSourceRead), sourceCtrl.GetSource)
 		sourceGroup.POST("", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.CreateSource)
-		sourceGroup.PUT("/:id", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.UpdateSource)
-		sourceGroup.PATCH("/:id/enabled", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.UpdateSourceEnabled)
+		registerPOSTWriteRoute(sourceGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.UpdateSource)
+		registerPOSTWriteRoute(sourceGroup, http.MethodPatch, "/:id/enabled", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.UpdateSourceEnabled)
 		sourceGroup.POST("/:id/test", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.TestSource)
 		sourceGroup.POST("/:id/fetch", middleware.RequirePermission(model.PermissionSourceManage), sourceCtrl.FetchSource)
 	}
@@ -62,8 +64,8 @@ func apiData(api *gin.RouterGroup) {
 		transformGroup.GET("", middleware.RequirePermission(model.PermissionPipelineRead), transformCtrl.ListRules)
 		transformGroup.GET("/:id", middleware.RequirePermission(model.PermissionPipelineRead), transformCtrl.GetRule)
 		transformGroup.POST("", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.CreateRule)
-		transformGroup.PUT("/:id", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.UpdateRule)
-		transformGroup.PATCH("/:id/enabled", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.UpdateRuleEnabled)
+		registerPOSTWriteRoute(transformGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.UpdateRule)
+		registerPOSTWriteRoute(transformGroup, http.MethodPatch, "/:id/enabled", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.UpdateRuleEnabled)
 		transformGroup.POST("/test", middleware.RequirePermission(model.PermissionPipelineManage), transformCtrl.TestRule)
 	}
 
@@ -83,8 +85,8 @@ func apiData(api *gin.RouterGroup) {
 		destinationGroup.GET("", middleware.RequirePermission(model.PermissionDeliveryRead), deliveryCtrl.ListDestinations)
 		destinationGroup.GET("/:id", middleware.RequirePermission(model.PermissionDeliveryRead), deliveryCtrl.GetDestination)
 		destinationGroup.POST("", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.CreateDestination)
-		destinationGroup.PUT("/:id", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateDestination)
-		destinationGroup.PATCH("/:id/enabled", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateDestinationEnabled)
+		registerPOSTWriteRoute(destinationGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateDestination)
+		registerPOSTWriteRoute(destinationGroup, http.MethodPatch, "/:id/enabled", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateDestinationEnabled)
 		destinationGroup.POST("/:id/test", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.TestDestination)
 	}
 
@@ -95,8 +97,8 @@ func apiData(api *gin.RouterGroup) {
 		deliveryTaskGroup.GET("", middleware.RequirePermission(model.PermissionDeliveryRead), deliveryCtrl.ListTasks)
 		deliveryTaskGroup.GET("/:id", middleware.RequirePermission(model.PermissionDeliveryRead), deliveryCtrl.GetTask)
 		deliveryTaskGroup.POST("", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.CreateTask)
-		deliveryTaskGroup.PUT("/:id", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateTask)
-		deliveryTaskGroup.PATCH("/:id/enabled", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateTaskEnabled)
+		registerPOSTWriteRoute(deliveryTaskGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateTask)
+		registerPOSTWriteRoute(deliveryTaskGroup, http.MethodPatch, "/:id/enabled", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.UpdateTaskEnabled)
 		deliveryTaskGroup.POST("/:id/run", middleware.RequirePermission(model.PermissionDeliveryManage), deliveryCtrl.RunTask)
 	}
 
@@ -113,7 +115,7 @@ func apiData(api *gin.RouterGroup) {
 	{
 		orderPushConfigCtrl := data_ctrl.NewOrderPushConfigController()
 		orderPushConfigGroup.GET("", middleware.RequirePermission(model.PermissionDeliveryRead), orderPushConfigCtrl.GetSkipPolicy)
-		orderPushConfigGroup.PUT("", middleware.RequirePermission(model.PermissionDeliveryManage), orderPushConfigCtrl.SaveSkipPolicy)
+		registerPOSTWriteRoute(orderPushConfigGroup, http.MethodPut, "", middleware.RequirePermission(model.PermissionDeliveryManage), orderPushConfigCtrl.SaveSkipPolicy)
 	}
 
 	runGroup := api.Group("/v1/runs")
@@ -130,12 +132,12 @@ func apiData(api *gin.RouterGroup) {
 		pipelineGroup.GET("", middleware.RequirePermission(model.PermissionPipelineRead), pipelineCtrl.ListPipelines)
 		pipelineGroup.GET("/:id", middleware.RequirePermission(model.PermissionPipelineRead), pipelineCtrl.GetPipeline)
 		pipelineGroup.POST("", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.CreatePipeline)
-		pipelineGroup.PUT("/:id", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.UpdatePipeline)
+		registerPOSTWriteRoute(pipelineGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.UpdatePipeline)
 		pipelineGroup.GET("/:id/stages", middleware.RequirePermission(model.PermissionPipelineRead), pipelineCtrl.ListStages)
 		pipelineGroup.POST("/:id/stages", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.CreateStage)
 		pipelineGroup.GET("/:id/steps", middleware.RequirePermission(model.PermissionPipelineRead), pipelineCtrl.ListSteps)
 		pipelineGroup.POST("/:id/steps", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.CreateStep)
-		pipelineGroup.PUT("/:id/steps/:step_id", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.UpdateStep)
+		registerPOSTWriteRoute(pipelineGroup, http.MethodPut, "/:id/steps/:step_id", middleware.RequirePermission(model.PermissionPipelineManage), pipelineCtrl.UpdateStep)
 		pipelineGroup.GET("/:id/preview-json", middleware.RequirePermission(model.PermissionPipelineRead), pipelineCtrl.PreviewJSON)
 		pipelineGroup.POST("/:id/run", middleware.RequirePermission(model.PermissionPipelineExecute), pipelineCtrl.RunPipeline)
 	}
@@ -144,9 +146,9 @@ func apiData(api *gin.RouterGroup) {
 	pipelineStageGroup.Use(middleware.AuthJWT(), middleware.RequirePermission(model.PermissionPipelineManage))
 	{
 		pipelineCtrl := data_ctrl.NewPipelineController()
-		pipelineStageGroup.PUT("/:stage_id", pipelineCtrl.UpdateStage)
+		registerPOSTWriteRoute(pipelineStageGroup, http.MethodPut, "/:stage_id", pipelineCtrl.UpdateStage)
 		pipelineStageGroup.POST("/:stage_id/steps", pipelineCtrl.CreateStageStep)
-		pipelineStageGroup.PUT("/:stage_id/steps/:step_id", pipelineCtrl.UpdateStep)
+		registerPOSTWriteRoute(pipelineStageGroup, http.MethodPut, "/:stage_id/steps/:step_id", pipelineCtrl.UpdateStep)
 		pipelineStageGroup.POST("/:stage_id/generate-config", pipelineCtrl.GenerateStageConfig)
 		pipelineStageGroup.POST("/:stage_id/publish-config", pipelineCtrl.PublishStageConfig)
 	}
@@ -172,13 +174,13 @@ func apiData(api *gin.RouterGroup) {
 		excelMatchJobGroup.POST("/oracle-exports", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.CreateOracleExport)
 		excelMatchJobGroup.GET("/oracle-export-schemes", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListOracleExportSchemes)
 		excelMatchJobGroup.POST("/oracle-export-schemes", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.SaveOracleExportScheme)
-		excelMatchJobGroup.DELETE("/oracle-export-schemes/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteOracleExportScheme)
+		registerPOSTWriteRoute(excelMatchJobGroup, http.MethodDelete, "/oracle-export-schemes/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteOracleExportScheme)
 		excelMatchJobGroup.GET("/operation-schemes/:operation", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListOperationSchemes)
 		excelMatchJobGroup.POST("/operation-schemes/:operation", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.SaveOperationScheme)
-		excelMatchJobGroup.DELETE("/operation-schemes/:operation/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteOperationScheme)
+		registerPOSTWriteRoute(excelMatchJobGroup, http.MethodDelete, "/operation-schemes/:operation/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteOperationScheme)
 		excelMatchJobGroup.GET("/workflows", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListWorkflows)
 		excelMatchJobGroup.POST("/workflows", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.SaveWorkflow)
-		excelMatchJobGroup.DELETE("/workflows/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteWorkflow)
+		registerPOSTWriteRoute(excelMatchJobGroup, http.MethodDelete, "/workflows/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteWorkflow)
 		excelMatchJobGroup.POST("/workflow-runs", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.CreateWorkflow)
 		excelMatchJobGroup.POST("/preview", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.Preview)
 		excelMatchJobGroup.POST("/uploads", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.CreateUploadSession)
@@ -186,7 +188,7 @@ func apiData(api *gin.RouterGroup) {
 		excelMatchJobGroup.POST("/uploads/:upload_id/complete", middleware.RequirePermission(model.PermissionExcelExecute), excelMatchJobCtrl.CompleteUpload)
 		excelMatchJobGroup.GET("/schemes", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.ListSchemes)
 		excelMatchJobGroup.POST("/schemes", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.SaveScheme)
-		excelMatchJobGroup.DELETE("/schemes/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteScheme)
+		registerPOSTWriteRoute(excelMatchJobGroup, http.MethodDelete, "/schemes/:scheme_id", middleware.RequirePermission(model.PermissionExcelManage), excelMatchJobCtrl.DeleteScheme)
 		excelMatchJobGroup.GET("/:id", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.GetJob)
 		excelMatchJobGroup.GET("/:id/download", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.Download)
 		excelMatchJobGroup.POST("/:id/download", middleware.RequirePermission(model.PermissionExcelRead), excelMatchJobCtrl.Download)
@@ -287,24 +289,24 @@ func registerOfficeMessageRoutes(api *gin.RouterGroup, controller *data_ctrl.Off
 	messages.Use(middleware.AuthJWT())
 	messages.GET("", middleware.RequirePermission(model.PermissionOfficeMessageRead), controller.ListMessages)
 	messages.POST("", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.CreateMessage)
-	messages.PUT("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateMessage)
-	messages.DELETE("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteMessage)
+	registerPOSTWriteRoute(messages, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateMessage)
+	registerPOSTWriteRoute(messages, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteMessage)
 	api.GET("/v1/office-feishu-bots", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionOfficeMessageRead), controller.ListFeishuBots)
 
 	targets := api.Group("/v1/office-push-targets")
 	targets.Use(middleware.AuthJWT())
 	targets.GET("", middleware.RequirePermission(model.PermissionOfficeMessageRead), controller.ListTargets)
 	targets.POST("", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.CreateTarget)
-	targets.PUT("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateTarget)
-	targets.DELETE("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteTarget)
+	registerPOSTWriteRoute(targets, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateTarget)
+	registerPOSTWriteRoute(targets, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteTarget)
 	targets.POST("/:id/runs", middleware.RequirePermission(model.PermissionOfficeMessagePush), middleware.LimitRoute("30-M"), controller.CreateRun)
 
 	schedules := api.Group("/v1/office-push-schedules")
 	schedules.Use(middleware.AuthJWT())
 	schedules.GET("", middleware.RequirePermission(model.PermissionOfficeMessageRead), controller.ListSchedules)
 	schedules.POST("", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.CreateSchedule)
-	schedules.PUT("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateSchedule)
-	schedules.DELETE("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteSchedule)
+	registerPOSTWriteRoute(schedules, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.UpdateSchedule)
+	registerPOSTWriteRoute(schedules, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.DeleteSchedule)
 
 	api.GET("/v1/office-push-runs", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionOfficeMessageRead), controller.ListRuns)
 	oracle := api.Group("/v1/office-oracle")
@@ -334,7 +336,7 @@ func registerReportCategoryAccessRoutes(api *gin.RouterGroup, controller *data_c
 	group := api.Group("/v1/report-category-access")
 	group.Use(middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage))
 	group.GET("", controller.List)
-	group.PUT("", controller.Replace)
+	registerPOSTWriteRoute(group, http.MethodPut, "", controller.Replace)
 }
 
 func registerReportDownloadCatalogRoutes(api *gin.RouterGroup, controller *data_ctrl.ReportDownloadCatalogController) {
@@ -355,8 +357,8 @@ func registerReportInputQueryRoutes(api *gin.RouterGroup, controller *data_ctrl.
 	group.GET("", controller.ListDefinitions)
 	group.POST("", controller.CreateDefinition)
 	group.GET("/:id", controller.GetDefinition)
-	group.PUT("/:id", controller.UpdateDefinition)
-	group.DELETE("/:id", controller.DeleteDefinition)
+	registerPOSTWriteRoute(group, http.MethodPut, "/:id", controller.UpdateDefinition)
+	registerPOSTWriteRoute(group, http.MethodDelete, "/:id", controller.DeleteDefinition)
 	group.POST("/:id/test", middleware.LimitRoute("30-M"), controller.TestDefinition)
 	api.GET("/v1/reports/:id/input-options/:condition_code", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportExecute), middleware.LimitRoute("120-M"), controller.Options)
 }
@@ -371,7 +373,7 @@ func registerReportDatasourceRoutes(api *gin.RouterGroup, controller *data_ctrl.
 	catalogGroup.GET("/:id/bojun-tables/:tableId", catalog.Get)
 	catalogGroup.GET("/:id/bojun-tables/:tableId/columns", catalog.Columns)
 	catalogGroup.GET("/:id/bojun-tables/:tableId/columns/:columnId/reference", catalog.Reference)
-	catalogGroup.PUT("/:id/bojun-tables/:tableId/config", catalog.Configure)
+	registerPOSTWriteRoute(catalogGroup, http.MethodPut, "/:id/bojun-tables/:tableId/config", catalog.Configure)
 
 	api.POST("/v1/report-datasource-connection-tests", middleware.AuthJWT(), middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("30-M"), controller.TestConnection)
 	group := api.Group("/v1/report-datasources")
@@ -379,7 +381,7 @@ func registerReportDatasourceRoutes(api *gin.RouterGroup, controller *data_ctrl.
 	group.GET("", middleware.RequirePermission(model.PermissionReportManage), controller.List)
 	group.GET("/:id", middleware.RequirePermission(model.PermissionReportManage), controller.Get)
 	group.POST("", middleware.RequirePermission(model.PermissionReportManage), controller.Create)
-	group.PUT("/:id", middleware.RequirePermission(model.PermissionReportManage), controller.Update)
+	registerPOSTWriteRoute(group, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionReportManage), controller.Update)
 	group.POST("/:id/test", middleware.RequirePermission(model.PermissionReportManage), controller.Test)
 	group.GET("/:id/procedures", middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("120-M"), controller.ListProcedures)
 	group.GET("/:id/procedure-signature", middleware.RequirePermission(model.PermissionReportManage), middleware.LimitRoute("120-M"), controller.GetProcedureSignature)
@@ -522,10 +524,10 @@ func registerReportRoutes(api *gin.RouterGroup, reportCtrl *data_ctrl.ReportCont
 	reportGroup.POST("", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Create)
 	reportGroup.GET("", middleware.RequirePermission(model.PermissionReportRead), reportCtrl.List)
 	reportGroup.GET("/:id", middleware.RequirePermission(model.PermissionReportRead), reportCtrl.Get)
-	reportGroup.PUT("/:id", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Update)
-	reportGroup.DELETE("/:id", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Delete)
+	registerPOSTWriteRoute(reportGroup, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Update)
+	registerPOSTWriteRoute(reportGroup, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Delete)
 	reportGroup.POST("/:id/publish", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.Publish)
-	reportGroup.PUT("/:id/active-version", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.ActivateVersion)
+	registerPOSTWriteRoute(reportGroup, http.MethodPut, "/:id/active-version", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.ActivateVersion)
 	reportGroup.GET("/:id/versions", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.ListVersions)
 	reportGroup.GET("/:id/versions/:versionId", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.GetVersion)
 	reportGroup.GET("/:id/version-diff", middleware.RequirePermission(model.PermissionReportManage), reportCtrl.VersionDiff)
@@ -631,8 +633,8 @@ func registerMallRoutes(api *gin.RouterGroup, mallCtrl *data_ctrl.MallController
 		mallGroup.POST("/import", middleware.RequirePermission(model.PermissionMallWrite), weatherWriteEnabled, mallCtrl.Import)
 		mallGroup.GET("", middleware.RequirePermission(model.PermissionMallRead), mallCtrl.List)
 		mallGroup.GET("/:id", middleware.RequirePermission(model.PermissionMallRead), middleware.RequireMallScope("id"), mallCtrl.Get)
-		mallGroup.PATCH("/:id", middleware.RequirePermission(model.PermissionMallWrite), middleware.RequireMallScope("id"), mallCtrl.Update)
-		mallGroup.DELETE("/:id", middleware.RequirePermission(model.PermissionMallWrite), middleware.RequireMallScope("id"), mallCtrl.Delete)
+		registerPOSTWriteRoute(mallGroup, http.MethodPatch, "/:id", middleware.RequirePermission(model.PermissionMallWrite), middleware.RequireMallScope("id"), mallCtrl.Update)
+		registerPOSTWriteRoute(mallGroup, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionMallWrite), middleware.RequireMallScope("id"), mallCtrl.Delete)
 		mallGroup.POST("/:id/geocode", middleware.RequirePermission(model.PermissionMallWrite), middleware.RequireMallScope("id"), weatherWriteEnabled, mallCtrl.TriggerGeocode)
 		mallGroup.GET("/:id/geocode-candidates", middleware.RequirePermission(model.PermissionMallRead), middleware.RequireMallScope("id"), mallCtrl.ListGeocodeCandidates)
 		mallGroup.POST("/:id/geocode-confirm", middleware.RequirePermission(model.PermissionMallGeocodeConfirm), middleware.RequireMallScope("id"), mallCtrl.ConfirmGeocode)
@@ -645,7 +647,7 @@ func registerFeishuMentionRoutes(api *gin.RouterGroup, controller *data_ctrl.Fei
 	read := middleware.RequirePermission(model.PermissionOfficeMentionRead)
 	group.GET("/chats", manage, controller.Chats)
 	group.POST("/chats", manage, controller.CreateChat)
-	group.PUT("/chats/:id", manage, controller.UpdateChat)
+	registerPOSTWriteRoute(group, http.MethodPut, "/chats/:id", manage, controller.UpdateChat)
 	group.GET("/recipients", read, controller.Recipients)
 	group.GET("/recipients/:id", read, controller.Recipient)
 	group.GET("/reports", read, controller.Reports)
@@ -656,7 +658,7 @@ func registerFeishuMentionRoutes(api *gin.RouterGroup, controller *data_ctrl.Fei
 	group.GET("/jobs", read, controller.Jobs)
 	group.POST("/jobs/:id/retry", read, middleware.RequirePermission(model.PermissionOfficeMentionRetry), controller.Retry)
 	group.GET("/status", manage, controller.Status)
-	group.PUT("/digest-settings", manage, controller.SaveDigestSettings)
+	registerPOSTWriteRoute(group, http.MethodPut, "/digest-settings", manage, controller.SaveDigestSettings)
 }
 
 func registerFeishuMentionViewRoutes(api *gin.RouterGroup, controller *data_ctrl.FeishuMentionViewController) {
