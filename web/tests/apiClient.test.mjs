@@ -131,6 +131,39 @@ test('FormData requests preserve multipart boundaries and authentication headers
   assert.equal(received.headers.Authorization, 'Bearer secret-token-that-must-not-leak')
 })
 
+test('authenticated POST downloads preserve the binary file and JSON filter body', async () => {
+  let received
+  const bytes = new Uint8Array([80, 75, 3, 4, 0, 255])
+  const client = createApiClient(clientOptions({
+    fetch: async (input, init) => {
+      received = { input, init }
+      return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } })
+    },
+  }))
+  const body = { startDate: '2026-10-29', endDate: '2026-10-29', mallId: 3 }
+  const result = await client.request('/v1/kaiyu-passenger/export', { method: 'POST', body, responseType: 'blob' })
+
+  assert.equal(result.ok, true)
+  assert.ok(result.data instanceof Blob)
+  assert.deepEqual(new Uint8Array(await result.data.arrayBuffer()), bytes)
+  assert.equal(received.init.method, 'POST')
+  assert.deepEqual(JSON.parse(received.init.body), body)
+  assert.equal(received.init.headers.Authorization, 'Bearer secret-token-that-must-not-leak')
+})
+
+test('binary downloads surface JSON errors and do not retry writes', async () => {
+  let calls = 0
+  const client = createApiClient(clientOptions({
+    maxGetRetries: 2,
+    fetch: async () => { calls += 1; return response(422, { code: 100422, msg: '查询最多支持31天' }) },
+  }))
+  const result = await client.request('/v1/kaiyu-passenger/export', { method: 'POST', body: {}, responseType: 'blob', acceptSafeErrorMessage: true })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 422)
+  assert.equal(result.error.message, '查询最多支持31天')
+  assert.equal(calls, 1)
+})
+
 test('rejects bare JSON success responses by default', async () => {
   const client = createApiClient(clientOptions({
     fetch: async () => response(200, { status: 'ok', service: 'gin-biz-web-api' }),

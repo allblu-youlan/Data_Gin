@@ -78,6 +78,7 @@ export function useConsoleSession(baseURL: string) {
         }
         const requestOptions: ApiRequestOptions = {
           method: options.method,
+          responseType: options.responseType,
           body: options.body,
           headers: options.headers,
           signal: options.signal,

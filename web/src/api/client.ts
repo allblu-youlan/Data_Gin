@@ -25,6 +25,7 @@ export type TokenRefreshResult =
 
 export type ApiRequestOptions = {
   method: HTTPMethod
+  responseType?: 'json' | 'blob'
   body?: unknown
   headers?: Record<string, string>
   signal?: AbortSignal
@@ -268,10 +269,13 @@ export function createApiClient(options: ApiClientOptions) {
           headers: authorizedHeaders(requestToken, headers, canSendBody && !formDataBody, formDataBody || method === 'GET'),
           body: !canSendBody ? undefined : formDataBody ? body : JSON.stringify(body),
         })
+        if (requestOptions.responseType === 'blob' && response.ok && !response.headers.get('Content-Type')?.includes('json')) {
+          return { ok: true, status: response.status, data: await response.blob() }
+        }
         const payload: unknown = await response.json().catch(() => null)
         const status = effectiveApiStatus(response.status, payload)
         const successfulPayload = isSuccessfulPayload(payload) || (acceptBareJSONSuccess && isBareJSONObject(payload))
-        if (response.ok && status < 400 && successfulPayload) return { ok: true, status, data: payload }
+        if (requestOptions.responseType !== 'blob' && response.ok && status < 400 && successfulPayload) return { ok: true, status, data: payload }
 
         if (status === 401) {
           if (options.getToken() !== requestToken) return abortedResponse()
