@@ -41,7 +41,7 @@
     "preview": "vite preview",
     "test:office-mention": "tsc src/officeMention/contracts.ts src/officeMention/types.ts src/appShell/navigationPermissions.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && perl -0pi -e \"s|'./overviewWorkspacePolicy'|'./overviewWorkspacePolicy.js'|\" .test-dist/appShell/navigationPermissions.js && node --experimental-specifier-resolution=node --test tests/officeMention.test.mjs",
     "test:passenger-flow": "tsc src/passengerFlow/contracts.ts src/passengerFlow/backfillContracts.ts src/appShell/navigationPermissions.ts --rootDir src --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && perl -0pi -e \"s|'./overviewWorkspacePolicy'|'./overviewWorkspacePolicy.js'|\" .test-dist/appShell/navigationPermissions.js && node --test tests/passengerFlow.test.mjs",
-    "test:date-time": "tsc src/dateTime.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/dateTime.test.mjs"
+    "test:date-time": "tsc src/dateTime.ts src/reportCenter/formatReportCell.ts --rootDir src --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/dateTime.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/ibm-plex-sans": "^5.3.0",

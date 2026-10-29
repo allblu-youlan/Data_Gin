@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime, toShanghaiDateTimeInput } from '../dateTime.js'
 import { AlertTriangle } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import type { ClientResponse } from '../api/client'
@@ -119,14 +120,14 @@ export function BojunBackfillPage({ client, loading, onCompletedRefresh }: { cli
 
 function BackfillResult({ title, result }: { title: string; result: BojunOrderBackfillResult }) {
   const samples = [...(result.samples ?? []), ...(result.failed_samples ?? [])].slice(0, 12)
-  return <Section title={title} description={`${result.start_time} ~ ${result.end_time} / 拉取 ${result.fetch_pages} 页`} flush>
+  return <Section title={title} description={`${formatShanghaiDateTime(result.start_time)} ~ ${formatShanghaiDateTime(result.end_time)} / 拉取 ${result.fetch_pages} 页`} flush>
     <MetricStrip label={`${title}统计`} items={[{ key: 'total', label: 'Oracle 返回', value: result.total_count }, { key: 'writable', label: '可处理', value: result.writable_count }, { key: 'existing', label: '已存在', value: result.existing_count }, { key: 'created', label: '已新增', value: result.retail_count }, { key: 'updated', label: '已更新', value: result.updated_count }, { key: 'failed', label: '失败', value: result.failed_count }]} />
     {samples.length === 0 ? <FeedbackState kind="empty" title="暂无样例数据" /> : <DataTable minWidth={860} scrollLabel={`${title}订单样例`}><thead><tr><th scope="col">状态</th><th scope="col">订单号</th><th scope="col">门店</th><th scope="col">类型</th><th scope="col">数量</th><th scope="col">金额</th><th scope="col">说明</th></tr></thead><tbody>{samples.map((sample, index) => <tr key={`${sample.docno || 'empty'}-${sample.status}-${index}`}><td><StatusTag tone={sampleTone(sample.status)}>{statusLabel(sample.status)}</StatusTag></td><td>{sample.docno || '-'}</td><td>{sample.c_store_name || sample.c_store_code || '-'}</td><td>{sample.order_type_name || sample.order_type_code || '-'}</td><td>{sample.tot_qty ?? '-'}</td><td>{sample.tot_amt_actual ?? '-'}</td><td>{sample.reason || '-'}</td></tr>)}</tbody></DataTable>}
   </Section>
 }
 
 function Field({ label, name, defaultValue, onChange }: { label: string; name: string; defaultValue: string; onChange: () => void }) {
-  return <label>{label}<input name={name} type="datetime-local" defaultValue={defaultValue} onChange={onChange} required /></label>
+  return <label>{label}<input name={name} type="datetime-local" step="1" defaultValue={defaultValue} onChange={onChange} required /></label>
 }
 
 function readResult(response: ClientResponse) {
@@ -147,6 +148,6 @@ function readTaskResult(response: ClientResponse) {
 }
 
 function formValue(form: FormData, key: string) { const value = form.get(key); return typeof value === 'string' ? value : '' }
-function datetimeLocalMinutesAgo(minutes: number) { const date = new Date(Date.now() - minutes * 60 * 1000); const pad = (value: number) => String(value).padStart(2, '0'); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}` }
+function datetimeLocalMinutesAgo(minutes: number) { return toShanghaiDateTimeInput(Date.now() - minutes * 60 * 1000) }
 function statusLabel(value: string) { return ({ pending: '待写入', created: '已新增', updated: '已更新', exists: '已存在', invalid: '无效', failed: '失败', push_failed: '推送失败' } as Record<string, string>)[value] ?? (value || '-') }
 function sampleTone(value: string) { return /created|updated/.test(value) ? 'success' as const : /failed|invalid/.test(value) ? 'danger' as const : value === 'pending' ? 'warning' as const : 'neutral' as const }

@@ -1,3 +1,4 @@
+import { formatShanghaiDate, formatShanghaiDateTime } from './dateTime.js'
 import { Download } from 'lucide-react'
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
@@ -79,14 +80,13 @@ export function MallWeatherChart({
   ), [itemCount, plotWidth])
   const selectedPosition = mallWeatherClampedChartIndex(activeIndex, itemCount) ?? 0
   const activeAxisPoint = activeIndex === null ? undefined : axisPoints[selectedPosition]
-  const selectedTime = timeDomain[selectedPosition] || ''
+  const selectedTime = chartTimeLabel(timeDomain[selectedPosition] || '')
   const selectedValues = normalizedSeries
     .map((item) => ({ id: item.id, name: item.name, color: item.color, value: item.data[selectedPosition]?.value }))
   const selectedY = plottedSeries
     .flatMap((item) => item.points.filter((point) => point.index === selectedPosition).map((point) => point.y))
     .sort((a, b) => a - b)[0] ?? plotHeight / 2
-  const xTickIndexes = sampleIndexes(itemCount, Math.max(3, Math.min(6, Math.floor(plotWidth / 88))))
-  const showDateInTimeTicks = chartDatePart(timeDomain[0] || '') !== chartDatePart(timeDomain[itemCount - 1] || '')
+  const xTickIndexes = sampleIndexes(itemCount, Math.max(1, Math.min(4, Math.floor(plotWidth / 160))))
   const hasData = Boolean(scale && plottedSeries.some((item) => item.points.length > 0))
 
   useEffect(() => {
@@ -200,7 +200,7 @@ export function MallWeatherChart({
               {xTickIndexes.map((index) => {
                 const x = itemCount <= 1 ? 0 : index / (itemCount - 1) * plotWidth
                 return <text className={styles.xTick} x={x} y={plotHeight + 25} textAnchor={index === 0 ? 'start' : index === itemCount - 1 ? 'end' : 'middle'} key={index}>
-                  {chartTimeLabel(timeDomain[index] || '', showDateInTimeTicks)}
+                  {chartTimeLabel(timeDomain[index] || '')}
                 </text>
               })}
               {plottedSeries.map((item) => (
@@ -248,21 +248,14 @@ function ChartPoint({ point, color }: { point: string; color: string }) {
 
 function sampleIndexes(length: number, maximum: number) {
   if (length <= 0) return []
+  if (maximum === 1) return [0]
   if (length <= maximum) return Array.from({ length }, (_, index) => index)
   const indexes = Array.from({ length: maximum }, (_, index) => Math.round(index * (length - 1) / (maximum - 1)))
   return [...new Set(indexes)]
 }
 
-function chartTimeLabel(value: string, includeDate: boolean) {
-  const clock = value.match(/(?:T|\s)(\d{2}:\d{2})/)
-  const date = value.match(/\d{4}-(\d{2})-(\d{2})/)
-  if (clock?.[1]) return includeDate && date ? `${date[1]}-${date[2]} ${clock[1]}` : clock[1]
-  if (date) return `${date[1]}-${date[2]}`
-  return value.length > 10 ? value.slice(0, 10) : value
-}
-
-function chartDatePart(value: string) {
-  return value.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''
+function chartTimeLabel(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? formatShanghaiDate(value) : formatShanghaiDateTime(value, '')
 }
 
 function chartAxisLabel(value: number) {

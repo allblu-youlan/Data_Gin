@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import test from 'node:test'
+import { formatReportCell } from '../.test-dist/reportCenter/formatReportCell.js'
 import { formatShanghaiDate, formatShanghaiDateTime, parseShanghaiDateTime, toShanghaiDateTimeInput } from '../.test-dist/dateTime.js'
 
 test('displays instants in Shanghai with padded fields and seconds', () => {
@@ -36,4 +37,12 @@ test('display and input conversion do not depend on the browser host timezone', 
     const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ }, encoding: 'utf8' })
     assert.deepEqual(JSON.parse(output), ['2026-10-30 00:00:00', '2026-10-29T16:00:00.000Z'])
   }
+})
+
+test('report cells convert datetime while preserving date and raw text fields', () => {
+  assert.equal(formatReportCell('2026-10-29T16:03:04Z', '—', 'datetime'), '2026-10-30 00:03:04')
+  assert.equal(formatReportCell('2026-10-29T16:03:04Z', '—', 'timestamp'), '2026-10-30 00:03:04')
+  assert.equal(formatReportCell('2026-10-29', '—', 'date'), '2026-10-29')
+  assert.equal(formatReportCell('2026-10-29T16:03:04Z', '—', 'string'), '2026-10-29T16:03:04Z')
+  assert.equal(formatReportCell(null, '无', 'datetime'), '无')
 })

@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from './dateTime.js'
 import { AlertTriangle, Clock3, CloudRain, CloudSun, Download, MapPin, RefreshCcw, Thermometer } from 'lucide-react'
 import { useState } from 'react'
 import { MallWeatherChart, type MallWeatherChartSeries } from './MallWeatherChart'
@@ -46,7 +47,7 @@ export function WeatherRealtime({ mall, overview }: { mall: MallWeatherMall; ove
   return (
     <article className={[styles['panel'], styles['realtime']].join(' ')} aria-label="当前实况天气">
       <header className={styles['realtimeHeading']}>
-        <div><strong>当前实况</strong><span>{realtime?.snapshotAtLocal || '暂无快照时间'}</span></div>
+        <div><strong>当前实况</strong><span>{formatShanghaiDateTime(realtime?.snapshotAtLocal, '暂无快照时间')}</span></div>
         <button type="button" onClick={downloadCsv} disabled={!realtime} aria-label={`下载数据：${mall.nameCn}当前实况 CSV`}><Download aria-hidden="true" />下载数据</button>
       </header>
       {downloadError && <p className={[styles['message'], styles['error']].join(' ')} role="alert">{downloadError}</p>}
@@ -137,7 +138,7 @@ export function WeatherOverviewDetails({ mall, overview, alerts, refreshing, onR
             <AlertTriangle aria-hidden="true" />
             <strong>{primaryAlert.title}</strong>
             <span>{primaryAlert.source || '预警发布机构'}</span>
-            <time>{primaryAlert.publishedAtLocal || '发布时间未知'}</time>
+            <time>{formatShanghaiDateTime(primaryAlert.publishedAtLocal, '发布时间未知')}</time>
             {primaryAlert.description && <p>{primaryAlert.description}</p>}
           </article>
           : <EmptyState title="当前无有效预警" detail="当前查询窗口没有返回有效气象预警。" />)}

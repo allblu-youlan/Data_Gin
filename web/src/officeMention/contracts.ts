@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import type { Job, JobStatus, JobType, MentionSection, Page, Recipient, Report } from './types'
 export const mentionNotice = '个人提醒与确认默认关闭；开启后记录本人确认，无法获取原群消息实际已读状态。'
 export const sectionTitles: Record<MentionSection, string> = { chats: '监控群', recipients: '@ 消息记录', reports: '每日报告', jobs: '发送任务', status: '模块状态' }
@@ -31,9 +32,7 @@ export function safeOriginalURL(value: string | null | undefined) {
   try { const parsed = new URL(value); return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null } catch { return null }
 }
 export function formatMentionTime(value: string | null | undefined) {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+  return formatShanghaiDateTime(value)
 }
 export function parseMentionData<T>(payload: unknown): T {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('响应格式无效')

@@ -1,4 +1,5 @@
-import type { RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { CalendarDays, ChevronRight, LogOut, RefreshCcw } from 'lucide-react'
 import type { SessionUser } from '../api/auth'
 import { WorkspaceHeader } from '../ui'
@@ -81,7 +82,7 @@ export function ConsoleHeader({
           {activeNav !== 'store_info' ? (
             <span className={styles.date}>
               <CalendarDays aria-hidden="true" />
-              {new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' }).format(new Date())}
+              <ShanghaiClock />
             </span>
           ) : null}
           <span className={`${styles.health} ${loading ? styles.loading : ''}`} role="status">
@@ -98,4 +99,13 @@ export function ConsoleHeader({
       )}
     />
   )
+}
+
+function ShanghaiClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  return <time dateTime={now.toISOString()} title="上海时间（Asia/Shanghai）">{formatShanghaiDateTime(now)}</time>
 }

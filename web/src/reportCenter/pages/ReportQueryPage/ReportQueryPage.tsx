@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime, SHANGHAI_TIME_ZONE } from '../../../dateTime.js'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import DatePicker from 'antd/es/date-picker'
 import dayjs from 'dayjs'
@@ -356,7 +357,7 @@ export function ReportQueryPage({ client, navigation, canExport = true }: { clie
       {loading ? <FeedbackState kind="loading" title="正在加载可下载报表" /> : error ? <FeedbackState kind="error" title="可下载报表加载失败" description={error} action={<button type="button" onClick={reload}>重试</button>} /> : null}
       {run ? <Section title={selectSnapshot ? '查询结果' : '下载文件'} actions={<div className={styles.resultActions}>{reportExport ? <StatusTag tone={exportTone(reportExport)}>{reportExport.status === 'READY' && purgeAfterExport && !reportExport.purgedAt ? '可下载 · 清理中' : exportLabel(reportExport.status)}</StatusTag> : <StatusTag tone={runTone(run)}>{runLabel(run.status)}</StatusTag>}{selectSnapshot && canExport && run.resultAvailable && !reportExport ? <Button variant="primary" disabled={operation.busy} onClick={() => void startExport(run.id)}><Download aria-hidden="true" />导出本次结果</Button> : null}{canExport && reportExport?.canDownload ? <Button variant="primary" onClick={() => void downloadExport()}><Download aria-hidden="true" />下载文件</Button> : null}</div>} flush>
         {operation.busy && !reportExport?.canDownload ? <FeedbackState kind="loading" title={reportExport ? '正在生成 Excel' : '正在生成报表'} description={reportExport ? exportProgress(reportExport) : undefined} /> : null}
-        {selectSnapshot ? <p className={styles.resultMeta}>运行 #{run.id} · 版本 #{run.versionId} · {run.rowCount.toLocaleString('zh-CN')} 行 · 生成 {run.finishedAt ? new Date(run.finishedAt).toLocaleString('zh-CN') : '进行中'} · 有效至 {run.resultExpiresAt ? new Date(run.resultExpiresAt).toLocaleString('zh-CN') : '待确认'}{!run.resultAvailable && run.resultExpiresAt && Date.parse(run.resultExpiresAt) <= Date.now() ? ' · 结果已到期，请重新查询' : ''}</p> : null}
+        {selectSnapshot ? <p className={styles.resultMeta}>运行 #{run.id} · 版本 #{run.versionId} · {run.rowCount.toLocaleString('zh-CN')} 行 · 生成 {run.finishedAt ? formatShanghaiDateTime(run.finishedAt) : '进行中'} · 有效至 {run.resultExpiresAt ? formatShanghaiDateTime(run.resultExpiresAt) : '待确认'}{!run.resultAvailable && run.resultExpiresAt && Date.parse(run.resultExpiresAt) <= Date.now() ? ' · 结果已到期，请重新查询' : ''}</p> : null}
         {result ? <details open={selectSnapshot || undefined} className={styles.optionalPreview}><summary>{selectSnapshot ? '数据明细' : '查看结果预览（可选）'}</summary><div>
           {contract?.executionMode === 'TABLE_SNAPSHOT' ? <ResultQueryToolbar page={result} query={resultQuery} open={filtersOpen} disabled={operation.busy || Boolean(reportExport)} onToggle={() => setFiltersOpen((value) => !value)} onChange={setResultQuery} onApply={() => void applyResultQuery()} /> : null}
           <ReportResultTable page={result} onInspect={setDetailColumn} onRecord={setRecordSelection} />
@@ -492,7 +493,7 @@ function zonedDateTimeToRFC3339(value: string, timezone: string) {
   }
   const matched = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
   if (!matched) return ''
-  const zone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  const zone = timezone || SHANGHAI_TIME_ZONE
   try {
     const expected = { year: Number(matched[1]), month: Number(matched[2]), day: Number(matched[3]), hour: Number(matched[4]), minute: Number(matched[5]), second: Number(matched[6] ?? 0) }
     let instant = Date.UTC(expected.year, expected.month - 1, expected.day, expected.hour, expected.minute, expected.second)

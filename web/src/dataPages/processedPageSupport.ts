@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime, parseShanghaiDateTime } from '../dateTime.js'
 import { redactMonitoringJSON } from '../monitoring'
 
 export type ProcessedData = {
@@ -22,24 +23,12 @@ export type CleanRecord = {
 
 export function unixTimestamp(value: string) {
   if (!value) return ''
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp) ? String(Math.floor(timestamp / 1000)) : ''
+  const date = parseShanghaiDateTime(value)
+  return date ? String(Math.floor(date.getTime() / 1000)) : ''
 }
 
 export function formatUnixTime(value: number) {
-  if (!value) return '-'
-  const date = new Date(value * 1000)
-  if (Number.isNaN(date.getTime())) return '-'
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date).replace(/\//g, '-')
+  return value ? formatShanghaiDateTime(value * 1000, '-') : '-'
 }
 
 export function formatQualityScore(value: number) {

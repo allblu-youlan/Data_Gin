@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { redactMonitoringJSON } from '../monitoring'
 
 export type RawData = {
@@ -61,10 +62,7 @@ export function backendDateTime(value: string) {
 }
 
 export function formatUnixTime(value: number) {
-  if (!value) return '-'
-  const date = new Date(value * 1000)
-  if (Number.isNaN(date.getTime())) return '-'
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date).replace(/\//g, '-')
+  return value ? formatShanghaiDateTime(value * 1000, '-') : '-'
 }
 
 function parseMaybeJSON(value: unknown) {

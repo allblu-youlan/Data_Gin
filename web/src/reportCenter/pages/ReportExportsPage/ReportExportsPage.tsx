@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Download, RefreshCw } from 'lucide-react'
 import { DataTable, FeedbackState, FilterToolbar, PageCanvas, PageHeader, Section, StatusTag, type StatusTagTone } from '../../../ui'
@@ -52,5 +53,5 @@ export function ReportExportsPage({ client, navigation }: { client: ReportCenter
 
 function exportTone(item: ReportExport): StatusTagTone { return item.status === 'READY' ? 'success' : item.status === 'FAILED' || item.status === 'CANCELLED' || item.status === 'EXPIRED' ? 'danger' : 'running' }
 function exportLabel(status: ReportExportStatus) { return ({ PENDING: '等待导出', RUNNING: '生成中', READY: '文件就绪', FAILED: '导出失败', CANCELLED: '已取消', EXPIRED: '已过期' })[status] }
-function formatDate(value: string | null) { if (!value) return '-'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN') }
+function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }
 function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB` }

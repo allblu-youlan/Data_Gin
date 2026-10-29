@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useEffect, useState } from 'react'
 import { Database, RefreshCw } from 'lucide-react'
 import { Button, DataTable, FeedbackState, PaginationControls, StatusTag } from '../../../ui'
@@ -99,7 +100,7 @@ export function BojunDictionaryPanel({ client, datasources }: { client: ReportCe
       </DataTable>
       {!matched.length ? <p className={styles.hint}>没有匹配字段，请调整搜索词。</p> : null}
       {pages > 1 ? <PaginationControls page={currentPage} totalPages={pages} onPrevious={() => setPage(currentPage - 1)} onNext={() => setPage(currentPage + 1)} /> : null}
-      <p className={styles.hint}>物理映射：{item.table.resolvedTable || '尚未核验'} · 最后同步：{item.table.lastSyncedAt ? new Date(item.table.lastSyncedAt).toLocaleString('zh-CN') : '—'}</p>
+      <p className={styles.hint}>物理映射：{item.table.resolvedTable || '尚未核验'} · 最后同步：{item.table.lastSyncedAt ? formatShanghaiDateTime(item.table.lastSyncedAt) : '—'}</p>
     </section> : null}
   </div>
 }

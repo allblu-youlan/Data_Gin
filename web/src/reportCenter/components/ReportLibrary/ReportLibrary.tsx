@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useState, type ReactNode } from 'react'
 import { ArrowUpRight, FileBarChart2, GitCompareArrows, Search, Trash2, X } from 'lucide-react'
 import { Button, FeedbackState, StatusTag } from '../../../ui'
@@ -55,7 +56,4 @@ export function ReportLibrary({ reports, loading, loadingMore, hasMore, error, s
   </section>
 }
 
-function formatDate(value: string | null) {
-  if (!value || Number.isNaN(Date.parse(value))) return '尚未更新'
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value))
-}
+function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }

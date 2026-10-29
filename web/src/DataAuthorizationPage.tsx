@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from './dateTime.js'
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Clipboard, KeyRound, Plus, RefreshCcw, RotateCcw } from 'lucide-react'
 import {
@@ -363,5 +364,5 @@ function auditActionLabel(action: string) { return ({ ACCOUNT_CREATE: '开通账
 function actionTitle(action: NonNullable<ActionDialog>) { return action.kind === 'grant' ? `授权 / 续期 · ${permissionLabel(action.permission)}` : action.kind === 'revoke' ? `撤销 · ${permissionLabel(action.permission)}` : '重新签发访问 Token' }
 function dangerousActionTitle(action: SubmittedAction) { return action.kind === 'revoke' ? '确认撤销数据权限' : '确认重新签发访问 Token' }
 function dangerousActionDescription(action: SubmittedAction) { return action.kind === 'revoke' ? `确认撤销 ${action.account} 的 ${permissionLabel(action.permission ?? '')}？撤销后，该权限的下一次开放接口请求将立即失效。` : `确认重新签发 ${action.account} 的访问 Token？旧 Token 将立即失效。` }
-function formatDateTime(value: string | null | undefined) { if (!value) return '-'; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'short' }).format(date) }
+function formatDateTime(value: string | null | undefined) { return formatShanghaiDateTime(value, '-') }
 function formatAuditExpiry(audit: DataAuthorizationAudit) { if (!audit.oldExpiresAt && !audit.newExpiresAt) return '-'; return `${formatDateTime(audit.oldExpiresAt)} → ${formatDateTime(audit.newExpiresAt)}` }

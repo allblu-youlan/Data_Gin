@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Activity, Download, RefreshCw } from 'lucide-react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
@@ -13,7 +14,7 @@ import styles from './PassengerFlowPage.module.css'
 
 const number = new Intl.NumberFormat('zh-CN')
 const ratio = (value: number) => `${(value * 100).toFixed(1)}%`
-const localHour = (value: string) => value.replace('T', ' ').slice(0, 16)
+const localHour = formatShanghaiDateTime
 
 export function PassengerFlowPage({ client, canManage = false }: { client: WorkspaceApiClient; canManage?: boolean }) {
   const [filter, setFilter] = useState<PassengerFilter>(() => passengerPreset(1))

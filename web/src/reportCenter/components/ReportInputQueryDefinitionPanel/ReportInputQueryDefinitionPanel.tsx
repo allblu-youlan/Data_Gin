@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Braces, FlaskConical, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button, DataTable, Dialog, Drawer, FeedbackState, StatusTag } from '../../../ui'
@@ -160,6 +161,4 @@ function testMessage(result: ReportInputQueryTestResult) {
 	return result.status === 'SUCCESS' ? `查询通过，返回 ${result.rowCount} 条（${result.latencyMs} ms）。` : result.message || '查询测试失败。'
 }
 
-function formatDate(value: string | null) {
-	return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '-'
-}
+function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }

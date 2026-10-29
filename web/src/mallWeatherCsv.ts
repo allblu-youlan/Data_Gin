@@ -1,3 +1,4 @@
+import { formatShanghaiDate, formatShanghaiDateTime } from './dateTime.js'
 import type {
   MallWeatherAlert,
   MallWeatherDaily,
@@ -295,7 +296,7 @@ export function createMallWeatherDatasetCsv<Kind extends MallWeatherCsvKind>(
   if (!headers) throw new Error('invalid mall weather CSV kind')
   const fields = objectKeys(headers)
   const records: string[][] = [
-    ['商场编码', '商场名称', ...fields.map((field) => headers[field])],
+    ['商场编码', '商场名称', ...fields.map((field) => headers[field].replace('（UTC）', '（上海时间，原UTC）').replace('（当地时间）', '（上海时间）'))],
   ]
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -304,7 +305,7 @@ export function createMallWeatherDatasetCsv<Kind extends MallWeatherCsvKind>(
     records.push([
       protectSpreadsheetText(normalizedMall.mallCode),
       protectSpreadsheetText(normalizedMall.mallName),
-      ...fields.map((field) => formatCsvValue(row[field])),
+      ...fields.map((field) => formatWeatherCsvValue(String(field), row[field])),
     ])
   }
 
@@ -347,7 +348,7 @@ export function createMallWeatherChartCsv(
     ...times.map((time) => [
       protectSpreadsheetText(normalizedMall.mallCode),
       protectSpreadsheetText(normalizedMall.mallName),
-      protectSpreadsheetText(time),
+      protectSpreadsheetText(/^\d{4}-\d{2}-\d{2}$/.test(time) ? formatShanghaiDate(time) : formatShanghaiDateTime(time, time)),
       ...normalizedSeries.map((item) => formatCsvValue(item.values.get(time))),
     ]),
   ]
@@ -440,6 +441,13 @@ function objectKeys<Value extends object>(value: Value): Array<keyof Value> {
   return Object.keys(value) as Array<keyof Value>
 }
 
+function formatWeatherCsvValue(field: string, value: unknown): string {
+  if (typeof value === 'string' && /(?:At|Time|Minute)(?:Utc|Local)$/.test(field)) {
+    return protectSpreadsheetText(formatShanghaiDateTime(value, value))
+  }
+  return formatCsvValue(value)
+}
+
 function formatCsvValue(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return protectSpreadsheetText(value)
@@ -450,7 +458,7 @@ function formatCsvValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? '是' : '否'
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new Error('invalid mall weather CSV date')
-    return value.toISOString()
+    return formatShanghaiDateTime(value)
   }
   if (Array.isArray(value)) return formatWarnings(value)
   throw new Error('unsupported mall weather CSV value')

@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Database, Pencil, Plus, RefreshCw, Unplug } from 'lucide-react'
 import { Button, DataTable, Drawer, FeedbackState, StatusTag } from '../../../ui'
@@ -188,6 +189,4 @@ function datasourceInput(datasource: ReportDatasource | null): ReportDatasourceI
   } : { code: '', name: '', host: '', port: 1521, serviceName: '', sid: '', username: '', password: '', sessionTimezone: 'Asia/Shanghai', connectTimeoutSeconds: 5, queryTimeoutSeconds: 300, maxOpenConnections: 10, maxIdleConnections: 2, prefetchRows: 1000, arraySize: 1000, enabled: true }
 }
 
-function formatDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '-'
-}
+function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }

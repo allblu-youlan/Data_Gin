@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { useEffect, useState } from 'react'
 import { FileSpreadsheet, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
@@ -71,7 +72,4 @@ export function MessageManagementPage({ client, permissions }: Props) {
     <Dialog open={Boolean(pendingDelete)} role="alertdialog" title="删除办公消息" description="已被推送配置引用的消息不能删除。" closeDisabled={saving} onClose={() => setPendingDelete(null)} footer={<><button type="button" disabled={saving} onClick={() => setPendingDelete(null)}>取消</button><button type="button" className={styles.danger} disabled={saving} onClick={() => void remove()}>{saving ? '删除中…' : '确认删除'}</button></>}><p className={styles.dialogCopy}>确认删除“{pendingDelete?.name}”？该操作不可撤销。</p></Dialog>
   </PageCanvas>
 }
-function formatTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false })
-}
+function formatTime(value: string) { return formatShanghaiDateTime(value, '—') }

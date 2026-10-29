@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { DataTable, Drawer, FeedbackState, StatusTag } from '../../../ui'
@@ -116,7 +117,4 @@ function targetLabel(targetType: string) {
   return ({ REPORT_DATASOURCE: '数据源', REPORT_DEFINITION: '报表', REPORT_RUN: '运行', REPORT_EXPORT: '导出' } as Record<string, string>)[targetType] ?? targetType
 }
 
-function formatDate(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN')
-}
+function formatDate(value: string) { return formatShanghaiDateTime(value, '-') }

@@ -1,3 +1,4 @@
+import { formatShanghaiDate } from '../dateTime.js'
 import type { ClientResponse } from '../api/client'
 
 export type LegacyTask = {
@@ -69,11 +70,8 @@ export function backendDateTime(value: string) {
 }
 
 export function previousDayDateTimeLocal(endOfDay: boolean) {
-  const date = new Date()
-  date.setDate(date.getDate() - 1)
-  date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, 0)
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  const date = formatShanghaiDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+  return `${date}T${endOfDay ? '23:59:59' : '00:00:00'}`
 }
 
 export function timeFilterLabel(value: YouzanDistributionTimeFilter) {

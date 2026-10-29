@@ -1,3 +1,4 @@
+import { parseShanghaiDateTime, toShanghaiDateTimeInput } from './dateTime.js'
 export type DataPermissionCode = 'weather.read' | 'bojun.order.read' | 'bojun.store.read' | 'bojun.stock.read' | 'business_overview.read'
 export type DataPermissionStatus = 'ACTIVE' | 'EXPIRED' | 'NOT_GRANTED'
 
@@ -200,13 +201,11 @@ export function dataAuthorizationMessage(payload: unknown, fallback: string) {
 
 export function defaultAuthorizationExpiry(now = new Date()) {
   const expiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-  const local = new Date(expiry.getTime() - expiry.getTimezoneOffset() * 60 * 1000)
-  return local.toISOString().slice(0, 16)
+  return toShanghaiDateTimeInput(expiry).slice(0, 16)
 }
 
 export function authorizationExpiryISO(localDateTime: string) {
-  const value = new Date(localDateTime)
-  return Number.isNaN(value.getTime()) ? '' : value.toISOString()
+  return parseShanghaiDateTime(localDateTime)?.toISOString() ?? ''
 }
 
 export function buildDataAuthorizationGrant(

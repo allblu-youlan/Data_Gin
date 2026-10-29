@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { useEffect, useRef, useState } from 'react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { Button, MetricStrip, Section } from '../ui'
@@ -86,7 +87,7 @@ export function PassengerBackfillPanel({ client, filter, canManage, disabled, on
       {missing.malls.length > 0 && <div className={styles.gaps} aria-label="门店缺失小时">
         {missing.malls.map(mall => <div key={mall.mallId} className={styles.gap}>
           <span><strong>{mall.mallName}</strong> · 缺失 {mall.missingHours} 小时</span>
-          <span className={styles.barMeta}>{mall.firstMissingHour.replace('T', ' ').slice(0, 16)} 至 {mall.lastMissingHour.replace('T', ' ').slice(0, 16)}</span>
+          <span className={styles.barMeta}>{formatShanghaiDateTime(mall.firstMissingHour)} 至 {formatShanghaiDateTime(mall.lastMissingHour)}</span>
         </div>)}
       </div>}
     </>}
