@@ -15,5 +15,7 @@
 .notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin: 0; font-size: 13px; color: var(--color-text-secondary); }
 .error { color: var(--color-danger); font-size: 13px; margin: 0; }
 .footnote { font-size: 12px; color: var(--color-text-secondary); line-height: 1.7; margin: 0; }
+.gaps { display: grid; gap: var(--space-2); max-height: 240px; overflow-y: auto; margin: var(--space-3) 0; }
+.gap { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: space-between; font-size: 12px; }
 @media (max-width: 1050px) { .charts { grid-template-columns: minmax(0, 1fr); } .ranking { max-height: 400px; } }
 @media (max-width: 600px) { .page select { min-width: 0; } .presets { width: 100%; } }

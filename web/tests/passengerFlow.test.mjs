@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { passengerChartData, passengerFilterBody, passengerFilterError, passengerPreset, passengerQueryPath, parsePassengerMalls, parsePassengerOverview, shanghaiPassengerDate } from '../.test-dist/passengerFlow/contracts.js'
 import { canViewNavigationItem } from '../.test-dist/appShell/navigationPermissions.js'
+import { parsePassengerBackfill, parsePassengerMissing, runPassengerBackfill } from '../.test-dist/passengerFlow/backfillContracts.js'
 
 const counts = { passby: 100, traffic: 20, trafficCount: 18, trafficBatch: 10, captureRate: 0.2, recordCount: 1 }
 const trend = [
@@ -46,4 +47,39 @@ test('strictly parses the graph and mall option contracts', () => {
   assert.equal(parsePassengerOverview({ data: { ...overview, summary: { ...overview.summary, traffic: '20' } } }), null)
   assert.equal(parsePassengerOverview({ data: { ...overview, trend: null } }), null)
   assert.equal(parsePassengerMalls({ data: { items: [{ mallId: 3 }] } }), null)
+})
+
+const batch = { savedHours: 2, sourceMissingHours: 1, failedDays: 0, failedHours: 0, scannedDays: 1, remainingHours: 3, nextCursor: 'next-day' }
+
+test('missing-hour and backfill responses preserve incomplete outcomes', () => {
+  const missing = { startDate: '2026-10-29', endDate: '2026-10-29', timeZone: 'Asia/Shanghai', checkedUntil: '2026-10-29T11:00:00+08:00', expectedHours: 11, existingHours: 9, missingHours: 2, unboundMalls: 1,
+    malls: [{ mallId: 3, mallName: '门店甲', shopId: 's3', missingHours: 2, firstMissingHour: '2026-10-29T08:00:00+08:00', lastMissingHour: '2026-10-29T09:00:00+08:00' }] }
+  assert.deepEqual(parsePassengerMissing({ data: missing }), missing)
+  assert.equal(parsePassengerMissing({ data: { ...missing, missingHours: '2' } }), null)
+  assert.deepEqual(parsePassengerBackfill({ data: batch }), batch)
+  assert.equal(parsePassengerBackfill({ data: { ...batch, nextCursor: 1 } }), null)
+})
+
+test('backfill follows server cursor once and aggregates each batch', async () => {
+  const sent = [], progress = []
+  const result = await runPassengerBackfill(async cursor => {
+    sent.push(cursor)
+    return cursor ? { ...batch, savedHours: 1, sourceMissingHours: 0, failedDays: 1, failedHours: 1, remainingHours: 2, nextCursor: '' } : batch
+  }, value => progress.push(value), () => false)
+  assert.deepEqual(sent, ['', 'next-day'])
+  assert.equal(result.savedHours, 3)
+  assert.equal(result.sourceMissingHours, 1)
+  assert.equal(result.failedHours, 1)
+  assert.equal(result.remainingHours, 2)
+  assert.equal(progress.length, 2)
+})
+
+test('stop finishes current backfill batch and errors never replay POST', async () => {
+  let calls = 0
+  const stopped = await runPassengerBackfill(async () => { calls++; return batch }, () => {}, () => true)
+  assert.equal(calls, 1)
+  assert.equal(stopped.nextCursor, 'next-day')
+  calls = 0
+  await assert.rejects(runPassengerBackfill(async () => { calls++; throw new Error('network error') }, () => {}, () => false), /network error/)
+  assert.equal(calls, 1)
 })

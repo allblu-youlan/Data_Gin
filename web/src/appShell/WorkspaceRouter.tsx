@@ -105,7 +105,7 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   if (activeNav === 'step_runs') return <StepRunsPage client={client} focusRunID={stepRunFocusID} />
   if (activeNav === 'store_info') return <StoreInfoPage actorID={actorID} client={client} downloadFile={downloadFile} />
   if (activeNav === 'mall_weather') return <MallWeatherPage actorID={actorID} client={client} downloadFile={downloadFile} />
-  if (activeNav === 'passenger_flow') return <PassengerFlowPage client={client} />
+  if (activeNav === 'passenger_flow') return <PassengerFlowPage client={client} canManage={permissions.includes('data.manage')} />
   if (activeNav === 'office_messages') return <MessageManagementPage client={client} permissions={permissions} />
   if (activeNav === 'office_push') return <PushManagementPage client={client} permissions={permissions} />
   const mentionSections: Partial<Record<NavKey, MentionSection>> = { mention_chats: 'chats', mention_recipients: 'recipients', mention_reports: 'reports', mention_jobs: 'jobs', mention_status: 'status' }

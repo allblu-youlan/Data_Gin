@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Activity, Download, RefreshCw } from 'lucide-react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { MallWeatherChart } from '../MallWeatherChart'
+import { PassengerBackfillPanel } from './PassengerBackfillPanel'
 import { Button, FeedbackState, FilterToolbar, MetricStrip, PageCanvas, PageHeader, Section } from '../ui'
 import {
   parsePassengerMalls, parsePassengerOverview, passengerChartData, passengerFilterBody, passengerFilterError,
@@ -14,7 +15,7 @@ const number = new Intl.NumberFormat('zh-CN')
 const ratio = (value: number) => `${(value * 100).toFixed(1)}%`
 const localHour = (value: string) => value.replace('T', ' ').slice(0, 16)
 
-export function PassengerFlowPage({ client }: { client: WorkspaceApiClient }) {
+export function PassengerFlowPage({ client, canManage = false }: { client: WorkspaceApiClient; canManage?: boolean }) {
   const [filter, setFilter] = useState<PassengerFilter>(() => passengerPreset(1))
   const [malls, setMalls] = useState<PassengerMall[]>([])
   const [mallError, setMallError] = useState('')
@@ -148,6 +149,7 @@ export function PassengerFlowPage({ client }: { client: WorkspaceApiClient }) {
     {error && <FeedbackState kind="error" title="无法加载客流" description={error} action={<Button onClick={() => void load(filter)}>重试</Button>} />}
     {downloadError && <p className={styles.error} role="alert">{downloadError}</p>}
     {downloadMessage && <p className={styles.notice} role="status">{downloadMessage}</p>}
+    <PassengerBackfillPanel key={`${filter.startDate}:${filter.endDate}:${filter.mallId}`} client={client} filter={filter} canManage={canManage} disabled={changed || loading || Boolean(passengerFilterError(filter))} onUpdated={() => void load(filter)} />
     {loading ? <FeedbackState kind="loading" title="正在加载客流数据" description="正在汇总所选门店和日期范围内的小时记录。" /> : data && <>
       <div className={styles.context}><span>{data.startDate} 至 {data.endDate} · {snapshot?.filter.mallId ? malls.find(mall => String(mall.mallId) === snapshot.filter.mallId)?.mallName || '所选门店' : '全部授权门店'}</span><span>最新数据小时：{data.summary.latestHour ? localHour(data.summary.latestHour) : '暂无'}</span></div>
       <MetricStrip label="监控客流汇总" items={[
