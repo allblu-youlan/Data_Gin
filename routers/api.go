@@ -44,6 +44,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 	// 开放接口账号与数据授权，仅可信管理员可用
 	registerDataAuthorizationRoutes(api)
 	registerAccessRoutes(api)
+	registerTableEmailRoutes(api)
 
 }
 

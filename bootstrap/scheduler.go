@@ -57,6 +57,7 @@ func setupScheduler() {
 
 	registerOfficePushScheduledTasks(scheduler)
 	registerFeishuMentionScheduledTasks(scheduler)
+	registerTableEmailScheduledTasks(scheduler)
 
 	go func(scheduler *asynq.Scheduler) {
 		if err := scheduler.Run(); err != nil {

@@ -49,6 +49,7 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 	}
 	definitions := make([]job.OutboxTaskDefinition, 0)
 	definitions = append(definitions, job.OfficePushOutboxTaskDefinitions()...)
+	definitions = append(definitions, job.TableEmailOutboxTaskDefinitions()...)
 	definitions = append(definitions, job.FeishuMentionOutboxTaskDefinitions(
 		config.GetInt("cfg.feishu_mention.max_attempts", 5),
 		time.Duration(config.GetInt("cfg.feishu_mention.delivery_lease_seconds", 60))*time.Second,

@@ -28,6 +28,7 @@ import { OfficeMentionPage } from '../officeMention/OfficeMentionPage'
 import type { MentionSection } from '../officeMention/types'
 import { MessageManagementPage } from '../officeMessage/MessageManagementPage'
 import { PushManagementPage } from '../officeMessage/PushManagementPage'
+import { TableEmailNotificationsPage } from '../tableEmailNotifications/TableEmailNotificationsPage'
 import type { DeliveryLog, PipelineRun } from '../monitoringPages/types'
 import { ReportCenter } from '../reportCenter/ReportCenter'
 import type { ApiRequestOptions, ClientResponse, HTTPMethod } from '../api/client'
@@ -106,6 +107,7 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   if (activeNav === 'mall_weather') return <MallWeatherPage actorID={actorID} client={client} downloadFile={downloadFile} />
   if (activeNav === 'office_messages') return <MessageManagementPage client={client} permissions={permissions} />
   if (activeNav === 'office_push') return <PushManagementPage client={client} permissions={permissions} />
+  if (activeNav === 'table_email_notifications') return <TableEmailNotificationsPage client={client} permissions={permissions} />
   const mentionSections: Partial<Record<NavKey, MentionSection>> = { mention_chats: 'chats', mention_recipients: 'recipients', mention_reports: 'reports', mention_jobs: 'jobs', mention_status: 'status' }
   const mentionSection = mentionSections[activeNav]
   if (mentionSection) return <OfficeMentionPage key={mentionSection} client={client} permissions={permissions} section={mentionSection} />

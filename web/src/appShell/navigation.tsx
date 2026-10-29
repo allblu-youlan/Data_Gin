@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Inbox,
   ListChecks,
+  Mail,
   Search,
   ScrollText,
   Send,
@@ -57,6 +58,7 @@ export type NavKey =
   | 'report_exports'
   | 'office_messages'
   | 'office_push'
+  | 'table_email_notifications'
   | 'mention_chats'
   | 'mention_recipients'
   | 'mention_reports'
@@ -113,6 +115,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { key: 'office_messages', label: '消息管理', description: '文本与 Oracle Excel 来源', icon: <FileSpreadsheet aria-hidden="true" /> },
       { key: 'office_push', label: '推送管理', description: '飞书与 WebDAV 推送记录', icon: <Send aria-hidden="true" /> },
+      { key: 'table_email_notifications', label: '数据邮件提醒', description: 'Oracle 新增记录邮件通知', icon: <Mail aria-hidden="true" /> },
     ],
   },
   {
@@ -163,7 +166,7 @@ const compactWorkspaceKeys = new Set<NavKey>([
   'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'store_info',
   'mall_weather', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
   'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
-  'office_messages', 'office_push',
+  'office_messages', 'office_push', 'table_email_notifications',
   'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',
 ])
 

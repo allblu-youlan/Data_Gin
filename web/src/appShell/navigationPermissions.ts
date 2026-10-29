@@ -1,6 +1,7 @@
 import { overviewSignalAccess } from './overviewWorkspacePolicy'
 
 export function canViewNavigationItem(key: string, permissions: readonly string[]) {
+  if (key === 'table_email_notifications') return permissions.includes('office_message.read') && permissions.includes('report.manage')
   if (key === 'access_management') return permissions.some((permission) => permission.startsWith('system.'))
   if (key === 'overview') return Object.values(overviewSignalAccess(permissions)).some(Boolean)
   if (key === 'report_catalog') return permissions.includes('report.read') && permissions.includes('report.manage')

@@ -66,6 +66,7 @@ func setupQueueJob() {
 	mux.Use(requireQueueDatabaseAvailability(database.RequireAvailable, repairEnabled), jobLoggingMiddleware)
 
 	addQueueJob(mux)
+	registerTableEmailWorkers(mux)
 	// Register even when disabled, so queued tasks pause instead of becoming unknown types.
 	if mentionRuntime.processor != nil {
 		mux.HandleFunc(job.TypeFeishuMentionDeliver, mentionRuntime.processor.HandleDelivery)

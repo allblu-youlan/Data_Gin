@@ -27,7 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const schemaMigrationVersion = "2026-10-20-bojun-custom-report-v25"
+const schemaMigrationVersion = "2026-10-28-table-email-notification-v26"
+const bojunCustomReportMigrationVersion = "2026-10-20-bojun-custom-report-v25"
 const feishuManualReportMigrationVersion = "2026-10-14-feishu-manual-report-v24"
 const feishuMentionMigrationVersion = "2026-10-13-feishu-mention-v23"
 const officeWebDAVMigrationVersion = "2026-09-08-office-webdav-v22"
@@ -197,6 +198,7 @@ func bojunOracleMigrationModels() []interface{} {
 
 func schemaIncrementalMigrationBaselines() []string {
 	return []string{
+		bojunCustomReportMigrationVersion,
 		feishuManualReportMigrationVersion,
 		feishuMentionMigrationVersion,
 		officeWebDAVMigrationVersion,
@@ -229,6 +231,8 @@ func incrementalSchemaMigrationModels() []interface{} {
 	return append(models,
 		&model.ReportCategoryAccess{},
 		&model.ReportCategoryGrant{},
+		&model.TableEmailRule{},
+		&model.TableEmailDelivery{},
 	)
 }
 
@@ -476,6 +480,7 @@ func autoMigrateTables() error {
 	models = append(models, mallWeatherMigrationModels()...)
 	models = append(models, reportCenterMigrationModels()...)
 	models = append(models, officeMessageMigrationModels()...)
+	models = append(models, &model.TableEmailRule{}, &model.TableEmailDelivery{})
 	err := db.AutoMigrate(models...)
 
 	if err != nil {
