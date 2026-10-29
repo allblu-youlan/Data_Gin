@@ -51,6 +51,49 @@ func TestReportExportRendererWritesFrozenHeadersTypesAndSafeText(t *testing.T) {
 	}
 }
 
+func TestReportExportRendererDisplaysShanghaiDateTimes(t *testing.T) {
+	for _, test := range []struct {
+		name, valueType, want string
+		value                 interface{}
+	}{
+		{name: "UTC instant", valueType: "datetime", value: time.Date(2026, 10, 28, 16, 30, 12, 0, time.UTC), want: "2026-10-29 00:30:12"},
+		{name: "UTC text", valueType: "timestamp", value: "2026-10-28T16:30:12Z", want: "2026-10-29 00:30:12"},
+		{name: "different offset", valueType: "datetime", value: "2026-10-29T00:30:12+09:00", want: "2026-10-28 23:30:12"},
+		{name: "Shanghai offset", valueType: "datetime", value: "2026-10-29T00:30:12+08:00", want: "2026-10-29 00:30:12"},
+		{name: "Shanghai wall clock", valueType: "datetime", value: "2026-10-29 00:30:12", want: "2026-10-29 00:30:12"},
+		{name: "date without time", valueType: "date", value: "2026-10-29", want: "2026-10-29"},
+		{name: "date preserves calendar", valueType: "date", value: "2026-10-29T00:30:12+14:00", want: "2026-10-29"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			pager := &fakeReportExportPager{pages: []reportoracle.ResultPage{{
+				Columns: []string{"VALUE"},
+				Rows:    []reportoracle.ResultRow{{Key: "ROW-A", Values: []interface{}{test.value}}},
+				NextKey: "ROW-A",
+			}}}
+			output := filepath.Join(t.TempDir(), "time.xlsx")
+			_, err := NewReportExportRenderer(pager).Render(t.Context(), ReportExportRenderRequest{
+				OutputPath: output,
+				Columns: []frozenResultColumn{{
+					FieldID: "1", LogicalCode: "value", DatabaseColumn: "VALUE", ExcelHeader: "时间",
+					ValueType: test.valueType, ExportVisible: true, ExportAllowed: true,
+				}},
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := excelize.OpenFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			got, err := file.GetCellValue("数据", "A2")
+			if err != nil || got != test.want {
+				t.Fatalf("displayed time=%q error=%v, want %q", got, err, test.want)
+			}
+		})
+	}
+}
+
 func TestReportExportRendererDecimalNumberFormat(t *testing.T) {
 	tests := []struct {
 		name          string

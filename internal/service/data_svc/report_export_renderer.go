@@ -354,6 +354,8 @@ func reportExportCell(value interface{}, column frozenResultColumn, styles repor
 		style := styles.datetime
 		if valueType == "date" {
 			style = styles.date
+		} else {
+			parsed = parsed.In(officeShanghaiLocation)
 		}
 		return excelize.Cell{StyleID: style, Value: parsed}, false, nil
 	case "integer", "decimal", "number":
@@ -429,7 +431,7 @@ func reportExportTime(value interface{}) (time.Time, error) {
 	}
 	text := strings.TrimSpace(fmt.Sprint(value))
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999", "2006-01-02 15:04:05", time.DateOnly} {
-		if parsed, err := time.Parse(layout, text); err == nil {
+		if parsed, err := time.ParseInLocation(layout, text, officeShanghaiLocation); err == nil {
 			return parsed, nil
 		}
 	}
