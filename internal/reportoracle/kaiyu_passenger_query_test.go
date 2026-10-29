@@ -65,3 +65,18 @@ func TestKaiyuPassengerQueryPropagatesFailure(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestKaiyuPassengerQueryRejectsOversizedResultsWithoutTruncating(t *testing.T) {
+	row := []driver.Value{"shop1", "2026-10-28 09:00:00", int64(7), "门店一", int64(20), int64(10), int64(8), int64(5), float64(.5), float64(12), float64(.3), float64(.1), float64(100), float64(2), float64(50), float64(.2)}
+	values := make([][]driver.Value, 100_001)
+	for i := range values {
+		values[i] = row
+	}
+	rows := &bojunQueryTestRows{columns: make([]string, 16), values: values}
+	adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) { return rows, nil })
+	start := time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)
+	items, err := adapter.QueryKaiyuPassengerHours(t.Context(), start, start.Add(24*time.Hour), nil)
+	if !errors.Is(err, ErrKaiyuPassengerTooManyRows) || items != nil || !rows.closed {
+		t.Fatalf("items=%d err=%v closed=%v", len(items), err, rows.closed)
+	}
+}

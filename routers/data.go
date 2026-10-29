@@ -14,6 +14,7 @@ import (
 
 func apiData(api *gin.RouterGroup) {
 	registerMallRoutes(api, data_ctrl.NewMallController())
+	registerKaiyuPassengerRoutes(api, data_ctrl.NewKaiyuPassengerController())
 	businessOverviewController := data_ctrl.NewBusinessOverviewController()
 	registerBusinessOverviewRoutes(api, businessOverviewController)
 	registerOpenBusinessOverviewRoutes(api, businessOverviewController)

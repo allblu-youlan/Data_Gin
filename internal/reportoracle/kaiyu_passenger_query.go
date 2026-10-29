@@ -2,12 +2,17 @@ package reportoracle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"gin-biz-web-api/model"
 )
+
+const KaiyuPassengerMaxRows = 100_000
+
+var ErrKaiyuPassengerTooManyRows = errors.New("kaiyu passenger: too many rows")
 
 // QueryKaiyuPassengerHours reads the half-open Shanghai wall-clock interval.
 // mallIDs must already be constrained by the account's mall scope. Empty means ALL.
@@ -47,6 +52,9 @@ WHERE HOUR_START >= TO_TIMESTAMP(:1, 'YYYY-MM-DD HH24:MI:SS')
 	defer rows.Close()
 	result := make([]model.KaiyuPassengerHourly, 0)
 	for rows.Next() {
+		if len(result) >= KaiyuPassengerMaxRows {
+			return nil, ErrKaiyuPassengerTooManyRows
+		}
 		var row model.KaiyuPassengerHourly
 		var hour string
 		if err := rows.Scan(&row.ShopID, &hour, &row.MallID, &row.ShopName, &row.Passby, &row.Traffic, &row.TrafficCount, &row.TrafficBatch, &row.CaptureRate, &row.AvgVisitDuration, &row.NewVisitorsRatio, &row.DeepVisitRatio, &row.NetSales, &row.SalesTransactions, &row.ATV, &row.ShopperYield); err != nil {
