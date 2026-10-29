@@ -32,6 +32,7 @@ export type NavKey =
   | 'step_runs'
   | 'store_info'
   | 'mall_weather'
+  | 'passenger_flow'
   | 'access_management'
   | 'sources'
   | 'receive'
@@ -93,7 +94,10 @@ export const navGroups: NavGroup[] = [
       { key: 'youzan_distribution', label: '有赞分销', description: '每日拉取与手动补拉', icon: <Download aria-hidden="true" /> },
     ],
   },
-  { label: '数据服务', items: [{ key: 'mall_weather', label: '商场天气', description: '实况、趋势与预警', icon: <CloudSun aria-hidden="true" /> }] },
+  { label: '数据服务', items: [
+    { key: 'mall_weather', label: '商场天气', description: '实况、趋势与预警', icon: <CloudSun aria-hidden="true" /> },
+    { key: 'passenger_flow', label: '监控客流', description: '小时客流图表与 XLSX 下载', icon: <ChartColumn aria-hidden="true" /> },
+  ] },
   {
     label: '报表中心',
     items: [
@@ -161,7 +165,7 @@ const navKeys = navItems.map((item) => item.key)
 const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
   'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'store_info',
-  'mall_weather', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
+  'mall_weather', 'passenger_flow', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
   'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
   'office_messages', 'office_push',
   'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',

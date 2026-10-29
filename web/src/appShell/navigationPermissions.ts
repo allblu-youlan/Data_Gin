@@ -33,7 +33,7 @@ export function resolveAccessibleNavigationItem<T extends string>(
 
 function navPermission(key: string) {
   const permissions: Record<string, string> = {
-    business_overview: 'business_overview.read', store_info: 'mall.read', mall_weather: 'weather.read', sources: 'source.read', receive: 'data.read', pull_records: 'data.read',
+    business_overview: 'business_overview.read', store_info: 'mall.read', mall_weather: 'weather.read', passenger_flow: 'data.read', sources: 'source.read', receive: 'data.read', pull_records: 'data.read',
     backfill: 'data.manage', youzan_distribution: 'data.manage', rules: 'pipeline.read', processed: 'data.read', methods: 'pipeline.read',
     destinations: 'delivery.read', tasks: 'delivery.read', push_policy: 'delivery.read', runs: 'pipeline.read', step_runs: 'pipeline.read',
     delivery_logs: 'delivery.read', excel_jobs: 'excel.read', excel_schemes: 'excel.read', excel_write: 'excel.manage', excel_export: 'excel.read', excel_oracle_import: 'excel.read', excel_procedure: 'excel.read', excel_workflow: 'excel.read',
