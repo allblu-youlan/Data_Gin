@@ -17,10 +17,22 @@ import (
 )
 
 type kaiyuControllerService struct {
-	actor uint
-	query data_svc.KaiyuPassengerQuery
-	calls int
-	err   error
+	actor  uint
+	query  data_svc.KaiyuPassengerQuery
+	calls  int
+	err    error
+	cursor string
+}
+
+func (s *kaiyuControllerService) Missing(_ context.Context, actor uint, query data_svc.KaiyuPassengerQuery) (*data_svc.KaiyuPassengerMissingResult, error) {
+	s.actor, s.query = actor, query
+	s.calls++
+	return &data_svc.KaiyuPassengerMissingResult{}, s.err
+}
+func (s *kaiyuControllerService) Backfill(_ context.Context, actor uint, input data_svc.KaiyuPassengerBackfillRequest) (*data_svc.KaiyuPassengerBackfillResult, error) {
+	s.actor, s.query, s.cursor = actor, input.KaiyuPassengerQuery, input.Cursor
+	s.calls++
+	return &data_svc.KaiyuPassengerBackfillResult{}, s.err
 }
 
 func (s *kaiyuControllerService) Query(_ context.Context, actor uint, query data_svc.KaiyuPassengerQuery) (*data_svc.KaiyuPassengerResult, error) {
@@ -48,6 +60,8 @@ func kaiyuControllerRequest(t *testing.T, service *kaiyuControllerService, metho
 	router.GET("/passenger", controller.Query)
 	router.GET("/passenger/malls", controller.ListMalls)
 	router.POST("/passenger/export", controller.Export)
+	router.GET("/passenger/missing", controller.Missing)
+	router.POST("/passenger/backfill", controller.Backfill)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
@@ -59,6 +73,8 @@ func TestKaiyuPassengerControllerPassesAuthenticatedActorAndFilters(t *testing.T
 	for _, tc := range []struct{ method, path, body string }{
 		{http.MethodGet, "/passenger?startDate=2026-10-28&endDate=2026-10-28&mallId=7", ""},
 		{http.MethodPost, "/passenger/export", `{"startDate":"2026-10-28","endDate":"2026-10-28","mallId":7}`},
+		{http.MethodGet, "/passenger/missing?startDate=2026-10-28&endDate=2026-10-28&mallId=7", ""},
+		{http.MethodPost, "/passenger/backfill", `{"startDate":"2026-10-28","endDate":"2026-10-28","mallId":7,"cursor":"2026-10-28:7"}`},
 	} {
 		service := &kaiyuControllerService{}
 		recorder := kaiyuControllerRequest(t, service, tc.method, tc.path, tc.body)
@@ -83,6 +99,8 @@ func TestKaiyuPassengerControllerRejectsAmbiguousOrInvalidInput(t *testing.T) {
 		{http.MethodGet, "/passenger?startDate=2026-10-28&endDate=2026-10-28&actor=1", ""},
 		{http.MethodPost, "/passenger/export", `{"startDate":"2026-10-28","endDate":"2026-10-28","actor":1}`},
 		{http.MethodPost, "/passenger/export?mallId=8", `{"startDate":"2026-10-28","endDate":"2026-10-28","mallId":7}`},
+		{http.MethodPost, "/passenger/backfill", `{"startDate":"2026-10-28","endDate":"2026-10-28","actor":1}`},
+		{http.MethodGet, "/passenger/missing?startDate=2026-10-28&endDate=2026-10-28&mallId=7&mallId=9", ""},
 	} {
 		service := &kaiyuControllerService{}
 		recorder := kaiyuControllerRequest(t, service, tc.method, tc.path, tc.body)
@@ -100,6 +118,7 @@ func TestKaiyuPassengerControllerMapsErrorsBeforeBinaryHeaders(t *testing.T) {
 	}{
 		{auth_svc.ErrMallScopeForbidden, 403, "无权"},
 		{data_svc.ErrKaiyuPassengerInvalid, 422, "31"},
+		{data_svc.ErrKaiyuPassengerBackfillBusy, 409, "正在"},
 		{reportoracle.ErrKaiyuPassengerTooManyRows, 422, "100000"},
 		{fmt.Errorf("%w: password=hidden", data_svc.ErrKaiyuPassengerUnavailable), 503, "暂时"},
 	} {

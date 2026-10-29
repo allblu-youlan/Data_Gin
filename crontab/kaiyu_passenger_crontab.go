@@ -22,11 +22,18 @@ func (KaiyuPassengerCrontab) RunContext(ctx context.Context) {
 	defer kaiyuPassengerRunning.Store(false)
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
-	result, err := data_svc.RunKaiyuPassengerSync(ctx, data_svc.KaiyuPreviousHour(time.Now()))
-	fields := []zap.Field{zap.Time("hour_start", result.HourStart), zap.Int("saved", result.Saved), zap.Int("failed", result.Failed), zap.Int("unbound", result.Skipped)}
+	end := data_svc.KaiyuPreviousHour(time.Now()).Add(time.Hour)
+	missing, result, err := data_svc.RunKaiyuPassengerGapCheck(ctx, end.Add(-48*time.Hour), end, true)
+	fields := []zap.Field{zap.Time("end_hour", end)}
+	if missing != nil {
+		fields = append(fields, zap.Int("missing_hours", missing.MissingHours), zap.Int("unbound", missing.UnboundMalls))
+	}
+	if result != nil {
+		fields = append(fields, zap.Int("saved_hours", result.SavedHours), zap.Int("source_missing_hours", result.SourceMissingHours), zap.Int("failed_hours", result.FailedHours), zap.Int("remaining_hours", result.RemainingHours))
+	}
 	if err != nil {
-		logger.Error("开域小时客流同步未全部完成", append(fields, zap.String("error", providerhttp.RedactText(err.Error())))...)
+		logger.Error("开域小时客流查缺补拉未全部完成", append(fields, zap.String("error", providerhttp.RedactText(err.Error())))...)
 		return
 	}
-	logger.Info("开域小时客流同步完成", fields...)
+	logger.Info("开域最近48小时客流查缺补拉完成", fields...)
 }

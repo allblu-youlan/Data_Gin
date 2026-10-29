@@ -91,5 +91,46 @@ func newKaiyuCommand() *cobra.Command {
 	}}
 	syncCmd.Flags().StringVar(&hourText, "hour", "", "北京时间小时，例如 2026-10-28 09:00")
 	command.AddCommand(syncCmd)
+	command.AddCommand(newKaiyuGapCommand(false), newKaiyuGapCommand(true))
+	return command
+}
+
+func newKaiyuGapCommand(backfill bool) *cobra.Command {
+	name, description := "missing", "检查已绑定门店缺失的完整小时，默认最近48小时"
+	if backfill {
+		name, description = "backfill", "按门店和日期补齐缺失小时，默认最近48小时"
+	}
+	var startDate, endDate string
+	command := &cobra.Command{Use: name, Short: description, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		end := data_svc.KaiyuPreviousHour(time.Now()).Add(time.Hour)
+		start := end.Add(-48 * time.Hour)
+		if startDate != "" || endDate != "" {
+			location := time.FixedZone("Asia/Shanghai", 8*3600)
+			var err error
+			start, err = time.ParseInLocation(time.DateOnly, startDate, location)
+			if err != nil {
+				return fmt.Errorf("start-date 格式为 YYYY-MM-DD: %w", err)
+			}
+			end, err = time.ParseInLocation(time.DateOnly, endDate, location)
+			if err != nil {
+				return fmt.Errorf("end-date 格式为 YYYY-MM-DD: %w", err)
+			}
+			end = end.AddDate(0, 0, 1)
+		}
+		bootstrap.InitializeMigration()
+		ctx, cancel := context.WithTimeout(cmd.Context(), 20*time.Minute)
+		defer cancel()
+		missing, result, err := data_svc.RunKaiyuPassengerGapCheck(ctx, start, end, backfill)
+		output := struct {
+			Missing  *data_svc.KaiyuPassengerMissingResult  `json:"missing"`
+			Backfill *data_svc.KaiyuPassengerBackfillResult `json:"backfill,omitempty"`
+		}{Missing: missing}
+		if backfill {
+			output.Backfill = result
+		}
+		return errors.Join(err, json.NewEncoder(cmd.OutOrStdout()).Encode(output))
+	}}
+	command.Flags().StringVar(&startDate, "start-date", "", "开始日期（含），与 end-date 一起使用，最多31天")
+	command.Flags().StringVar(&endDate, "end-date", "", "结束日期（含），只处理已经结束的小时")
 	return command
 }

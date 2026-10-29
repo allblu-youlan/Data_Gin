@@ -21,6 +21,8 @@ type KaiyuPassengerQueryService interface {
 	Query(context.Context, uint, data_svc.KaiyuPassengerQuery) (*data_svc.KaiyuPassengerResult, error)
 	ListMalls(context.Context, uint) (*data_svc.KaiyuPassengerMallListResult, error)
 	Export(context.Context, uint, data_svc.KaiyuPassengerQuery) (*data_svc.KaiyuPassengerExport, error)
+	Missing(context.Context, uint, data_svc.KaiyuPassengerQuery) (*data_svc.KaiyuPassengerMissingResult, error)
+	Backfill(context.Context, uint, data_svc.KaiyuPassengerBackfillRequest) (*data_svc.KaiyuPassengerBackfillResult, error)
 }
 
 type KaiyuPassengerController struct{ service KaiyuPassengerQueryService }
@@ -37,6 +39,14 @@ func NewKaiyuPassengerControllerWithService(service KaiyuPassengerQueryService) 
 }
 
 func (controller *KaiyuPassengerController) Query(c *gin.Context) {
+	controller.queryHours(c, false)
+}
+
+func (controller *KaiyuPassengerController) Missing(c *gin.Context) {
+	controller.queryHours(c, true)
+}
+
+func (controller *KaiyuPassengerController) queryHours(c *gin.Context, missing bool) {
 	values := c.Request.URL.Query()
 	if len(values["startDate"]) != 1 || len(values["endDate"]) != 1 {
 		writeKaiyuPassengerError(c, data_svc.ErrKaiyuPassengerInvalid)
@@ -57,7 +67,28 @@ func (controller *KaiyuPassengerController) Query(c *gin.Context) {
 		}
 		input.MallID = uint(id)
 	}
-	result, err := controller.service.Query(c.Request.Context(), auth.CurrentUserID(c), input)
+	var result any
+	var err error
+	if missing {
+		result, err = controller.service.Missing(c.Request.Context(), auth.CurrentUserID(c), input)
+	} else {
+		result, err = controller.service.Query(c.Request.Context(), auth.CurrentUserID(c), input)
+	}
+	if err != nil {
+		writeKaiyuPassengerError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	responses.New(c).ToResponseWithStatus(http.StatusOK, result)
+}
+
+func (controller *KaiyuPassengerController) Backfill(c *gin.Context) {
+	var input data_svc.KaiyuPassengerBackfillRequest
+	if len(c.Request.URL.Query()) != 0 || decodeMallJSON(c, &input) != nil {
+		writeKaiyuPassengerError(c, data_svc.ErrKaiyuPassengerInvalid)
+		return
+	}
+	result, err := controller.service.Backfill(c.Request.Context(), auth.CurrentUserID(c), input)
 	if err != nil {
 		writeKaiyuPassengerError(c, err)
 		return
@@ -104,6 +135,8 @@ func (controller *KaiyuPassengerController) Export(c *gin.Context) {
 func writeKaiyuPassengerError(c *gin.Context, err error) {
 	response := responses.New(c)
 	switch {
+	case errors.Is(err, data_svc.ErrKaiyuPassengerBackfillBusy):
+		response.ToSafeErrorResponse(errcode.Conflict, "客流补拉正在执行，请稍后重试")
 	case errors.Is(err, auth_svc.ErrMallScopeForbidden):
 		response.ToSafeErrorResponse(errcode.Forbidden, "无权访问所选门店的客流数据")
 	case errors.Is(err, reportoracle.ErrKaiyuPassengerTooManyRows):

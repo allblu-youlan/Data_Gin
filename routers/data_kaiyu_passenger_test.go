@@ -23,9 +23,11 @@ func TestKaiyuPassengerRoutesRequireAuthentication(t *testing.T) {
 	router := gin.New()
 	registerKaiyuPassengerRoutes(router.Group("/api"), &data_ctrl.KaiyuPassengerController{})
 	want := map[string]bool{
-		"GET /api/v1/kaiyu-passenger":         true,
-		"GET /api/v1/kaiyu-passenger/malls":   true,
-		"POST /api/v1/kaiyu-passenger/export": true,
+		"GET /api/v1/kaiyu-passenger":           true,
+		"GET /api/v1/kaiyu-passenger/malls":     true,
+		"POST /api/v1/kaiyu-passenger/export":   true,
+		"GET /api/v1/kaiyu-passenger/missing":   true,
+		"POST /api/v1/kaiyu-passenger/backfill": true,
 	}
 	if len(router.Routes()) != len(want) {
 		t.Fatalf("routes=%v", router.Routes())

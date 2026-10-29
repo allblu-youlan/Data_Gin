@@ -14,6 +14,8 @@ import (
 
 var kaiyuLocation = time.FixedZone("Asia/Shanghai", 8*3600)
 
+var ErrKaiyuPassengerSourceMissing = errors.New("kaiyu passenger: source hour missing")
+
 type kaiyuMallReader interface {
 	List(context.Context, data_dao.MallListFilter) ([]model.Mall, error)
 }
@@ -117,6 +119,12 @@ func (s *KaiyuPassengerService) syncMallHour(ctx context.Context, mall model.Mal
 	if err != nil {
 		return err
 	}
+	return s.saveMallHour(ctx, mall, id, hour, rows)
+}
+
+// saveMallHour also serves day-based backfills, so all hours from one provider
+// response use the same validation and idempotent Oracle write.
+func (s *KaiyuPassengerService) saveMallHour(ctx context.Context, mall model.Mall, id string, hour time.Time, rows []kaiyu.HourlyPassenger) error {
 	expected := hour.Format("2006-01-02 15:04")
 	var matched *kaiyu.HourlyPassenger
 	for i := range rows {
@@ -133,7 +141,7 @@ func (s *KaiyuPassengerService) syncMallHour(ctx context.Context, mall model.Mal
 		matched = row
 	}
 	if matched == nil {
-		return fmt.Errorf("接口尚无小时数据 %s，可稍后补拉", expected)
+		return fmt.Errorf("%w: %s", ErrKaiyuPassengerSourceMissing, expected)
 	}
 	row := model.KaiyuPassengerHourly{
 		MallID: mall.ID, ShopID: id, ShopName: matched.ShopName, HourStart: hour,
@@ -144,6 +152,7 @@ func (s *KaiyuPassengerService) syncMallHour(ctx context.Context, mall model.Mal
 	if row.ShopName == "" {
 		row.ShopName = mall.NameCN
 	}
+	var err error
 	for attempt := 0; attempt < 3; attempt++ {
 		if err = ctx.Err(); err != nil {
 			return err

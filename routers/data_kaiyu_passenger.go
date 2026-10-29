@@ -13,5 +13,7 @@ func registerKaiyuPassengerRoutes(api *gin.RouterGroup, controller *data_ctrl.Ka
 	group.Use(middleware.AuthJWT(), middleware.RequirePermission(model.PermissionDataRead))
 	group.GET("", middleware.LimitRoute("60-M"), controller.Query)
 	group.GET("/malls", middleware.LimitRoute("60-M"), controller.ListMalls)
+	group.GET("/missing", middleware.LimitRoute("60-M"), controller.Missing)
+	group.POST("/backfill", middleware.RequirePermission(model.PermissionDataManage), middleware.LimitRoute("120-M"), controller.Backfill)
 	group.POST("/export", middleware.LimitRoute("10-M"), controller.Export)
 }
