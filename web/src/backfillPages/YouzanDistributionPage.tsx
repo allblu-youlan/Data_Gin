@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { AlertTriangle } from 'lucide-react'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { ClientResponse } from '../api/client'
@@ -210,9 +211,9 @@ function Definition({ className, label, value }: { className?: string; label: st
 
 function BackfillResult({ title, result }: { title: string; result: YouzanDistributionBackfillResult }) {
   const samples = result.samples ?? []
-  return <Section title={title} description={`${timeFilterLabel(result.time_filter)} / ${result.start_time} ~ ${result.end_time} / 拉取 ${result.fetch_pages} 页`} flush>
+  return <Section title={title} description={`${timeFilterLabel(result.time_filter)} / ${formatShanghaiDateTime(result.start_time)} ~ ${formatShanghaiDateTime(result.end_time)} / 拉取 ${result.fetch_pages} 页`} flush>
     <MetricStrip label={`${title}统计`} items={[{ key: 'total', label: '有赞返回', value: result.total_count }, { key: 'writable', label: '可写入', value: result.writable_count }, { key: 'existing', label: '已存在', value: result.existing_count }, { key: 'written', label: '已写入', value: result.saved_count }, { key: 'failed', label: '失败', value: result.failed_count }]} />
-    {samples.length === 0 ? <FeedbackState kind="empty" title="暂无样例数据" /> : <DataTable minWidth={880} scrollLabel={`${title}订单样例`}><thead><tr><th scope="col">状态</th><th scope="col">订单号</th><th scope="col">成功时间</th><th scope="col">实付金额</th><th scope="col">解密昵称</th><th scope="col">说明</th></tr></thead><tbody>{samples.map((sample, index) => <tr key={`${sample.tid}-${sample.status}-${index}`}><td><StatusTag tone={backfillStatusTone(sample.status)}>{backfillStatusLabel(sample.status)}</StatusTag></td><td>{sample.tid || '-'}</td><td>{sample.success_time || '-'}</td><td>{sample.payment || '-'}</td><td>{sample.fans_nickname || '-'}</td><td>{sample.reason || '-'}</td></tr>)}</tbody></DataTable>}
+    {samples.length === 0 ? <FeedbackState kind="empty" title="暂无样例数据" /> : <DataTable minWidth={880} scrollLabel={`${title}订单样例`}><thead><tr><th scope="col">状态</th><th scope="col">订单号</th><th scope="col">成功时间</th><th scope="col">实付金额</th><th scope="col">解密昵称</th><th scope="col">说明</th></tr></thead><tbody>{samples.map((sample, index) => <tr key={`${sample.tid}-${sample.status}-${index}`}><td><StatusTag tone={backfillStatusTone(sample.status)}>{backfillStatusLabel(sample.status)}</StatusTag></td><td>{sample.tid || '-'}</td><td>{formatShanghaiDateTime(sample.success_time, '-')}</td><td>{sample.payment || '-'}</td><td>{sample.fans_nickname || '-'}</td><td>{sample.reason || '-'}</td></tr>)}</tbody></DataTable>}
   </Section>
 }
 
@@ -221,7 +222,7 @@ function SelectField({ value, onChange }: { value: YouzanDistributionTimeFilter;
 }
 
 function DateTimeField({ label, name, defaultValue, onChange }: { label: string; name: string; defaultValue: string; onChange?: () => void }) {
-  return <label className={styles.field}>{label}<input name={name} type="datetime-local" defaultValue={defaultValue} onChange={onChange} required /></label>
+  return <label className={styles.field}>{label}<input name={name} type="datetime-local" step="1" defaultValue={defaultValue} onChange={onChange} required /></label>
 }
 
 function ManualRunForm({ task, onSubmit }: { task: LegacyTask; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
@@ -239,7 +240,7 @@ function ManualRunConfirmation({ task, payload, result, error }: { task: LegacyT
     <dl className={styles.definition}>
       <Definition label="任务编码" value={<code>{task.code}</code>} />
       <Definition label="筛选方式" value={timeFilterLabel(payload.time_filter)} />
-      <Definition className={styles.wide} label="执行时间范围" value={`${payload.start_time} ~ ${payload.end_time}`} />
+      <Definition className={styles.wide} label="执行时间范围" value={`${formatShanghaiDateTime(payload.start_time)} ~ ${formatShanghaiDateTime(payload.end_time)}`} />
     </dl>
     {error ? <FeedbackState kind="error" title="任务未投递" description={error} /> : null}
     {result ? <FeedbackState kind="empty" title="任务已投递" description={`任务 ID ${result.id}，队列 ${result.queue}，类型 ${result.type}。`} /> : null}

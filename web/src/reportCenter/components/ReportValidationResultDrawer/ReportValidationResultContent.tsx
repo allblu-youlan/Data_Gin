@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { CheckCircle2 } from 'lucide-react'
 import { StatusTag } from '../../../ui'
 import type { ReportPublication } from '../../types'
@@ -40,7 +41,4 @@ function qualifiedName(owner: string, packageName: string, name: string) {
   return [owner, packageName, name].filter(Boolean).join('.') || '—'
 }
 
-function formatDate(value: string) {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('zh-CN')
-}
+function formatDate(value: string) { return formatShanghaiDateTime(value, '—') }

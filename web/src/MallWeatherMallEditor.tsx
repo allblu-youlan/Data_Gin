@@ -35,6 +35,7 @@ export function MallDetailsFields({ form, onChange, disabled, mallCodeReadOnly =
   return <>
     <label><span>商场编码 *</span><input name="mallCode" value={form.mallCode} onChange={(event) => onChange('mallCode', event.currentTarget.value)} placeholder="例如 SH-PD-001" maxLength={64} disabled={disabled || mallCodeReadOnly} /></label>
     <label><span>商场名称 *</span><input name="nameCn" value={form.nameCn} onChange={(event) => onChange('nameCn', event.currentTarget.value)} placeholder="中文名称" maxLength={255} disabled={disabled} /></label>
+    <label><span>开域店铺 ID</span><input name="kaiyuShopId" value={form.kaiyuShopId || ''} onChange={(event) => onChange('kaiyuShopId', event.currentTarget.value)} placeholder="填写监控平台 shopid，留空不采集" maxLength={64} disabled={disabled} /></label>
     <label><span>省份 *</span><input name="province" value={form.province} onChange={(event) => onChange('province', event.currentTarget.value)} placeholder="上海市" maxLength={128} disabled={disabled} /></label>
     <label><span>城市 *</span><input name="city" value={form.city} onChange={(event) => onChange('city', event.currentTarget.value)} placeholder="上海市" maxLength={128} disabled={disabled} /></label>
     <label><span>区县</span><input name="district" value={form.district} onChange={(event) => onChange('district', event.currentTarget.value)} placeholder="浦东新区" maxLength={128} disabled={disabled} /></label>
@@ -46,6 +47,7 @@ function mallEditInput(mall: MallWeatherMall): MallWeatherCreateInput {
   return {
     mallCode: mall.mallCode,
     nameCn: mall.nameCn,
+    kaiyuShopId: mall.kaiyuShopId || '',
     province: mall.province,
     city: mall.city,
     district: mall.district,
@@ -216,7 +218,7 @@ export function MallWeatherMallEditor({ mall, client, onMallUpdated, onMallDelet
           <label className={styles['mall-weather-form-wide']}><span>确认原因</span><input name="editCoordinateReason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} maxLength={500} disabled={submitting} /></label>
         </div>
         <div className={[styles['mall-weather-form-actions'], styles['mall-weather-form-wide']].join(' ')}>
-          <button type="submit" disabled={submitting}>{submitting ? '保存中' : '保存地址并重新解析'}</button>
+          <button type="submit" disabled={submitting}>{submitting ? '保存中' : '保存店铺信息'}</button>
           <button className={styles['primary']} type="button" onClick={requestCoordinateConfirmation} disabled={submitting}>{submitting ? '确认中' : '保存并确认高德坐标'}</button>
         </div>
       </form>}

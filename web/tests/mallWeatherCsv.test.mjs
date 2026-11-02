@@ -130,8 +130,8 @@ test('creates chart-scoped CSV aligned by time with only visible series', () => 
   ], mall))
   assert.equal(text, [
     '商场编码,商场名称,时间,温度（°C）,体感温度（°C）',
-    'SH-001,上海测试商场,2026-08-02 10:00,28,',
-    'SH-001,上海测试商场,2026-08-02 11:00,29,31',
+    'SH-001,上海测试商场,2026-08-02 10:00:00,28,',
+    'SH-001,上海测试商场,2026-08-02 11:00:00,29,31',
     '',
   ].join('\r\n'))
   assert.equal(mallWeatherChartCsvFileName('hourly_temperature', ' SH/001 '), 'SH_001_hourly_temperature.csv')
@@ -309,4 +309,13 @@ test('rejects invalid contexts, rows and non-finite numeric data', () => {
     qualityWarnings: [],
   }], mall), /number/)
   assert.throws(() => createMallWeatherCsvZip(null, mall), /ZIP data/)
+})
+
+test('exports chart times in Shanghai even when source points use UTC', () => {
+  const csv = decodeCsv(createMallWeatherChartCsv([{ id: 'traffic', name: '客流', unit: '人次', data: [{ time: '2026-10-29T16:03:04Z', value: 10 }] }], mall))
+  assert.ok(csv.includes('2026-10-30 00:03:04'))
+  assert.ok(!csv.includes('2026-10-29T16:03:04Z'))
+  const dataset = decodeCsv(createMallWeatherDatasetCsv('minutely', [{ forecastMinuteUtc: '2026-10-29T16:03:04Z', forecastMinuteLocal: '2026-10-30T00:03:04+08:00' }], mall))
+  assert.ok(dataset.includes('2026-10-30 00:03:04,2026-10-30 00:03:04'))
+  assert.ok(dataset.includes('上海时间'))
 })

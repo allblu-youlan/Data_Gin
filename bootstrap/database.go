@@ -27,7 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const schemaMigrationVersion = "2026-10-28-kaiyu-passenger-v27"
+const schemaMigrationVersion = "2026-11-02-open-api-integration-v28"
+const kaiyuMigrationVersion = "2026-10-28-kaiyu-passenger-v27"
 const kaiyuPreviousMigrationVersion = "2026-10-28-table-email-notification-v26"
 const bojunCustomReportMigrationVersion = "2026-10-20-bojun-custom-report-v25"
 const feishuManualReportMigrationVersion = "2026-10-14-feishu-manual-report-v24"
@@ -199,6 +200,7 @@ func bojunOracleMigrationModels() []interface{} {
 
 func schemaIncrementalMigrationBaselines() []string {
 	return []string{
+		kaiyuMigrationVersion,
 		kaiyuPreviousMigrationVersion,
 		bojunCustomReportMigrationVersion,
 		feishuManualReportMigrationVersion,

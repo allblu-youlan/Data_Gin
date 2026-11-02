@@ -66,8 +66,8 @@ test('builds the exact bounded audit cursor request contract with an RFC3339 tim
 
 test('normalizes default and explicit expiry', () => {
   const now = new Date('2026-07-28T00:00:00Z')
-  assert.equal(defaultAuthorizationExpiry(now).length, 16)
-  assert.match(authorizationExpiryISO('2026-08-27T12:30'), /^2026-08-/)
+  assert.equal(defaultAuthorizationExpiry(now), '2026-08-27T08:00')
+  assert.equal(authorizationExpiryISO('2026-08-27T12:30'), '2026-08-27T04:30:00.000Z')
   assert.equal(authorizationExpiryISO('invalid'), '')
   assert.deepEqual(buildDataAuthorizationGrant('bojun.order.read', '2026-08-27T12:30', false), {
     permission: 'bojun.order.read',

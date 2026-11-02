@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from './dateTime.js'
 import { Plus, RefreshCcw, Save, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { DataTable } from './ui'
@@ -229,8 +230,7 @@ function datasetLabel(kind: string) {
 }
 
 function formatDate(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false })
+  return formatShanghaiDateTime(value)
 }
 
 function profileError(status: number, fallback: string, forbidden: string) {

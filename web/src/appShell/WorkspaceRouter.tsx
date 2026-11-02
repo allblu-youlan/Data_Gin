@@ -4,6 +4,7 @@ import { BojunBackfillPage } from '../backfillPages/BojunBackfillPage'
 import { YouzanDistributionPage } from '../backfillPages/YouzanDistributionPage'
 import type { LegacyTask } from '../backfillPages/youzanDistributionSupport'
 import { BusinessOverviewPage } from '../businessOverviewPages/BusinessOverviewPage'
+import { PassengerFlowPage } from '../passengerFlow/PassengerFlowPage'
 import { DeliveryTasksPage } from '../configurationPages/DeliveryTasksPage/DeliveryTasksPage'
 import { DestinationsPage } from '../configurationPages/DestinationsPage/DestinationsPage'
 import { MethodsPage } from '../configurationPages/MethodsPage/MethodsPage'
@@ -105,6 +106,7 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   if (activeNav === 'step_runs') return <StepRunsPage client={client} focusRunID={stepRunFocusID} />
   if (activeNav === 'store_info') return <StoreInfoPage actorID={actorID} client={client} downloadFile={downloadFile} />
   if (activeNav === 'mall_weather') return <MallWeatherPage actorID={actorID} client={client} downloadFile={downloadFile} />
+  if (activeNav === 'passenger_flow') return <PassengerFlowPage client={client} canManage={permissions.includes('data.manage')} />
   if (activeNav === 'office_messages') return <MessageManagementPage client={client} permissions={permissions} />
   if (activeNav === 'office_push') return <PushManagementPage client={client} permissions={permissions} />
   if (activeNav === 'table_email_notifications') return <TableEmailNotificationsPage client={client} permissions={permissions} />

@@ -19,13 +19,13 @@ func TestRegisterFeishuMentionRoutesAreInternalOnly(t *testing.T) {
 			t.Fatalf("unexpected route %s", r.Path)
 		}
 	}
-	for _, route := range []string{"GET /chats", "POST /chats", "PUT /chats/:id", "GET /recipients", "GET /recipients/:id", "GET /reports", "GET /reports/:id", "POST /reports/:id/resend", "GET /reports/:id/messages", "GET /reports/:id/parts/:partNo", "GET /jobs", "POST /jobs/:id/retry", "GET /status", "PUT /digest-settings"} {
+	for _, route := range []string{"GET /chats", "POST /chats", "PUT /chats/:id", "POST /chats/:id/update", "GET /recipients", "GET /recipients/:id", "GET /reports", "GET /reports/:id", "POST /reports/:id/resend", "GET /reports/:id/messages", "GET /reports/:id/parts/:partNo", "GET /jobs", "POST /jobs/:id/retry", "GET /status", "PUT /digest-settings", "POST /digest-settings/update"} {
 		parts := strings.SplitN(route, " ", 2)
 		if !routes[parts[0]+" /api/v1/feishu-mention"+parts[1]] {
 			t.Fatalf("missing route %s", route)
 		}
 	}
-	if len(routes) != 14 {
+	if len(routes) != 16 {
 		t.Fatalf("unexpected route count %d", len(routes))
 	}
 }
@@ -59,7 +59,7 @@ func TestFeishuMentionDigestSettingsUsesManagePermission(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(source), `manage := middleware.RequirePermission(model.PermissionOfficeMentionManage)`) ||
-		!strings.Contains(string(source), `group.PUT("/digest-settings", manage, controller.SaveDigestSettings)`) {
+		!strings.Contains(string(source), `registerPOSTWriteRoute(group, http.MethodPut, "/digest-settings", manage, controller.SaveDigestSettings)`) {
 		t.Fatal("digest settings must require dedicated office_mention.manage permission")
 	}
 }

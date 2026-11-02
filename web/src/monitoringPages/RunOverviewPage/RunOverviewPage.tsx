@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../dateTime.js'
 import { Activity, AlertTriangle, Server } from 'lucide-react'
 import type { DataStatisticsSummary, HealthSummary, MallWeatherMetricsSummary } from '../../monitoring'
 import { DataTable, FeedbackState, MetricStrip, PageCanvas, PageHeader, Section, StatusTag, type StatusTagTone } from '../../ui'
@@ -107,11 +108,7 @@ function runStatusLabel(status: string) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return '-'
-  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}+08:00`
-  const date = new Date(normalized)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date).replace(/\//g, '-')
+  return formatShanghaiDateTime(value, '-')
 }
 
 function sum(items: OverviewPipelineRun[], key: 'success_count' | 'failed_count') {

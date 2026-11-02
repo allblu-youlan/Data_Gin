@@ -40,7 +40,7 @@ func TestReportCenterMigrationModelsAreUnique(t *testing.T) {
 }
 
 func TestSchemaMigrationVersionIncludesFeishuMention(t *testing.T) {
-	if schemaMigrationVersion != "2026-10-28-kaiyu-passenger-v27" {
+	if schemaMigrationVersion != "2026-11-02-open-api-integration-v28" {
 		t.Fatalf("schemaMigrationVersion = %q", schemaMigrationVersion)
 	}
 	if feishuMentionMigrationVersion != "2026-10-13-feishu-mention-v23" {
@@ -334,5 +334,19 @@ func TestRunPendingSchemaMigrationUsesFullPathWithoutPreviousVersion(t *testing.
 	})
 	if err != nil || incrementalCalls != 0 || fullCalls != 1 {
 		t.Fatalf("runPendingSchemaMigration() error=%v incremental=%d full=%d", err, incrementalCalls, fullCalls)
+	}
+}
+
+func TestSchemaMigrationSupportsDeployedKaiyuAndEmailVersions(t *testing.T) {
+	for _, version := range []string{"2026-10-28-kaiyu-passenger-v27", "2026-10-28-table-email-notification-v26"} {
+		t.Run(version, func(t *testing.T) {
+			if schemaMigrationVersion == version {
+				t.Fatal("new permission seeds require a new migration version")
+			}
+			got, applied := preferredSchemaMigrationBaseline(schemaIncrementalMigrationBaselines(), []string{version})
+			if !applied || got != version {
+				t.Fatalf("baseline = (%q, %t), want (%q, true)", got, applied, version)
+			}
+		})
 	}
 }

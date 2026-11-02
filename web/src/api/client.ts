@@ -25,6 +25,7 @@ export type TokenRefreshResult =
 
 export type ApiRequestOptions = {
   method: HTTPMethod
+  responseType?: 'json' | 'blob'
   body?: unknown
   headers?: Record<string, string>
   signal?: AbortSignal
@@ -156,6 +157,16 @@ function authorizedHeaders(token: string, extra: Record<string, string> | undefi
   }
 }
 
+function writeTransport(path: string, method: HTTPMethod) {
+  if (method === 'GET' || method === 'POST') return { path, method }
+  // Match the backend POST aliases because the public gateway rejects other write methods.
+  const action = { PUT: 'update', PATCH: 'patch', DELETE: 'delete' }[method]
+  const suffixIndex = path.search(/[?#]/)
+  const pathname = suffixIndex < 0 ? path : path.slice(0, suffixIndex)
+  const query = suffixIndex < 0 ? '' : path.slice(suffixIndex)
+  return { path: `${pathname.replace(/\/+$/, '')}/${action}${query}`, method: 'POST' as const }
+}
+
 export function createApiClient(options: ApiClientOptions) {
   const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis)
   const timeoutMs = options.timeoutMs ?? 15_000
@@ -241,6 +252,7 @@ export function createApiClient(options: ApiClientOptions) {
 
   async function request(path: string, requestOptions: ApiRequestOptions): Promise<ClientResponse> {
     const { method, body, headers, signal, retry = true, acceptBareJSONSuccess = false, acceptSafeErrorMessage = false } = requestOptions
+    const transport = writeTransport(path, method)
     const retryable = method === 'GET' && retry
     let attempt = 0
     let replayedAfterRefresh = false
@@ -251,16 +263,19 @@ export function createApiClient(options: ApiClientOptions) {
         const canSendBody = method !== 'GET' && body !== undefined
         const formDataBody = canSendBody && isFormData(body)
         const requestToken = options.getToken()
-        const response = await fetchImpl(apiURL(path, options.baseURL), {
-          method,
+        const response = await fetchImpl(apiURL(transport.path, options.baseURL), {
+          method: transport.method,
           signal: requestSignal.signal,
           headers: authorizedHeaders(requestToken, headers, canSendBody && !formDataBody, formDataBody || method === 'GET'),
           body: !canSendBody ? undefined : formDataBody ? body : JSON.stringify(body),
         })
+        if (requestOptions.responseType === 'blob' && response.ok && !response.headers.get('Content-Type')?.includes('json')) {
+          return { ok: true, status: response.status, data: await response.blob() }
+        }
         const payload: unknown = await response.json().catch(() => null)
         const status = effectiveApiStatus(response.status, payload)
         const successfulPayload = isSuccessfulPayload(payload) || (acceptBareJSONSuccess && isBareJSONObject(payload))
-        if (response.ok && status < 400 && successfulPayload) return { ok: true, status, data: payload }
+        if (requestOptions.responseType !== 'blob' && response.ok && status < 400 && successfulPayload) return { ok: true, status, data: payload }
 
         if (status === 401) {
           if (options.getToken() !== requestToken) return abortedResponse()

@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Calendar, Pencil, Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
@@ -169,4 +170,4 @@ function RunStatus({ status }: { status: OfficePushRun['status'] }) {
 
 function pushChannelLabel(channel: OfficePushTarget['channel']) { return channel === 'WEBDAV' ? 'WebDAV' : '飞书' }
 
-function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) }
+function formatTime(value: string) { return formatShanghaiDateTime(value, '—') }

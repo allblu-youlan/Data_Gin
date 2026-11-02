@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../../../dateTime.js'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Eye, GitCompareArrows, Rocket } from 'lucide-react'
 import { Button, DataTable, Dialog, Drawer, FeedbackState, StatusTag } from '../../../ui'
@@ -143,6 +144,6 @@ function VersionDetailView({ detail }: { detail: ReportVersionDetail }) {
 
 function Item({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div><dt>{label}</dt><dd className={mono ? styles.mono : undefined}>{value}</dd></div> }
 function DiffView({ diff }: { diff: ReportVersionDiff }) { const total = diff.sections.reduce((count, section) => count + section.changes.length, 0); return <section className={styles.diff}><header><h3>v{diff.base.version} → v{diff.target.version}</h3><StatusTag tone={total ? 'warning' : 'success'}>{total ? `${total} 项变化` : '无差异'}</StatusTag></header>{diff.sections.map((section) => <section key={section.key}><h4>{section.label}</h4>{section.changes.length ? <ul>{section.changes.map((change) => <li key={change.key}><strong>{change.label}</strong><span><code>{displayDiffValue(change.before)}</code><ArrowRight aria-hidden="true" /><code>{displayDiffValue(change.after)}</code></span></li>)}</ul> : <p>无变化</p>}</section>)}</section> }
-function formatDate(value: string | null) { if (!value) return '-'; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN') }
+function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }
 function displayDiffValue(value: unknown) { if (value === null || value === undefined) return '-'; return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) }
 function shortFingerprint(value: string) { return value.length > 18 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value }

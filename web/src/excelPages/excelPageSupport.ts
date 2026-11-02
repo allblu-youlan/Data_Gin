@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { apiURL as buildApiURL } from '../apiURL'
 import {
   cloneExcelEmptyCellFills,
@@ -79,7 +80,7 @@ export function excelPreviewStat(stats: ExcelMatchPreviewStats, key: keyof Excel
 export function excelPreviewStatusLabel(value: string) { return ({ matched: '已匹配', unmatched: '未匹配', skipped: '已跳过' } as Record<string, string>)[value] ?? (value || '-') }
 export function excelLogLevelLabel(value: string) { return ({ info: '信息', warn: '警告', error: '错误' } as Record<string, string>)[value] ?? (value || '-') }
 export function formatUnixTime(value: number) { return value ? formatDate(new Date(value * 1000).toISOString()) : '-' }
-export function formatDate(value: string | null) { if (!value) return '-'; const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}+08:00`; const date = new Date(normalized); if (Number.isNaN(date.getTime())) return value; return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date).replace(/\//g, '-') }
+export function formatDate(value: string | null) { return formatShanghaiDateTime(value, '-') }
 export function compactText(value: string) { const text = (value || '').replace(/\s+/g, ' ').trim(); return text.length <= 120 ? text : `${text.slice(0, 120)}...` }
 
 export function submitExcelDownloadForm(jobID: number, token: string, baseURL = import.meta.env.VITE_API_BASE_URL ?? '') {

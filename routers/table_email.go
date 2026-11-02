@@ -1,6 +1,8 @@
 package routers
 
 import (
+	"net/http"
+
 	"gin-biz-web-api/internal/controller/data_ctrl"
 	"gin-biz-web-api/internal/middleware"
 	"gin-biz-web-api/model"
@@ -19,8 +21,8 @@ func registerTableEmailRoutes(api *gin.RouterGroup) {
 	group.GET("/columns", controller.Columns)
 	group.GET("/deliveries", controller.Deliveries)
 	group.POST("", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Create)
-	group.PUT("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Update)
-	group.DELETE("/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Delete)
+	registerPOSTWriteRoute(group, http.MethodPut, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Update)
+	registerPOSTWriteRoute(group, http.MethodDelete, "/:id", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Delete)
 	group.POST("/preview", middleware.RequirePermission(model.PermissionOfficeMessageManage), controller.Preview)
 	group.POST("/deliveries/:id/retry", middleware.RequirePermission(model.PermissionOfficeMessagePush), controller.Retry)
 }

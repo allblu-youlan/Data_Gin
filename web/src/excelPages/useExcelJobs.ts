@@ -1,3 +1,4 @@
+import { formatShanghaiDateTime } from '../dateTime.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClientResponse } from '../api/client'
 import { buildExcelMatchJobListQuery, normalizeMonitoringPageNumber, parseMonitoringPage, type MonitoringPagination } from '../monitoringRecords'
@@ -174,7 +175,7 @@ export function useExcelJobs({ section, client, token, refreshVersion, setLoadin
           nextDelay = delayMilliseconds
           return
         }
-        setAutoRefreshText(`自动刷新中：任务 #${nextJob.id}，${excelJobStatusLabel(nextJob.status)}，${new Date().toLocaleTimeString()}`)
+        setAutoRefreshText(`自动刷新中：任务 #${nextJob.id}，${excelJobStatusLabel(nextJob.status)}，${formatShanghaiDateTime(new Date())}`)
         if (!isExcelJobActive(nextJob)) { setTrackingJobID(null); void loadJobHistory(); return }
         nextDelay = poll.delayMilliseconds
       } finally {

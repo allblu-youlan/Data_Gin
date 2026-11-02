@@ -164,6 +164,7 @@ function pendingCreateInput(pending: MallWeatherPendingCreate | null): MallWeath
   return {
     mallCode: pending.body.mallCode,
     nameCn: pending.body.nameCn,
+    kaiyuShopId: pending.body.kaiyuShopId,
     province: pending.body.province,
     city: pending.body.city,
     district: pending.body.district || '',
@@ -230,6 +231,7 @@ export function MallCreatePanel({ actorID, client, onCreated, onCancel }: {
       id: created.id,
       mallCode: created.mallCode,
       nameCn: request.body.nameCn,
+      kaiyuShopId: request.body.kaiyuShopId,
       province: request.body.province,
       city: request.body.city,
       district: request.body.district || '',
