@@ -80,6 +80,7 @@ type MallCreateResult struct {
 }
 
 type MallDTO struct {
+	KaiyuShopID       string                                    `json:"kaiyuShopId"`
 	ID                uint                                      `json:"id"`
 	MallCode          string                                    `json:"mallCode"`
 	NameCN            string                                    `json:"nameCn"`
@@ -472,6 +473,10 @@ func normalizeMallCreateRequest(request requestbody.MallCreateRequest) (requestb
 	request.MallCode = strings.ToUpper(strings.TrimSpace(request.MallCode))
 	request.NameCN = strings.TrimSpace(request.NameCN)
 	request.NameEN = strings.TrimSpace(request.NameEN)
+	request.KaiyuShopID = strings.TrimSpace(request.KaiyuShopID)
+	if !validOptionalText(request.KaiyuShopID, 64) {
+		return request, fmt.Errorf("%w: invalid kaiyuShopId", ErrMallInvalidInput)
+	}
 	request.Province = strings.TrimSpace(request.Province)
 	request.City = strings.TrimSpace(request.City)
 	request.District = strings.TrimSpace(request.District)
@@ -540,6 +545,7 @@ func mallFromCreateRequest(request requestbody.MallCreateRequest, actorUserID ui
 	}
 	return &model.Mall{
 		MallCode:           request.MallCode,
+		KaiyuShopID:        request.KaiyuShopID,
 		NameCN:             request.NameCN,
 		NameEN:             request.NameEN,
 		Country:            "中国",
@@ -583,6 +589,9 @@ func buildMallPatch(current *model.Mall, request requestbody.MallPatchRequest, a
 		return nil
 	}
 	if err := setText("name_cn", request.NameCN, 255, true); err != nil {
+		return nil, false, err
+	}
+	if err := setText("kaiyu_shop_id", request.KaiyuShopID, 64, false); err != nil {
 		return nil, false, err
 	}
 	if err := setText("name_en", request.NameEN, 255, false); err != nil {
@@ -726,7 +735,7 @@ func mallDTO(mall *model.Mall) (MallDTO, error) {
 		}
 	}
 	return MallDTO{
-		ID: mall.ID, MallCode: mall.MallCode, NameCN: mall.NameCN, NameEN: mall.NameEN,
+		ID: mall.ID, MallCode: mall.MallCode, KaiyuShopID: mall.KaiyuShopID, NameCN: mall.NameCN, NameEN: mall.NameEN,
 		Province: mall.Province, City: mall.City, District: mall.District, Address: mall.AddressRaw,
 		Longitude: mall.Longitude, Latitude: mall.Latitude, CoordinateSystem: mall.CoordinateSystem,
 		GeocodeStatus: strings.ToUpper(mall.GeocodeStatus), BusinessHours: businessHours,

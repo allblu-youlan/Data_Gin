@@ -1,0 +1,3926 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "天猫数据开放接口",
+    "version": "1.0.0",
+    "description": "提供生意参谋、全站推广、商品汇总三个只读分页查询接口。使用开放账号的 token 请求头认证，各接口分别授权。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。columns 保留原数据库列备注，无备注时为空字符串。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。"
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "当前服务的 API 根路径"
+    }
+  ],
+  "tags": [
+    {
+      "name": "天猫",
+      "description": "按数据集独立授权的天猫查询接口"
+    }
+  ],
+  "security": [
+    {
+      "OpenAPIToken": []
+    }
+  ],
+  "paths": {
+    "/open/tmall/sycm/query": {
+      "post": {
+        "tags": [
+          "天猫"
+        ],
+        "summary": "查询天猫生意参谋数据",
+        "operationId": "queryTmallSycm",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "x-required-permission": "tmall.sycm.read",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SycmQueryRequest"
+              },
+              "examples": {
+                "dateRange": {
+                  "summary": "按日期分页",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "batch": {
+                  "summary": "按导入批次精确筛选",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "filters": {
+                      "BATCH_ID": "batch-20261001"
+                    },
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SycmQueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidQuery"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/open/tmall/qztg/query": {
+      "post": {
+        "tags": [
+          "天猫"
+        ],
+        "summary": "查询天猫全站推广数据",
+        "operationId": "queryTmallQztg",
+        "description": "只读查询 ODS_TM_QZTG_PRODUCT。需要独立权限 tmall.qztg.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "x-required-permission": "tmall.qztg.read",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QztgQueryRequest"
+              },
+              "examples": {
+                "dateRange": {
+                  "summary": "按日期分页",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "batch": {
+                  "summary": "按导入批次精确筛选",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "filters": {
+                      "BATCH_ID": "batch-20261001"
+                    },
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QztgQueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidQuery"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/open/tmall/tot/query": {
+      "post": {
+        "tags": [
+          "天猫"
+        ],
+        "summary": "查询天猫商品汇总数据",
+        "operationId": "queryTmallTot",
+        "description": "只读查询 ODS_TM_TOT_PRODUCT。需要独立权限 tmall.tot.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "x-required-permission": "tmall.tot.read",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotQueryRequest"
+              },
+              "examples": {
+                "dateRange": {
+                  "summary": "按日期分页",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "batch": {
+                  "summary": "按导入批次精确筛选",
+                  "value": {
+                    "startDate": "2026-10-01",
+                    "endDate": "2026-10-31",
+                    "filters": {
+                      "BATCH_ID": "batch-20261001"
+                    },
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotQueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidQuery"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OpenAPIToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "token",
+        "description": "开放API账号的专用token；不接受Authorization/Bearer或URL参数作为替代。由授权管理员签发。"
+      }
+    },
+    "schemas": {
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "pageSize",
+          "hasMore"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "当前页码。",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "当前每页条数上限。",
+            "example": 50
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "读取 pageSize+1 条判断是否存在后续数据；无 COUNT 查询。页码最多1000，仍有数据时请缩小日期范围或增加维度筛选。",
+            "example": false
+          }
+        }
+      },
+      "Column": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "comment",
+          "dataType",
+          "length",
+          "nullable",
+          "filterable"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Oracle原列名，大小写保持不变。"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Oracle原列备注，不改写含义；数据库未设置备注时为空字符串。"
+          },
+          "dataType": {
+            "type": "string",
+            "enum": [
+              "NUMBER",
+              "VARCHAR2",
+              "DATE"
+            ],
+            "description": "Oracle源字段类型；返回值统一使用字符串或null。"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Oracle DATA_LENGTH，单位字节；不是API字符串的字符数限制。"
+          },
+          "nullable": {
+            "type": "boolean",
+            "description": "Oracle NULLABLE=Y时为true。"
+          },
+          "filterable": {
+            "type": "boolean",
+            "description": "是否可用作本接口filters中的精确匹配维度；STAT_DATE通过startDate/endDate筛选。"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务错误码；本接口错误码为100000加HTTP状态码。",
+            "example": 100422
+          },
+          "msg": {
+            "type": "string",
+            "description": "安全的公开错误信息，不含SQL、数据库地址、凭据或内部错误详情。"
+          },
+          "data": {
+            "nullable": true,
+            "description": "错误响应固定为null。",
+            "example": null,
+            "type": "object",
+            "enum": [
+              null
+            ]
+          }
+        }
+      },
+      "SycmFilters": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "properties": {
+          "PRODUCT_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "x-max-utf8-bytes": 4000,
+            "description": "商品名称；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过4000。"
+          },
+          "PRODUCT_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "x-max-utf8-bytes": 100,
+            "description": "商品ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过100。"
+          },
+          "ITEM_NO": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "货号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "PRODUCT_STATUS": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "商品状态；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "导入批次号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          }
+        }
+      },
+      "SycmQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startDate",
+          "endDate"
+        ],
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "example": "2026-10-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "example": "2026-10-31"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/SycmFilters"
+          },
+          "page": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "页码，省略或null时为1。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "每页条数，省略或null时为50。"
+          }
+        },
+        "example": {
+          "startDate": "2026-10-01",
+          "endDate": "2026-10-31",
+          "page": 1,
+          "pageSize": 50
+        }
+      },
+      "SycmRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ID",
+          "STAT_DATE",
+          "PRODUCT_NAME",
+          "PRODUCT_ID",
+          "ITEM_NO",
+          "PRODUCT_STATUS",
+          "VISITOR_CNT",
+          "PV_CNT",
+          "AVG_STAY_DURATION",
+          "DETAIL_BOUNCE_RATE",
+          "FAVORITE_CNT",
+          "CART_ITEM_CNT",
+          "CART_USER_CNT",
+          "ORDER_BUYER_CNT",
+          "ORDER_ITEM_CNT",
+          "ORDER_AMT",
+          "ORDER_CONV_RATE",
+          "PAY_BUYER_CNT",
+          "PAY_ITEM_CNT",
+          "PAY_AMT",
+          "PAY_CONV_RATE",
+          "PAY_NEW_BUYER_CNT",
+          "PAY_OLD_BUYER_CNT",
+          "OLD_BUYER_PAY_AMT",
+          "JHS_PAY_AMT",
+          "AVG_VISITOR_VALUE",
+          "REFUND_SUCCESS_AMT",
+          "YEAR_PAY_AMT",
+          "MONTH_PAY_AMT",
+          "MONTH_PAY_ITEM_CNT",
+          "SEARCH_GUIDE_PAY_CONV_RATE",
+          "SEARCH_GUIDE_VISITOR_CNT",
+          "SEARCH_GUIDE_PAY_BUYER_CNT",
+          "BATCH_ID",
+          "CREATED_ODS",
+          "UPDATED_ODS"
+        ],
+        "description": "ODS_TM_SYCM_PRODUCTORDER 的全部36个字段。每个字段均返回；数据库NULL保留为null，非NULL值全部为字符串。",
+        "properties": {
+          "ID": {
+            "type": "string",
+            "nullable": false,
+            "description": "主键ID 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "主键ID",
+            "x-oracle-precision": 19,
+            "x-oracle-scale": 0
+          },
+          "STAT_DATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "统计日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "统计日期"
+          },
+          "PRODUCT_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品名称",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 4000,
+            "x-oracle-comment": "商品名称"
+          },
+          "PRODUCT_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 100,
+            "x-oracle-comment": "商品ID"
+          },
+          "ITEM_NO": {
+            "type": "string",
+            "nullable": true,
+            "description": "货号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "货号"
+          },
+          "PRODUCT_STATUS": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品状态",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品状态"
+          },
+          "VISITOR_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品访客数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品访客数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PV_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品浏览量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品浏览量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "AVG_STAY_DURATION": {
+            "type": "string",
+            "nullable": true,
+            "description": "平均停留时长(秒) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平均停留时长(秒)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "DETAIL_BOUNCE_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品详情页跳出率",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品详情页跳出率"
+          },
+          "FAVORITE_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品收藏人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品收藏人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "CART_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品加购件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品加购件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "CART_USER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品加购人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品加购人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ORDER_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "下单买家数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "下单买家数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ORDER_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "下单件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "下单件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ORDER_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "下单金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "下单金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ORDER_CONV_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "下单转化率",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "下单转化率"
+          },
+          "PAY_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "支付买家数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "支付买家数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PAY_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "支付件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "支付件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "支付金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "支付金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "PAY_CONV_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品支付转化率",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品支付转化率"
+          },
+          "PAY_NEW_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "支付新买家数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "支付新买家数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PAY_OLD_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "支付老买家数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "支付老买家数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "OLD_BUYER_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "老买家支付金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "老买家支付金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "JHS_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "聚划算支付金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "聚划算支付金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "AVG_VISITOR_VALUE": {
+            "type": "string",
+            "nullable": true,
+            "description": "访客平均价值(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "访客平均价值(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "REFUND_SUCCESS_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "成功退款金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "成功退款金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "YEAR_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "年累计支付金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "年累计支付金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "MONTH_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "月累计支付金额(元) 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "月累计支付金额(元)",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "MONTH_PAY_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "月累计支付件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "月累计支付件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SEARCH_GUIDE_PAY_CONV_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "搜索引导支付转化率",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "搜索引导支付转化率"
+          },
+          "SEARCH_GUIDE_VISITOR_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "搜索引导访客数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "搜索引导访客数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SEARCH_GUIDE_PAY_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "搜索引导支付买家数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "搜索引导支付买家数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "导入批次号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "导入批次号"
+          },
+          "CREATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "创建时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "创建时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          },
+          "UPDATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "修改时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "修改时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          }
+        }
+      },
+      "SycmQueryData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "columns",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/SycmRow"
+            },
+            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 36,
+            "maxItems": 36,
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "description": "完整字段元数据，按Oracle列顺序返回；无数据时也返回。",
+            "example": [
+              {
+                "name": "ID",
+                "comment": "主键ID",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "STAT_DATE",
+                "comment": "统计日期",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PRODUCT_NAME",
+                "comment": "商品名称",
+                "dataType": "VARCHAR2",
+                "length": 4000,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "PRODUCT_ID",
+                "comment": "商品ID",
+                "dataType": "VARCHAR2",
+                "length": 100,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ITEM_NO",
+                "comment": "货号",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "PRODUCT_STATUS",
+                "comment": "商品状态",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "VISITOR_CNT",
+                "comment": "商品访客数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PV_CNT",
+                "comment": "商品浏览量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_STAY_DURATION",
+                "comment": "平均停留时长(秒)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DETAIL_BOUNCE_RATE",
+                "comment": "商品详情页跳出率",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "FAVORITE_CNT",
+                "comment": "商品收藏人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CART_ITEM_CNT",
+                "comment": "商品加购件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CART_USER_CNT",
+                "comment": "商品加购人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_BUYER_CNT",
+                "comment": "下单买家数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_ITEM_CNT",
+                "comment": "下单件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_AMT",
+                "comment": "下单金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_CONV_RATE",
+                "comment": "下单转化率",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_BUYER_CNT",
+                "comment": "支付买家数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_ITEM_CNT",
+                "comment": "支付件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_AMT",
+                "comment": "支付金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_CONV_RATE",
+                "comment": "商品支付转化率",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_NEW_BUYER_CNT",
+                "comment": "支付新买家数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_OLD_BUYER_CNT",
+                "comment": "支付老买家数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "OLD_BUYER_PAY_AMT",
+                "comment": "老买家支付金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "JHS_PAY_AMT",
+                "comment": "聚划算支付金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_VISITOR_VALUE",
+                "comment": "访客平均价值(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "REFUND_SUCCESS_AMT",
+                "comment": "成功退款金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "YEAR_PAY_AMT",
+                "comment": "年累计支付金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "MONTH_PAY_AMT",
+                "comment": "月累计支付金额(元)",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "MONTH_PAY_ITEM_CNT",
+                "comment": "月累计支付件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SEARCH_GUIDE_PAY_CONV_RATE",
+                "comment": "搜索引导支付转化率",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SEARCH_GUIDE_VISITOR_CNT",
+                "comment": "搜索引导访客数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SEARCH_GUIDE_PAY_BUYER_CNT",
+                "comment": "搜索引导支付买家数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "BATCH_ID",
+                "comment": "导入批次号",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "CREATED_ODS",
+                "comment": "创建时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "UPDATED_ODS",
+                "comment": "修改时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              }
+            ]
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "SycmQueryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SycmQueryData"
+          }
+        }
+      },
+      "QztgFilters": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "properties": {
+          "SCENE_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "场景ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "SCENE_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "场景名字；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ORI_SUB_SCENE_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "原二级场景ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ORI_SUB_SCENE_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "原二级场景名字；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "PLAN_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "计划ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "PLAN_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "x-max-utf8-bytes": 1000,
+            "description": "计划名字；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过1000。"
+          },
+          "ENTITY_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "主体ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ENTITY_TYPE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "主体类型；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ENTITY_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "x-max-utf8-bytes": 1000,
+            "description": "主体名称；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过1000。"
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "导入批次号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          }
+        }
+      },
+      "QztgQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startDate",
+          "endDate"
+        ],
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "example": "2026-10-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "example": "2026-10-31"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/QztgFilters"
+          },
+          "page": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "页码，省略或null时为1。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "每页条数，省略或null时为50。"
+          }
+        },
+        "example": {
+          "startDate": "2026-10-01",
+          "endDate": "2026-10-31",
+          "page": 1,
+          "pageSize": 50
+        }
+      },
+      "QztgRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ID",
+          "STAT_DATE",
+          "SCENE_ID",
+          "SCENE_NAME",
+          "ORI_SUB_SCENE_ID",
+          "ORI_SUB_SCENE_NAME",
+          "PLAN_ID",
+          "PLAN_NAME",
+          "ENTITY_ID",
+          "ENTITY_TYPE",
+          "ENTITY_NAME",
+          "IMPRESSION_CNT",
+          "CLICK_CNT",
+          "COST",
+          "CLICK_RATE",
+          "AVG_CLICK_COST",
+          "CPM",
+          "TOTAL_PRESALE_PAY_AMT",
+          "TOTAL_PRESALE_PAY_CNT",
+          "DIRECT_PRESALE_PAY_AMT",
+          "DIRECT_PRESALE_PAY_CNT",
+          "INDIRECT_PRESALE_PAY_AMT",
+          "INDIRECT_PRESALE_PAY_CNT",
+          "DIRECT_PAY_AMT",
+          "INDIRECT_PAY_AMT",
+          "TOTAL_PAY_AMT",
+          "TOTAL_PAY_CNT",
+          "DIRECT_PAY_CNT",
+          "INDIRECT_PAY_CNT",
+          "CLICK_CONV_RATE",
+          "ROI",
+          "PRESALE_ROI",
+          "TOTAL_PAY_COST",
+          "TOTAL_CART_CNT",
+          "DIRECT_CART_CNT",
+          "INDIRECT_CART_CNT",
+          "ADD_CART_RATE",
+          "FAV_ITEM_CNT",
+          "FAV_SHOP_CNT",
+          "SHOP_FAV_COST",
+          "TOTAL_FAV_CART_CNT",
+          "TOTAL_FAV_CART_COST",
+          "ITEM_FAV_CART_CNT",
+          "ITEM_FAV_CART_COST",
+          "TOTAL_FAV_CNT",
+          "ITEM_FAV_COST",
+          "ITEM_FAV_RATE",
+          "ADD_CART_COST",
+          "ORDER_CNT",
+          "ORDER_AMT",
+          "DIRECT_FAV_ITEM_CNT",
+          "INDIRECT_FAV_ITEM_CNT",
+          "COUPON_GET_CNT",
+          "SHOPPING_GOLD_RECHARGE_CNT",
+          "SHOPPING_GOLD_RECHARGE_AMT",
+          "WANGWANG_CHAT_CNT",
+          "GUIDE_VISIT_CNT",
+          "GUIDE_VISITOR_CNT",
+          "GUIDE_POTENTIAL_VISITOR_CNT",
+          "GUIDE_POTENTIAL_VISITOR_RATIO",
+          "JOIN_MEMBER_RATE",
+          "JOIN_MEMBER_CNT",
+          "GUIDE_VISIT_RATE",
+          "DEEP_VISIT_CNT",
+          "AVG_VISIT_PAGES",
+          "NEW_BUYER_CNT",
+          "NEW_BUYER_RATIO",
+          "MEMBER_FIRST_PAY_CNT",
+          "MEMBER_PAY_AMT",
+          "MEMBER_PAY_CNT",
+          "PAY_BUYER_CNT",
+          "AVG_PAY_CNT_PER_USER",
+          "AVG_PAY_AMT_PER_USER",
+          "NATURAL_TRAFFIC_PAY_AMT",
+          "NATURAL_TRAFFIC_EXPOSURE_CNT",
+          "PLATFORM_BOOST_TOTAL_PAY",
+          "PLATFORM_BOOST_DIRECT_PAY",
+          "PLATFORM_BOOST_CLICK_CNT",
+          "ITEM_COUPON_DEDUCT_AMT",
+          "ITEM_COUPON_BOOST_TOTAL_PAY",
+          "ITEM_COUPON_BOOST_DIRECT_PAY",
+          "ITEM_COUPON_BOOST_CLICK_CNT",
+          "TARGET_ROI",
+          "PLATFORM_SUBSIDY_AMT",
+          "SUBSIDY_GUIDE_PAY_AMT",
+          "SUBSIDY_COUPON_ITEM_CNT",
+          "SUBSIDY_GUIDE_PAY_BUYER_CNT",
+          "BATCH_ID",
+          "CREATED_ODS",
+          "UPDATED_ODS"
+        ],
+        "description": "ODS_TM_QZTG_PRODUCT 的全部90个字段。每个字段均返回；数据库NULL保留为null，非NULL值全部为字符串。",
+        "properties": {
+          "ID": {
+            "type": "string",
+            "nullable": false,
+            "description": "数据库未设置列备注。 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "",
+            "x-oracle-precision": 19,
+            "x-oracle-scale": 0
+          },
+          "STAT_DATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "日期"
+          },
+          "SCENE_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "场景ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "场景ID"
+          },
+          "SCENE_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "场景名字",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "场景名字"
+          },
+          "ORI_SUB_SCENE_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "原二级场景ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "原二级场景ID"
+          },
+          "ORI_SUB_SCENE_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "原二级场景名字",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "原二级场景名字"
+          },
+          "PLAN_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "计划ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "计划ID"
+          },
+          "PLAN_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "计划名字",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 1000,
+            "x-oracle-comment": "计划名字"
+          },
+          "ENTITY_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "主体ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "主体ID"
+          },
+          "ENTITY_TYPE": {
+            "type": "string",
+            "nullable": true,
+            "description": "主体类型",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "主体类型"
+          },
+          "ENTITY_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "主体名称",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 1000,
+            "x-oracle-comment": "主体名称"
+          },
+          "IMPRESSION_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "展现量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "展现量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "CLICK_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "点击量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "点击量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "花费 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "花费",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "CLICK_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "点击率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "点击率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "AVG_CLICK_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "平均点击花费 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平均点击花费",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "CPM": {
+            "type": "string",
+            "nullable": true,
+            "description": "千次展现花费 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "千次展现花费",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_PRESALE_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总预售成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总预售成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_PRESALE_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总预售成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总预售成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_PRESALE_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接预售成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接预售成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "DIRECT_PRESALE_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接预售成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接预售成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "INDIRECT_PRESALE_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接预售成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接预售成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "INDIRECT_PRESALE_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接预售成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接预售成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "INDIRECT_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "INDIRECT_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "CLICK_CONV_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "点击转化率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "点击转化率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "ROI": {
+            "type": "string",
+            "nullable": true,
+            "description": "投入产出比 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "投入产出比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "PRESALE_ROI": {
+            "type": "string",
+            "nullable": true,
+            "description": "含预售投产比 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "含预售投产比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "TOTAL_PAY_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "总成交成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总成交成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_CART_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总购物车数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总购物车数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_CART_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接购物车数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接购物车数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "INDIRECT_CART_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接购物车数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接购物车数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ADD_CART_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "加购率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "加购率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "FAV_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "收藏宝贝数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "收藏宝贝数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "FAV_SHOP_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "收藏店铺数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "收藏店铺数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SHOP_FAV_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "店铺收藏成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "店铺收藏成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_FAV_CART_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总收藏加购数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总收藏加购数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "TOTAL_FAV_CART_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "总收藏加购成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总收藏加购成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ITEM_FAV_CART_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝收藏加购数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝收藏加购数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ITEM_FAV_CART_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝收藏加购成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝收藏加购成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "TOTAL_FAV_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总收藏数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总收藏数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ITEM_FAV_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝收藏成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝收藏成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ITEM_FAV_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝收藏率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝收藏率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "ADD_CART_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "加购成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "加购成本",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ORDER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "拍下订单笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "拍下订单笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ORDER_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "拍下订单金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "拍下订单金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "DIRECT_FAV_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "直接收藏宝贝数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接收藏宝贝数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "INDIRECT_FAV_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "间接收藏宝贝数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "间接收藏宝贝数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "COUPON_GET_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "优惠券领取量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "优惠券领取量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SHOPPING_GOLD_RECHARGE_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "购物金充值笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "购物金充值笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SHOPPING_GOLD_RECHARGE_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "购物金充值金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "购物金充值金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "WANGWANG_CHAT_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "旺旺咨询量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "旺旺咨询量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "GUIDE_VISIT_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "引导访问量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "引导访问量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "GUIDE_VISITOR_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "引导访问人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "引导访问人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "GUIDE_POTENTIAL_VISITOR_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "引导访问潜客数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "引导访问潜客数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "GUIDE_POTENTIAL_VISITOR_RATIO": {
+            "type": "string",
+            "nullable": true,
+            "description": "引导访问潜客占比 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "引导访问潜客占比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "JOIN_MEMBER_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "入会率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "入会率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "JOIN_MEMBER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "入会量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "入会量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "GUIDE_VISIT_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "引导访问率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "引导访问率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "DEEP_VISIT_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "深度访问量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "深度访问量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "AVG_VISIT_PAGES": {
+            "type": "string",
+            "nullable": true,
+            "description": "平均访问页面数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平均访问页面数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "NEW_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "成交新客数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "成交新客数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "NEW_BUYER_RATIO": {
+            "type": "string",
+            "nullable": true,
+            "description": "成交新客占比 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "成交新客占比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "MEMBER_FIRST_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "会员首购人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "会员首购人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "MEMBER_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "会员成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "会员成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "MEMBER_PAY_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "会员成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "会员成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PAY_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "成交人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "成交人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "AVG_PAY_CNT_PER_USER": {
+            "type": "string",
+            "nullable": true,
+            "description": "人均成交笔数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "人均成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "AVG_PAY_AMT_PER_USER": {
+            "type": "string",
+            "nullable": true,
+            "description": "人均成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "人均成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "NATURAL_TRAFFIC_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "自然流量转化金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "自然流量转化金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "NATURAL_TRAFFIC_EXPOSURE_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "自然流量曝光量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "自然流量曝光量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PLATFORM_BOOST_TOTAL_PAY": {
+            "type": "string",
+            "nullable": true,
+            "description": "平台助推总成交 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平台助推总成交",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "PLATFORM_BOOST_DIRECT_PAY": {
+            "type": "string",
+            "nullable": true,
+            "description": "平台助推直接成交 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平台助推直接成交",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "PLATFORM_BOOST_CLICK_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "平台助推点击 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平台助推点击",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "ITEM_COUPON_DEDUCT_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝优惠券抵扣金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝优惠券抵扣金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ITEM_COUPON_BOOST_TOTAL_PAY": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝优惠券撬动总成交 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝优惠券撬动总成交",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ITEM_COUPON_BOOST_DIRECT_PAY": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝优惠券撬动直接成交 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝优惠券撬动直接成交",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "ITEM_COUPON_BOOST_CLICK_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "宝贝优惠券撬动点击 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝优惠券撬动点击",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "TARGET_ROI": {
+            "type": "string",
+            "nullable": true,
+            "description": "目标ROI 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "目标ROI",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
+          },
+          "PLATFORM_SUBSIDY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "平台补贴金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平台补贴金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "SUBSIDY_GUIDE_PAY_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "补贴引导成交金额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "补贴引导成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "SUBSIDY_COUPON_ITEM_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "发券补贴商品个数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "发券补贴商品个数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SUBSIDY_GUIDE_PAY_BUYER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "补贴引导成交人数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "补贴引导成交人数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "导入批次号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "导入批次号"
+          },
+          "CREATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "创建时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "创建时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          },
+          "UPDATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "修改时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "修改时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          }
+        }
+      },
+      "QztgQueryData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "columns",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/QztgRow"
+            },
+            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 90,
+            "maxItems": 90,
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "description": "完整字段元数据，按Oracle列顺序返回；无数据时也返回。",
+            "example": [
+              {
+                "name": "ID",
+                "comment": "",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "STAT_DATE",
+                "comment": "日期",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SCENE_ID",
+                "comment": "场景ID",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "SCENE_NAME",
+                "comment": "场景名字",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ORI_SUB_SCENE_ID",
+                "comment": "原二级场景ID",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ORI_SUB_SCENE_NAME",
+                "comment": "原二级场景名字",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "PLAN_ID",
+                "comment": "计划ID",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "PLAN_NAME",
+                "comment": "计划名字",
+                "dataType": "VARCHAR2",
+                "length": 1000,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ENTITY_ID",
+                "comment": "主体ID",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ENTITY_TYPE",
+                "comment": "主体类型",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ENTITY_NAME",
+                "comment": "主体名称",
+                "dataType": "VARCHAR2",
+                "length": 1000,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "IMPRESSION_CNT",
+                "comment": "展现量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CLICK_CNT",
+                "comment": "点击量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "COST",
+                "comment": "花费",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CLICK_RATE",
+                "comment": "点击率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_CLICK_COST",
+                "comment": "平均点击花费",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CPM",
+                "comment": "千次展现花费",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_PRESALE_PAY_AMT",
+                "comment": "总预售成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_PRESALE_PAY_CNT",
+                "comment": "总预售成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_PRESALE_PAY_AMT",
+                "comment": "直接预售成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_PRESALE_PAY_CNT",
+                "comment": "直接预售成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_PRESALE_PAY_AMT",
+                "comment": "间接预售成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_PRESALE_PAY_CNT",
+                "comment": "间接预售成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_PAY_AMT",
+                "comment": "直接成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_PAY_AMT",
+                "comment": "间接成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_PAY_AMT",
+                "comment": "总成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_PAY_CNT",
+                "comment": "总成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_PAY_CNT",
+                "comment": "直接成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_PAY_CNT",
+                "comment": "间接成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "CLICK_CONV_RATE",
+                "comment": "点击转化率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ROI",
+                "comment": "投入产出比",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PRESALE_ROI",
+                "comment": "含预售投产比",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_PAY_COST",
+                "comment": "总成交成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_CART_CNT",
+                "comment": "总购物车数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_CART_CNT",
+                "comment": "直接购物车数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_CART_CNT",
+                "comment": "间接购物车数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ADD_CART_RATE",
+                "comment": "加购率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "FAV_ITEM_CNT",
+                "comment": "收藏宝贝数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "FAV_SHOP_CNT",
+                "comment": "收藏店铺数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SHOP_FAV_COST",
+                "comment": "店铺收藏成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_FAV_CART_CNT",
+                "comment": "总收藏加购数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_FAV_CART_COST",
+                "comment": "总收藏加购成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_FAV_CART_CNT",
+                "comment": "宝贝收藏加购数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_FAV_CART_COST",
+                "comment": "宝贝收藏加购成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TOTAL_FAV_CNT",
+                "comment": "总收藏数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_FAV_COST",
+                "comment": "宝贝收藏成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_FAV_RATE",
+                "comment": "宝贝收藏率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ADD_CART_COST",
+                "comment": "加购成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_CNT",
+                "comment": "拍下订单笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ORDER_AMT",
+                "comment": "拍下订单金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DIRECT_FAV_ITEM_CNT",
+                "comment": "直接收藏宝贝数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "INDIRECT_FAV_ITEM_CNT",
+                "comment": "间接收藏宝贝数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "COUPON_GET_CNT",
+                "comment": "优惠券领取量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SHOPPING_GOLD_RECHARGE_CNT",
+                "comment": "购物金充值笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SHOPPING_GOLD_RECHARGE_AMT",
+                "comment": "购物金充值金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "WANGWANG_CHAT_CNT",
+                "comment": "旺旺咨询量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "GUIDE_VISIT_CNT",
+                "comment": "引导访问量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "GUIDE_VISITOR_CNT",
+                "comment": "引导访问人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "GUIDE_POTENTIAL_VISITOR_CNT",
+                "comment": "引导访问潜客数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "GUIDE_POTENTIAL_VISITOR_RATIO",
+                "comment": "引导访问潜客占比",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "JOIN_MEMBER_RATE",
+                "comment": "入会率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "JOIN_MEMBER_CNT",
+                "comment": "入会量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "GUIDE_VISIT_RATE",
+                "comment": "引导访问率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "DEEP_VISIT_CNT",
+                "comment": "深度访问量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_VISIT_PAGES",
+                "comment": "平均访问页面数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "NEW_BUYER_CNT",
+                "comment": "成交新客数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "NEW_BUYER_RATIO",
+                "comment": "成交新客占比",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "MEMBER_FIRST_PAY_CNT",
+                "comment": "会员首购人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "MEMBER_PAY_AMT",
+                "comment": "会员成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "MEMBER_PAY_CNT",
+                "comment": "会员成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PAY_BUYER_CNT",
+                "comment": "成交人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_PAY_CNT_PER_USER",
+                "comment": "人均成交笔数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "AVG_PAY_AMT_PER_USER",
+                "comment": "人均成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "NATURAL_TRAFFIC_PAY_AMT",
+                "comment": "自然流量转化金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "NATURAL_TRAFFIC_EXPOSURE_CNT",
+                "comment": "自然流量曝光量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PLATFORM_BOOST_TOTAL_PAY",
+                "comment": "平台助推总成交",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PLATFORM_BOOST_DIRECT_PAY",
+                "comment": "平台助推直接成交",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PLATFORM_BOOST_CLICK_CNT",
+                "comment": "平台助推点击",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_COUPON_DEDUCT_AMT",
+                "comment": "宝贝优惠券抵扣金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_COUPON_BOOST_TOTAL_PAY",
+                "comment": "宝贝优惠券撬动总成交",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_COUPON_BOOST_DIRECT_PAY",
+                "comment": "宝贝优惠券撬动直接成交",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "ITEM_COUPON_BOOST_CLICK_CNT",
+                "comment": "宝贝优惠券撬动点击",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "TARGET_ROI",
+                "comment": "目标ROI",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PLATFORM_SUBSIDY_AMT",
+                "comment": "平台补贴金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SUBSIDY_GUIDE_PAY_AMT",
+                "comment": "补贴引导成交金额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SUBSIDY_COUPON_ITEM_CNT",
+                "comment": "发券补贴商品个数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SUBSIDY_GUIDE_PAY_BUYER_CNT",
+                "comment": "补贴引导成交人数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "BATCH_ID",
+                "comment": "导入批次号",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "CREATED_ODS",
+                "comment": "创建时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "UPDATED_ODS",
+                "comment": "修改时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              }
+            ]
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "QztgQueryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/QztgQueryData"
+          }
+        }
+      },
+      "TotFilters": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "properties": {
+          "PRODUCT_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "商品ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "PRICE_RANGE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "商品单价区间；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "SELL_MONTH_RANGE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "有效售卖月份；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "TIER_LEVEL": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "梯队级别；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ORDER_CNT_GROUP": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "订单量组别；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "LAUNCH_WAVE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "上新波次；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "STOCK_STATUS": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "到仓状态；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "ITEM_NO": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "货号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "CATEGORY": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "商品类目；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "CAT_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "类目名称；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "SERIES": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "系列；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "REMAINING_PRICE_RANGE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "剩余件数吊牌价区间；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "COUPON_FLAG": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "是否消费券参加；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "导入批次号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          }
+        }
+      },
+      "TotQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startDate",
+          "endDate"
+        ],
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "example": "2026-10-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "example": "2026-10-31"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/TotFilters"
+          },
+          "page": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "页码，省略或null时为1。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "每页条数，省略或null时为50。"
+          }
+        },
+        "example": {
+          "startDate": "2026-10-01",
+          "endDate": "2026-10-31",
+          "page": 1,
+          "pageSize": 50
+        }
+      },
+      "TotRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ID",
+          "STAT_DATE",
+          "PRODUCT_ID",
+          "PRICE_RANGE",
+          "TOTAL_ORDER_CNT",
+          "SELL_MONTH_RANGE",
+          "TIER_LEVEL",
+          "ORDER_CNT_GROUP",
+          "LAUNCH_WAVE",
+          "STOCK_STATUS",
+          "ITEM_NO",
+          "CATEGORY",
+          "CAT_NAME",
+          "SERIES",
+          "REMAINING_PRICE_RANGE",
+          "TOTAL_ORDER_TAG_AMT",
+          "LATEST_SELL_THROUGH_RATE",
+          "SOLD_CNT",
+          "REMAINING_CNT",
+          "FORECAST_REMAINING_CNT",
+          "FORECAST_SELL_THROUGH_RATE",
+          "REMAINING_TAG_AMT",
+          "REMAINING_TAG_PRICE",
+          "REMAINING_ORDER_AMT_RATIO",
+          "COUPON_FLAG",
+          "TOMORROW_QZTG_BUDGET",
+          "SUGGESTED_ADD_CART_COST",
+          "BATCH_ID",
+          "CREATED_ODS",
+          "UPDATED_ODS"
+        ],
+        "description": "ODS_TM_TOT_PRODUCT 的全部30个字段。每个字段均返回；数据库NULL保留为null，非NULL值全部为字符串。",
+        "properties": {
+          "ID": {
+            "type": "string",
+            "nullable": false,
+            "description": "数据库未设置列备注。 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "",
+            "x-oracle-precision": 19,
+            "x-oracle-scale": 0
+          },
+          "STAT_DATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "日期"
+          },
+          "PRODUCT_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品ID",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品ID"
+          },
+          "PRICE_RANGE": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品单价区间",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品单价区间"
+          },
+          "TOTAL_ORDER_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总订单量 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总订单量",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SELL_MONTH_RANGE": {
+            "type": "string",
+            "nullable": true,
+            "description": "有效售卖月份",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "有效售卖月份"
+          },
+          "TIER_LEVEL": {
+            "type": "string",
+            "nullable": true,
+            "description": "梯队级别",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "梯队级别"
+          },
+          "ORDER_CNT_GROUP": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单量组别",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "订单量组别"
+          },
+          "LAUNCH_WAVE": {
+            "type": "string",
+            "nullable": true,
+            "description": "上新波次",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "上新波次"
+          },
+          "STOCK_STATUS": {
+            "type": "string",
+            "nullable": true,
+            "description": "到仓状态",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "到仓状态"
+          },
+          "ITEM_NO": {
+            "type": "string",
+            "nullable": true,
+            "description": "货号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "货号"
+          },
+          "CATEGORY": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品类目",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "商品类目"
+          },
+          "CAT_NAME": {
+            "type": "string",
+            "nullable": true,
+            "description": "类目名称",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "类目名称"
+          },
+          "SERIES": {
+            "type": "string",
+            "nullable": true,
+            "description": "系列",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "系列"
+          },
+          "REMAINING_PRICE_RANGE": {
+            "type": "string",
+            "nullable": true,
+            "description": "剩余件数吊牌价区间",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "剩余件数吊牌价区间"
+          },
+          "TOTAL_ORDER_TAG_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "总订单吊牌额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "总订单吊牌额",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "LATEST_SELL_THROUGH_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "最新售罄率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "最新售罄率",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "SOLD_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "已售件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "已售件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "REMAINING_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "最新剩余件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "最新剩余件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "FORECAST_REMAINING_CNT": {
+            "type": "string",
+            "nullable": true,
+            "description": "季末预测剩余件数 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "季末预测剩余件数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "FORECAST_SELL_THROUGH_RATE": {
+            "type": "string",
+            "nullable": true,
+            "description": "季末预测售罄率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "季末预测售罄率",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "REMAINING_TAG_AMT": {
+            "type": "string",
+            "nullable": true,
+            "description": "剩余件数吊牌额 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "剩余件数吊牌额",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "REMAINING_TAG_PRICE": {
+            "type": "string",
+            "nullable": true,
+            "description": "剩余件数吊牌价 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "剩余件数吊牌价",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "REMAINING_ORDER_AMT_RATIO": {
+            "type": "string",
+            "nullable": true,
+            "description": "剩余订单额占比 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "剩余订单额占比",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "COUPON_FLAG": {
+            "type": "string",
+            "nullable": true,
+            "description": "是否消费券参加",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "是否消费券参加"
+          },
+          "TOMORROW_QZTG_BUDGET": {
+            "type": "string",
+            "nullable": true,
+            "description": "明日最终投放预算全站推广 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "明日最终投放预算全站推广",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "SUGGESTED_ADD_CART_COST": {
+            "type": "string",
+            "nullable": true,
+            "description": "建议加购成本 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "建议加购成本",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18
+          },
+          "BATCH_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "导入批次号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "导入批次号"
+          },
+          "CREATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "创建时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "创建时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          },
+          "UPDATED_ODS": {
+            "type": "string",
+            "nullable": false,
+            "description": "修改时间 格式 YYYY-MM-DD HH:mm:ss，不附加时区。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7,
+            "x-oracle-comment": "修改时间",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "example": "2026-10-01 09:30:00"
+          }
+        }
+      },
+      "TotQueryData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "columns",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/TotRow"
+            },
+            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 30,
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "description": "完整字段元数据，按Oracle列顺序返回；无数据时也返回。",
+            "example": [
+              {
+                "name": "ID",
+                "comment": "",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "STAT_DATE",
+                "comment": "日期",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "PRODUCT_ID",
+                "comment": "商品ID",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "PRICE_RANGE",
+                "comment": "商品单价区间",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "TOTAL_ORDER_CNT",
+                "comment": "总订单量",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SELL_MONTH_RANGE",
+                "comment": "有效售卖月份",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "TIER_LEVEL",
+                "comment": "梯队级别",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ORDER_CNT_GROUP",
+                "comment": "订单量组别",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "LAUNCH_WAVE",
+                "comment": "上新波次",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "STOCK_STATUS",
+                "comment": "到仓状态",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "ITEM_NO",
+                "comment": "货号",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "CATEGORY",
+                "comment": "商品类目",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "CAT_NAME",
+                "comment": "类目名称",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "SERIES",
+                "comment": "系列",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "REMAINING_PRICE_RANGE",
+                "comment": "剩余件数吊牌价区间",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "TOTAL_ORDER_TAG_AMT",
+                "comment": "总订单吊牌额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "LATEST_SELL_THROUGH_RATE",
+                "comment": "最新售罄率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SOLD_CNT",
+                "comment": "已售件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "REMAINING_CNT",
+                "comment": "最新剩余件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "FORECAST_REMAINING_CNT",
+                "comment": "季末预测剩余件数",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "FORECAST_SELL_THROUGH_RATE",
+                "comment": "季末预测售罄率",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "REMAINING_TAG_AMT",
+                "comment": "剩余件数吊牌额",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "REMAINING_TAG_PRICE",
+                "comment": "剩余件数吊牌价",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "REMAINING_ORDER_AMT_RATIO",
+                "comment": "剩余订单额占比",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "COUPON_FLAG",
+                "comment": "是否消费券参加",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "TOMORROW_QZTG_BUDGET",
+                "comment": "明日最终投放预算全站推广",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "SUGGESTED_ADD_CART_COST",
+                "comment": "建议加购成本",
+                "dataType": "NUMBER",
+                "length": 22,
+                "nullable": true,
+                "filterable": false
+              },
+              {
+                "name": "BATCH_ID",
+                "comment": "导入批次号",
+                "dataType": "VARCHAR2",
+                "length": 200,
+                "nullable": true,
+                "filterable": true
+              },
+              {
+                "name": "CREATED_ODS",
+                "comment": "创建时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              },
+              {
+                "name": "UPDATED_ODS",
+                "comment": "修改时间",
+                "dataType": "DATE",
+                "length": 7,
+                "nullable": false,
+                "filterable": false
+              }
+            ]
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "TotQueryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TotQueryData"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "未提供有效的开放账号token。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100401,
+              "msg": "身份凭证缺失或格式错误",
+              "data": null
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "当前账号未获对应天猫数据集的有效授权。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100403,
+              "msg": "无权执行此操作",
+              "data": null
+            }
+          }
+        }
+      },
+      "InvalidQuery": {
+        "description": "日期、分页、筛选维度或JSON结构不符合接口要求。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100422,
+              "msg": "天猫查询参数校验失败",
+              "data": null
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "超过模块IP或用户单路由限流。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100429,
+              "msg": "开放接口请求过于频繁",
+              "data": null
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "建议等待的秒数。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "未分类内部错误。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100500,
+              "msg": "天猫查询服务暂时不可用",
+              "data": null
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "认证、授权或查询依赖暂时不可用。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": 100503,
+              "msg": "天猫查询服务暂时不可用",
+              "data": null
+            }
+          }
+        }
+      }
+    }
+  }
+}

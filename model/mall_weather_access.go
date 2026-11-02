@@ -15,6 +15,9 @@ const (
 	PermissionBojunOrderRead      = "bojun.order.read"
 	PermissionBojunStoreRead      = "bojun.store.read"
 	PermissionBojunStockRead      = "bojun.stock.read"
+	PermissionTmallSycmRead       = "tmall.sycm.read"
+	PermissionTmallQztgRead       = "tmall.qztg.read"
+	PermissionTmallTotRead        = "tmall.tot.read"
 )
 
 var mallWeatherAdminPermissions = [...]string{
@@ -30,6 +33,9 @@ var mallWeatherAdminPermissions = [...]string{
 	PermissionBojunOrderRead,
 	PermissionBojunStoreRead,
 	PermissionBojunStockRead,
+	PermissionTmallSycmRead,
+	PermissionTmallQztgRead,
+	PermissionTmallTotRead,
 }
 
 var grantableDataPermissions = [...]string{
@@ -38,6 +44,9 @@ var grantableDataPermissions = [...]string{
 	PermissionBojunStoreRead,
 	PermissionBojunStockRead,
 	PermissionBusinessOverviewRead,
+	PermissionTmallSycmRead,
+	PermissionTmallQztgRead,
+	PermissionTmallTotRead,
 }
 
 // GrantableDataPermissions returns the fixed permissions an administrator may

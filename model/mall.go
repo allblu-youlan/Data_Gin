@@ -11,6 +11,7 @@ import (
 type Mall struct {
 	BaseModel
 
+	KaiyuShopID       string     `gorm:"column:kaiyu_shop_id;size:64;not null;default:'';index" json:"kaiyu_shop_id"`
 	MallCode          string     `gorm:"column:mall_code;size:64;not null;uniqueIndex:uk_malls_code" json:"mall_code"`
 	NameCN            string     `gorm:"column:name_cn;size:255;not null" json:"name_cn"`
 	NameEN            string     `gorm:"column:name_en;size:255" json:"name_en"`

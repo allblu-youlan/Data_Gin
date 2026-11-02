@@ -12,6 +12,7 @@ type MallWeatherSettingsRequest struct {
 }
 
 type MallCreateRequest struct {
+	KaiyuShopID       string                        `json:"kaiyuShopId,omitempty"`
 	MallCode          string                        `json:"mallCode"`
 	NameCN            string                        `json:"nameCn"`
 	NameEN            string                        `json:"nameEn,omitempty"`
@@ -27,6 +28,7 @@ type MallCreateRequest struct {
 }
 
 type MallPatchRequest struct {
+	KaiyuShopID         *string                        `json:"kaiyuShopId,omitempty"`
 	ExpectedMallVersion uint64                         `json:"expectedMallVersion"`
 	NameCN              *string                        `json:"nameCn,omitempty"`
 	NameEN              *string                        `json:"nameEn,omitempty"`
