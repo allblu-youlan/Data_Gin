@@ -625,6 +625,12 @@ func permissionDTO(permission string, expiresAt *time.Time, granted bool, now ti
 		label = "伯俊实时库存查询"
 	case model.PermissionBusinessOverviewRead:
 		label = "营业金额查询"
+	case model.PermissionTmallSycmRead:
+		label = "天猫生意参谋查询"
+	case model.PermissionTmallQztgRead:
+		label = "天猫全站推广查询"
+	case model.PermissionTmallTotRead:
+		label = "天猫商品汇总查询"
 	}
 	status := "NOT_GRANTED"
 	if granted {

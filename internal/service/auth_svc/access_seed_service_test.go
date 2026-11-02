@@ -80,3 +80,16 @@ func TestBojunStoreStockPermissionsAreAPIGrantable(t *testing.T) {
 		})
 	}
 }
+
+func TestTmallPermissionsCanBeGrantedIndependently(t *testing.T) {
+	for _, code := range []string{"tmall.sycm.read", "tmall.qztg.read", "tmall.tot.read"} {
+		t.Run(code, func(t *testing.T) {
+			for _, permission := range PermissionCatalog() {
+				if permission.Code == code && permission.APIGrantable {
+					return
+				}
+			}
+			t.Fatal("tmall permission missing from API grant catalog")
+		})
+	}
+}

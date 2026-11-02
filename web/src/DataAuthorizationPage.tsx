@@ -55,6 +55,9 @@ const permissionCatalog: Array<{ permission: DataPermissionCode; label: string; 
   { permission: 'bojun.store.read', label: '伯俊店仓查询', description: '可按编码、名称前缀和状态分页查询店仓档案。' },
   { permission: 'bojun.stock.read', label: '伯俊实时库存查询', description: '可按店仓编码及商品条码、款色或款号之一查询实时库存明细。' },
   { permission: 'business_overview.read', label: '营业金额查询', description: '可按日期和门店查询营业金额及支付方式构成。' },
+  { permission: 'tmall.sycm.read', label: '天猫生意参谋查询', description: '可查询天猫生意参谋商品订单数据。' },
+  { permission: 'tmall.qztg.read', label: '天猫全站推广查询', description: '可查询天猫全站推广商品数据。' },
+  { permission: 'tmall.tot.read', label: '天猫商品汇总查询', description: '可查询天猫商品汇总数据。' },
 ]
 
 export function DataAuthorizationPage({ client }: { client: ApiClient }) {
@@ -357,7 +360,7 @@ function formString(form: FormData, key: string) { const value = form.get(key); 
 function deduplicateAccounts(accounts: DataAuthorizationAccount[]) { return [...new Map(accounts.map((account) => [account.id, account])).values()] }
 function deduplicateAudits(audits: DataAuthorizationAudit[]) { return [...new Map(audits.map((audit) => [audit.id, audit])).values()] }
 function fallbackPermission(permission: DataPermissionCode, label: string): DataAuthorizationPermission { return { permission, label, scope: '全模块数据', status: 'NOT_GRANTED', permanent: false, expiresAt: null } }
-function permissionLabel(permission: string) { return permission === 'weather.read' ? '天气数据查询' : permission === 'bojun.order.read' ? 'Bojun 订单查询' : permission === 'bojun.store.read' ? '伯俊店仓查询' : permission === 'bojun.stock.read' ? '伯俊实时库存查询' : permission === 'business_overview.read' ? '营业金额查询' : permission === 'open_api.account' ? '开放接口账号' : permission === 'open_api.credential' ? '访问凭证' : permission }
+function permissionLabel(permission: string) { return permissionCatalog.find((item) => item.permission === permission)?.label ?? (permission === 'open_api.account' ? '开放接口账号' : permission === 'open_api.credential' ? '访问凭证' : permission) }
 function permissionStatusLabel(status: string) { return status === 'ACTIVE' ? '生效中' : status === 'EXPIRED' ? '已过期' : '未授权' }
 function auditActionLabel(action: string) { return ({ ACCOUNT_CREATE: '开通账号', GRANT: '授权', RENEW: '续期', REVOKE: '撤销', TOKEN_REISSUE: '重签 Token' } as Record<string, string>)[action] ?? action }
 function actionTitle(action: NonNullable<ActionDialog>) { return action.kind === 'grant' ? `授权 / 续期 · ${permissionLabel(action.permission)}` : action.kind === 'revoke' ? `撤销 · ${permissionLabel(action.permission)}` : '重新签发访问 Token' }
