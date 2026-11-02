@@ -30,7 +30,7 @@
         ],
         "summary": "查询天猫生意参谋数据",
         "operationId": "queryTmallSycm",
-        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表STAT_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
         "x-required-permission": "tmall.sycm.read",
         "requestBody": {
           "required": true,
@@ -507,7 +507,8 @@
           "STAT_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "统计日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "description": "统计日期 保留源表YYYYMMDD字符串；请求startDate/endDate使用YYYY-MM-DD。",
+            "example": "20250101",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
             "x-oracle-comment": "统计日期"
@@ -1417,7 +1418,8 @@
           "STAT_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "description": "日期 保留源表YYYY-MM-DD字符串；查询条件使用startDate/endDate。",
+            "example": "2025-01-01",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
             "x-oracle-comment": "日期"
@@ -3265,7 +3267,8 @@
           "STAT_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "日期 原始统计日期字符串；查询条件使用startDate/endDate。",
+            "description": "日期 保留源表YYYY-MM-DD字符串；查询条件使用startDate/endDate。",
+            "example": "2025-01-01",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
             "x-oracle-comment": "日期"

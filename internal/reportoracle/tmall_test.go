@@ -14,7 +14,7 @@ import (
 func TestQueryTmallBindsDimensionsAndPreservesPrecisionAndNulls(t *testing.T) {
 	const product = "001' OR 1=1 --"
 	values := make([]driver.Value, 36)
-	values[0], values[1], values[3], values[19], values[34] = "9007199254740993123", "2026-10-01", "000123", "123456789012.123456", "2026-10-02 09:10:11"
+	values[0], values[1], values[3], values[19], values[34] = "9007199254740993123", "20261001", "000123", "123456789012.123456", "2026-10-02 09:10:11"
 	rows := &bojunQueryTestRows{columns: make([]string, 36), values: [][]driver.Value{values}}
 	adapter := newBojunQueryTestAdapter(t, func(ctx context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
 		if ctx != t.Context() || !strings.Contains(statement, "FROM YL_DBS.ODS_TM_SYCM_PRODUCTORDER a") || !strings.Contains(statement, "a.PRODUCT_ID = :") || strings.Contains(statement, product) || strings.Contains(statement, "SELECT *") {
@@ -38,7 +38,7 @@ func TestQueryTmallBindsDimensionsAndPreservesPrecisionAndNulls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || len(result[0]) != 36 || *result[0]["ID"] != "9007199254740993123" || *result[0]["PAY_AMT"] != "123456789012.123456" || *result[0]["PRODUCT_ID"] != "000123" || result[0]["PRODUCT_NAME"] != nil || *result[0]["CREATED_ODS"] != "2026-10-02 09:10:11" || !rows.closed {
+	if len(result) != 1 || len(result[0]) != 36 || *result[0]["ID"] != "9007199254740993123" || *result[0]["STAT_DATE"] != "20261001" || *result[0]["PAY_AMT"] != "123456789012.123456" || *result[0]["PRODUCT_ID"] != "000123" || result[0]["PRODUCT_NAME"] != nil || *result[0]["CREATED_ODS"] != "2026-10-02 09:10:11" || !rows.closed {
 		t.Fatalf("result=%+v closed=%v", result, rows.closed)
 	}
 }
@@ -92,10 +92,11 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 		columns     int
 		filters     map[string]string
 		wantFilters []any
+		wantDates   []any
 	}{
-		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}},
-		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "ENTITY_TYPE": "商品"}, []any{"商品", "001"}},
-		{TmallTot, "ODS_TM_TOT_PRODUCT", 30, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}},
+		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}, []any{"20251231", "20260101"}},
+		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "ENTITY_TYPE": "商品"}, []any{"商品", "001"}, []any{"2025-12-31", "2026-01-01"}},
+		{TmallTot, "ODS_TM_TOT_PRODUCT", 30, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}, []any{"2025-12-31", "2026-01-01"}},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
 			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
@@ -107,7 +108,7 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 				if strings.Contains(statement, "TO_DATE(a.STAT_DATE") || strings.Contains(statement, "TO_CHAR(a.STAT_DATE") || strings.Contains(statement, "COUNT(") {
 					t.Fatalf("query disables index or adds a count: %s", statement)
 				}
-				want := append([]any{"2025-12-31", "2026-01-01"}, test.wantFilters...)
+				want := append(append([]any{}, test.wantDates...), test.wantFilters...)
 				want = append(want, 0, 51)
 				got := make([]any, len(args)-1)
 				for i := range got {
@@ -121,6 +122,39 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 			rows, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: "2025-12-31", EndDate: "2025-12-31", Filters: test.filters, PageSize: 50})
 			if err != nil || rows == nil {
 				t.Fatalf("rows=%v error=%v", rows, err)
+			}
+		})
+	}
+}
+
+func TestQueryTmallBindsSourceDateRanges(t *testing.T) {
+	for _, test := range []struct {
+		dataset                              TmallDataset
+		name, start, end, wantStart, wantEnd string
+	}{
+		{TmallSycm, "same day", "2025-01-01", "2025-01-01", "20250101", "20250102"},
+		{TmallSycm, "month boundary", "2025-01-30", "2025-01-31", "20250130", "20250201"},
+		{TmallSycm, "year boundary", "2025-12-30", "2025-12-31", "20251230", "20260101"},
+		{TmallQztg, "same day", "2025-01-01", "2025-01-01", "2025-01-01", "2025-01-02"},
+		{TmallQztg, "month boundary", "2025-01-30", "2025-01-31", "2025-01-30", "2025-02-01"},
+		{TmallQztg, "year boundary", "2025-12-30", "2025-12-31", "2025-12-30", "2026-01-01"},
+		{TmallTot, "same day", "2025-01-01", "2025-01-01", "2025-01-01", "2025-01-02"},
+		{TmallTot, "month boundary", "2025-01-30", "2025-01-31", "2025-01-30", "2025-02-01"},
+		{TmallTot, "year boundary", "2025-12-30", "2025-12-31", "2025-12-30", "2026-01-01"},
+	} {
+		t.Run(string(test.dataset)+"/"+test.name, func(t *testing.T) {
+			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
+				if !strings.Contains(statement, "WHERE a.STAT_DATE >= :1 AND a.STAT_DATE < :2") {
+					t.Fatalf("date range must compare the source column directly: %s", statement)
+				}
+				if args[0].Value != test.wantStart || args[1].Value != test.wantEnd {
+					t.Fatalf("date binds = [%v %v], want [%s %s]", args[0].Value, args[1].Value, test.wantStart, test.wantEnd)
+				}
+				return &bojunQueryTestRows{columns: make([]string, len(TmallColumns(test.dataset)))}, nil
+			})
+			_, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: test.start, EndDate: test.end, PageSize: 50})
+			if err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

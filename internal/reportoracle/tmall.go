@@ -41,8 +41,9 @@ type TmallColumn struct {
 }
 
 type tmallTable struct {
-	name    string
-	columns []TmallColumn
+	name           string
+	statDateLayout string
+	columns        []TmallColumn
 }
 
 func TmallColumns(dataset TmallDataset) []TmallColumn {
@@ -138,8 +139,9 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 		}
 		projection = append(projection, expression)
 	}
+	start, _ := time.Parse("2006-01-02", query.StartDate)
 	end, _ := time.Parse("2006-01-02", query.EndDate)
-	arguments := []any{query.StartDate, end.AddDate(0, 0, 1).Format("2006-01-02")}
+	arguments := []any{start.Format(table.statDateLayout), end.AddDate(0, 0, 1).Format(table.statDateLayout)}
 	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a\nWHERE a.STAT_DATE >= :1 AND a.STAT_DATE < :2"
 	names := make([]string, 0, len(query.Filters))
 	for name := range query.Filters {

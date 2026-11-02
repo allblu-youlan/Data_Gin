@@ -3,7 +3,7 @@ package reportoracle
 // Fixed projections and comments verified from Oracle YL_DBS metadata.
 // Only dimension columns are accepted as exact-match filters.
 var tmallTables = map[TmallDataset]tmallTable{
-	TmallSycm: {name: "YL_DBS.ODS_TM_SYCM_PRODUCTORDER", columns: []TmallColumn{
+	TmallSycm: {name: "YL_DBS.ODS_TM_SYCM_PRODUCTORDER", statDateLayout: "20060102", columns: []TmallColumn{
 		{Name: "ID", Comment: "主键ID", DataType: "NUMBER", Length: 22, Nullable: false, Filterable: false},
 		{Name: "STAT_DATE", Comment: "统计日期", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: false},
 		{Name: "PRODUCT_NAME", Comment: "商品名称", DataType: "VARCHAR2", Length: 4000, Nullable: true, Filterable: true},
@@ -41,7 +41,7 @@ var tmallTables = map[TmallDataset]tmallTable{
 		{Name: "CREATED_ODS", Comment: "创建时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
 		{Name: "UPDATED_ODS", Comment: "修改时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
 	}},
-	TmallQztg: {name: "YL_DBS.ODS_TM_QZTG_PRODUCT", columns: []TmallColumn{
+	TmallQztg: {name: "YL_DBS.ODS_TM_QZTG_PRODUCT", statDateLayout: "2006-01-02", columns: []TmallColumn{
 		{Name: "ID", Comment: "", DataType: "NUMBER", Length: 22, Nullable: false, Filterable: false},
 		{Name: "STAT_DATE", Comment: "日期", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: false},
 		{Name: "SCENE_ID", Comment: "场景ID", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
@@ -133,7 +133,7 @@ var tmallTables = map[TmallDataset]tmallTable{
 		{Name: "CREATED_ODS", Comment: "创建时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
 		{Name: "UPDATED_ODS", Comment: "修改时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
 	}},
-	TmallTot: {name: "YL_DBS.ODS_TM_TOT_PRODUCT", columns: []TmallColumn{
+	TmallTot: {name: "YL_DBS.ODS_TM_TOT_PRODUCT", statDateLayout: "2006-01-02", columns: []TmallColumn{
 		{Name: "ID", Comment: "", DataType: "NUMBER", Length: 22, Nullable: false, Filterable: false},
 		{Name: "STAT_DATE", Comment: "日期", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: false},
 		{Name: "PRODUCT_ID", Comment: "商品ID", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
