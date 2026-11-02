@@ -57,7 +57,7 @@ func TestOpenBojunStockSnapshotControllerStrictJSONAndPublicFields(t *testing.T)
 	}
 	service := &fakeOpenBojunStockSnapshotService{}
 	response := performBojunQuery(newBojunStockSnapshotControllerRouter(service), "/snapshots", `{"changeDate":"2026-10-27","storeId":10,"productId":[20],"productColorId":[30],"page":2,"pageSize":10}`)
-	if response.Code != 200 || service.actor != 17 || service.request.ChangeDate != "2026-10-27" || service.request.StoreID != 10 || service.request.ProductID[0] != 20 || service.request.ProductColorID[0] != 30 || *service.request.Page != 2 || response.Header().Get("X-Request-ID") == "" {
+	if response.Code != 200 || service.actor != 17 || service.request.ChangeDate != "2026-10-27" || service.request.StoreID != "10" || service.request.ProductID[0] != "20" || service.request.ProductColorID[0] != "30" || *service.request.Page != 2 || response.Header().Get("X-Request-ID") == "" {
 		t.Fatalf("response=%s service=%+v", response.Body.String(), service)
 	}
 	var body struct {
@@ -98,5 +98,25 @@ func TestOpenBojunStockSnapshotControllerSafeErrors(t *testing.T) {
 		if response.Code != test.status || strings.Contains(response.Body.String(), "private Oracle") || !strings.Contains(response.Body.String(), "库存快照") {
 			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestOpenBojunStockSnapshotControllerAcceptsSourceIDTypes(t *testing.T) {
+	for _, test := range []struct{ name, body string }{
+		{"string IDs", `{"changeDate":"2026-10-27","storeId":"10","productId":["20"],"productColorId":["30"]}`},
+		{"legacy numeric IDs", `{"changeDate":"2026-10-27","storeId":10,"productId":[20],"productColorId":[30]}`},
+		{"source response types", `{"changeDate":"2026-10-27","storeId":10,"productId":["20"],"productColorId":["30"]}`},
+		{"mixed IDs", `{"changeDate":"2026-10-27","storeId":"10","productId":["20",21],"productColorId":[30,"31"]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &fakeOpenBojunStockSnapshotService{}
+			response := performBojunQuery(newBojunStockSnapshotControllerRouter(service), "/snapshots", test.body)
+			if response.Code != http.StatusOK || service.calls != 1 {
+				t.Fatalf("status=%d calls=%d body=%s", response.Code, service.calls, response.Body.String())
+			}
+			if fmt.Sprint(service.request.StoreID) != "10" || fmt.Sprint(service.request.ProductID[0]) != "20" || fmt.Sprint(service.request.ProductColorID[0]) != "30" {
+				t.Fatalf("source IDs changed: %+v", service.request)
+			}
+		})
 	}
 }

@@ -201,17 +201,18 @@ func (snapshot *openBojunStockSnapshot) page(pagination OpenBojunQueryPagination
 }
 
 func normalizeOpenBojunStockSnapshotRequest(request requestbody.OpenBojunStockSnapshotQueryRequest) (reportoracle.BojunStockSnapshotQuery, OpenBojunQueryPagination, error) {
-	query := reportoracle.BojunStockSnapshotQuery{StoreID: request.StoreID}
+	storeID, storeErr := request.StoreID.Int64()
+	query := reportoracle.BojunStockSnapshotQuery{StoreID: storeID}
 	invalid := func() (reportoracle.BojunStockSnapshotQuery, OpenBojunQueryPagination, error) {
 		return reportoracle.BojunStockSnapshotQuery{}, OpenBojunQueryPagination{}, ErrOpenBojunStockSnapshotInvalidQuery
 	}
 	date, err := time.Parse("2006-01-02", request.ChangeDate)
-	if err != nil || date.Format("2006-01-02") != request.ChangeDate || date.Year() < 1 || query.StoreID <= 0 || query.StoreID > 9999999999 {
+	if err != nil || date.Format("2006-01-02") != request.ChangeDate || date.Year() < 1 || storeErr != nil || query.StoreID <= 0 || query.StoreID > 9999999999 {
 		return invalid()
 	}
 	query.ChangeDate, _ = strconv.Atoi(date.Format("20060102"))
 	for _, filter := range []struct {
-		input  []int64
+		input  []json.Number
 		output *[]int64
 	}{{request.ProductID, &query.ProductID}, {request.ProductColorID, &query.ProductColorID}} {
 		if len(filter.input) == 0 || len(filter.input) > 100 {
@@ -219,8 +220,9 @@ func normalizeOpenBojunStockSnapshotRequest(request requestbody.OpenBojunStockSn
 		}
 		values := make([]int64, 0, len(filter.input))
 		seen := make(map[int64]struct{}, len(filter.input))
-		for _, id := range filter.input {
-			if id <= 0 || id > 9999999999 {
+		for _, value := range filter.input {
+			id, err := value.Int64()
+			if err != nil || id <= 0 || id > 9999999999 {
 				return invalid()
 			}
 			if _, exists := seen[id]; exists {

@@ -125,7 +125,46 @@ func newSnapshotTestService(run func(context.Context, reportoracle.BojunStockSna
 }
 
 func validSnapshotRequest() requestbody.OpenBojunStockSnapshotQueryRequest {
-	return requestbody.OpenBojunStockSnapshotQueryRequest{ChangeDate: "2026-10-26", StoreID: 10, ProductID: []int64{21, 20, 21}, ProductColorID: []int64{31, 30}}
+	return requestbody.OpenBojunStockSnapshotQueryRequest{ChangeDate: "2026-10-26", StoreID: "10", ProductID: []json.Number{"21", "20", "21"}, ProductColorID: []json.Number{"31", "30"}}
+}
+
+func TestOpenBojunStockSnapshotsReuseCacheForSourceAndNumericIDs(t *testing.T) {
+	productID, colorID := "20", "30"
+	store := OpenBojunStoreDTO{StoreID: 10}
+	product := OpenBojunProductInfoDTO{ProductID: &productID, ProductColorID: &colorID}
+	sourceRequest, err := json.Marshal(map[string]any{
+		"changeDate": "2026-10-26", "storeId": store.StoreID,
+		"productId": []string{*product.ProductID}, "productColorId": []string{*product.ProductColorID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	service, _, _, opened := newSnapshotTestService(func(_ context.Context, query reportoracle.BojunStockSnapshotQuery) ([]reportoracle.BojunStockSnapshotRow, error) {
+		calls++
+		want := reportoracle.BojunStockSnapshotQuery{ChangeDate: 20261026, StoreID: 10, ProductID: []int64{20}, ProductColorID: []int64{30}}
+		if !reflect.DeepEqual(query, want) {
+			t.Fatalf("query=%+v, want=%+v", query, want)
+		}
+		return []reportoracle.BojunStockSnapshotRow{{ChangeDate: 20261026, StoreCode: "001", ProductCode: "SKU"}}, nil
+	})
+	for _, body := range []string{
+		`{"changeDate":"2026-10-26","storeId":10,"productId":[20],"productColorId":[30]}`,
+		string(sourceRequest),
+		`{"changeDate":"2026-10-26","storeId":"10","productId":["20",20],"productColorId":["30"]}`,
+	} {
+		var request requestbody.OpenBojunStockSnapshotQueryRequest
+		if err := json.Unmarshal([]byte(body), &request); err != nil {
+			t.Fatalf("decode source IDs: %v", err)
+		}
+		result, err := service.Query(t.Context(), 17, request)
+		if err != nil || len(result.Items) != 1 {
+			t.Fatalf("result=%+v error=%v", result, err)
+		}
+	}
+	if calls != 1 || opened.Load() != 1 {
+		t.Fatalf("equivalent IDs generated twice: calls=%d opened=%d", calls, opened.Load())
+	}
 }
 
 func TestOpenBojunStockSnapshotsCacheCompleteResultsAndPageWithoutRegeneration(t *testing.T) {
@@ -152,7 +191,7 @@ func TestOpenBojunStockSnapshotsCacheCompleteResultsAndPageWithoutRegeneration(t
 		t.Fatalf("first=%+v error=%v", first, err)
 	}
 	page = 2
-	request.ProductID = []int64{20, 21}
+	request.ProductID = []json.Number{"20", "21"}
 	second, err := service.Query(t.Context(), 17, request)
 	if err != nil || len(second.Items) != 1 || second.Pagination.HasMore || second.Items[0].ProductCode != "SKU2" || second.GeneratedAt != first.GeneratedAt {
 		t.Fatalf("second=%+v error=%v", second, err)
@@ -173,11 +212,17 @@ func TestOpenBojunStockSnapshotsRejectInvalidRequestsAndPermissionsBeforeOracle(
 		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ChangeDate = "2026-02-29" },
 		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ChangeDate = "20261026" },
 		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ChangeDate = "2026-1-01" },
-		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.StoreID = 0 },
-		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductColorID = []int64{0} },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.StoreID = "0" },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.StoreID = "" },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.StoreID = "1.5" },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.StoreID = "10000000000" },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductColorID = []json.Number{"0"} },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductColorID = []json.Number{"3e1"} },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductColorID = []json.Number{""} },
 		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = nil },
-		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = []int64{-1} },
-		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = make([]int64, 101) },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = []json.Number{"-1"} },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = []json.Number{"20.0"} },
+		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { r.ProductID = make([]json.Number, 101) },
 		func(r *requestbody.OpenBojunStockSnapshotQueryRequest) { value := 101; r.PageSize = &value },
 	} {
 		request := validSnapshotRequest()
