@@ -1,0 +1,178 @@
+package data_svc
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"gin-biz-web-api/internal/service/auth_svc"
+	"gin-biz-web-api/model"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+)
+
+func TestSalesSummaryMetricsUsePushedAmountAndItemQuantities(t *testing.T) {
+	oracleID := uint64(25)
+	orders := []model.BojunRetailOrder{
+		{DocNo: "SALE-1", OrderTypeCode: "CMR", TotalAmtActual: 300, TotalQty: 3, ItemsJSON: `[{"qty":2},{"qty":1}]`},
+		{DocNo: "SALE-2", OracleRetailID: &oracleID, OrderTypeCode: "CMR", PushAmount: 200, PaidAmount: 250, TotalQty: 1, ItemsJSON: `[{"qty":4}]`},
+		{DocNo: "RETURN", OracleRetailID: &oracleID, OrderTypeCode: "RET", PushAmount: 50, TotalQty: -1, ItemsJSON: `[{"qty":2}]`},
+		{DocNo: "EXCHANGE", OrderTypeCode: "EXP", TotalAmtActual: 30, TotalQty: 1, ItemsJSON: `[{"qty":-1},{"qty":2}]`},
+	}
+	var metrics SalesSummaryMetrics
+	for _, order := range orders {
+		if err := addSalesSummaryOrder(&metrics, order); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finishSalesSummaryMetrics(&metrics)
+	if metrics.SalesAmount != 480 || metrics.SalesQuantity != 9 || metrics.ReturnQuantity != -3 || metrics.TotalQuantity != 6 || metrics.OrderCount != 3 {
+		t.Fatalf("unexpected totals: %+v", metrics)
+	}
+	if metrics.AverageOrderValue != 160 || metrics.AverageItemPrice != 160 || metrics.ItemsPerOrder != 3 {
+		t.Fatalf("unexpected ratios: %+v", metrics)
+	}
+	if metrics.DiscountRate < 80 || metrics.DiscountRate > 83 {
+		t.Fatalf("discount rate out of requested range: %v", metrics.DiscountRate)
+	}
+}
+
+type fakeSalesSummaryStore struct {
+	called       bool
+	code         string
+	start        int
+	end          int
+	weatherStart time.Time
+	weatherErr   error
+}
+
+func (store *fakeSalesSummaryStore) FindMall(_ context.Context, code string) (*model.Mall, error) {
+	store.called = true
+	return &model.Mall{BaseModel: model.BaseModel{ID: 3}, MallCode: code, NameCN: "东台里", Timezone: "Asia/Shanghai"}, nil
+}
+
+func (store *fakeSalesSummaryStore) ReadPushedOrders(
+	_ context.Context,
+	code string,
+	start int,
+	end int,
+	visit func(model.BojunRetailOrder) error,
+) error {
+	store.code, store.start, store.end = code, start, end
+	return visit(model.BojunRetailOrder{TotalAmtActual: 80, TotalQty: 2, OrderTypeCode: "CMR"})
+}
+
+func (store *fakeSalesSummaryStore) ReadDailyWeather(
+	_ context.Context,
+	_ uint,
+	start time.Time,
+) ([]model.MallWeatherDaily, error) {
+	store.weatherStart = start
+	low, high := 16.0, 26.0
+	return []model.MallWeatherDaily{{TemperatureMinC: &low, TemperatureMaxC: &high, Skycon: "LIGHT_RAIN"}}, store.weatherErr
+}
+
+func TestSalesSummaryQueryScopesMallAndUsesTodayWeather(t *testing.T) {
+	store := &fakeSalesSummaryStore{}
+	service := &SalesSummaryService{
+		store: store, mallScope: &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A003"}},
+		now: func() time.Time { return time.Date(2026, 11, 1, 17, 0, 0, 0, time.UTC) },
+	}
+	result, err := service.Query(t.Context(), 17, "abcn001a003", "2026-10-01", "2026-10-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.code != "ABCN001A003" || store.start != 20261001 || store.end != 20261031 {
+		t.Fatalf("wrong order filter: %+v", store)
+	}
+	if result.Metrics.SalesAmount != 80 || result.Mall.NameCN != "东台里" || result.Weather == nil || result.Weather.Date != "2026-11-02" {
+		t.Fatalf("wrong result: %+v", result)
+	}
+	store.weatherErr = errors.New("weather unavailable")
+	result, err = service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31")
+	if err != nil || result.Weather != nil || result.Metrics.SalesAmount != 80 {
+		t.Fatalf("weather failure blocked sales: result=%+v err=%v", result, err)
+	}
+}
+
+func TestSalesSummaryRejectsUnauthorizedMallAndInvalidDate(t *testing.T) {
+	store := &fakeSalesSummaryStore{}
+	service := &SalesSummaryService{
+		store: store, mallScope: &fakeBusinessOverviewMallScope{err: auth_svc.ErrMallScopeForbidden}, now: time.Now,
+	}
+	_, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31")
+	if !errors.Is(err, ErrSalesSummaryForbidden) || store.called {
+		t.Fatalf("unauthorized store was queried: %v", err)
+	}
+	for _, dates := range [][2]string{{"2026-02-30", "2026-03-01"}, {"2026-10-31", "2026-10-01"}} {
+		_, err := service.Query(t.Context(), 17, "ABCN001A003", dates[0], dates[1])
+		if !errors.Is(err, ErrSalesSummaryInvalid) || store.called {
+			t.Fatalf("invalid dates were queried: dates=%v err=%v", dates, err)
+		}
+	}
+}
+
+func TestSalesSummaryQueryRequiresPushEvidenceAndExcludesPolicySkips(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{Conn: &sql.DB{}, SkipInitializeWithVersion: true}), &gorm.Config{
+		DryRun: true, DisableAutomaticPing: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statement := salesSummaryPushedOrdersQuery(db, "ABCN001A003", 20261001, 20261031).
+		Find(&[]model.BojunRetailOrder{}).Statement
+	query := statement.SQL.String()
+	for _, required := range []string{
+		"c_store_code = ? AND billdate >= ? AND billdate <= ?", "AND (EXISTS (",
+		"sent.success = TRUE", "sent.source_code = 'bojun_order'", "sent.destination_id = 0",
+		"COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy'",
+		"JSON_EXTRACT(raw_content_json, '$.STATUS')", "AND NOT EXISTS (", "skipped.response_body = 'skipped_by_order_push_policy'",
+	} {
+		if !strings.Contains(query, required) {
+			t.Fatalf("missing pushed-order filter %q in %s", required, query)
+		}
+	}
+	if len(statement.Vars) != 3 || statement.Vars[0] != "ABCN001A003" || statement.Vars[1] != 20261001 || statement.Vars[2] != 20261031 {
+		t.Fatalf("unexpected bound query parameters: %v", statement.Vars)
+	}
+}
+
+func TestSalesSummaryEmptyOrdersAndQuantityFallback(t *testing.T) {
+	var empty SalesSummaryMetrics
+	finishSalesSummaryMetrics(&empty)
+	if empty.AverageOrderValue != 0 || empty.AverageItemPrice != 0 || empty.ItemsPerOrder != 0 {
+		t.Fatalf("empty ratios: %+v", empty)
+	}
+	var metrics SalesSummaryMetrics
+	if err := addSalesSummaryOrder(&metrics, model.BojunRetailOrder{OrderTypeCode: "CMR", TotalQty: 5, TotalAmtActual: 99, ItemsJSON: `[]`}); err != nil {
+		t.Fatal(err)
+	}
+	if metrics.SalesQuantity != 5 || metrics.OrderCount != 1 {
+		t.Fatalf("missing header quantity fallback: %+v", metrics)
+	}
+}
+
+func TestSalesSummaryNegativeAmountRefundAndExchangeQuantities(t *testing.T) {
+	var refund SalesSummaryMetrics
+	if err := addSalesSummaryOrder(&refund, model.BojunRetailOrder{
+		TotalAmtActual: -90, TotalQty: 2, ItemsJSON: `[{"qty":2}]`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if refund.SalesQuantity != 0 || refund.ReturnQuantity != -2 || refund.OrderCount != 0 {
+		t.Fatalf("negative amount refund counted as sales: %+v", refund)
+	}
+	var exchange SalesSummaryMetrics
+	if err := addSalesSummaryOrder(&exchange, model.BojunRetailOrder{
+		OrderTypeCode: "EXP", TotalAmtActual: -20, TotalQty: 0, ItemsJSON: `[{"qty":1},{"qty":-1}]`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if exchange.SalesQuantity != 1 || exchange.ReturnQuantity != -1 || exchange.OrderCount != 1 {
+		t.Fatalf("negative exchange lost item directions: %+v", exchange)
+	}
+}
