@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gin-biz-web-api/internal/controller/auth_ctrl"
+	"gin-biz-web-api/internal/controller/data_ctrl"
 	"gin-biz-web-api/internal/middleware"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
@@ -41,6 +42,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 	apiAuth(api)
 	// 数据存储相关
 	apiData(api)
+	registerOpenTmallRoutes(api, data_ctrl.NewOpenTmallController())
 	// 开放接口账号与数据授权，仅可信管理员可用
 	registerDataAuthorizationRoutes(api)
 	registerAccessRoutes(api)
