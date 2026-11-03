@@ -30,7 +30,7 @@
         ],
         "summary": "查询天猫生意参谋数据",
         "operationId": "queryTmallSycm",
-        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表STAT_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表PAY_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
         "x-required-permission": "tmall.sycm.read",
         "requestBody": {
           "required": true,
@@ -319,7 +319,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
         "properties": {
           "PRODUCT_NAME": {
             "type": "string",
@@ -370,14 +370,14 @@
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "description": "开始付款日期（包含），YYYY-MM-DD。",
             "example": "2026-10-01"
           },
           "endDate": {
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "description": "结束付款日期（包含），不得早于startDate；首尾合计最多31天。",
             "example": "2026-10-31"
           },
           "filters": {
@@ -412,7 +412,7 @@
         "additionalProperties": false,
         "required": [
           "ID",
-          "STAT_DATE",
+          "PAY_DATE",
           "PRODUCT_NAME",
           "PRODUCT_ID",
           "ITEM_NO",
@@ -460,14 +460,14 @@
             "x-oracle-precision": 19,
             "x-oracle-scale": 0
           },
-          "STAT_DATE": {
+          "PAY_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "统计日期 保留源表YYYYMMDD字符串；请求startDate/endDate使用YYYY-MM-DD。",
+            "description": "付款日期 保留源表YYYYMMDD字符串；请求startDate/endDate使用YYYY-MM-DD。",
             "example": "20250101",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
-            "x-oracle-comment": "统计日期"
+            "x-oracle-comment": "付款日期"
           },
           "PRODUCT_NAME": {
             "type": "string",
@@ -534,10 +534,12 @@
           "DETAIL_BOUNCE_RATE": {
             "type": "string",
             "nullable": true,
-            "description": "商品详情页跳出率",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "商品详情页跳出率"
+            "description": "商品详情页跳出率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品详情页跳出率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
           },
           "FAVORITE_CNT": {
             "type": "string",
@@ -602,10 +604,12 @@
           "ORDER_CONV_RATE": {
             "type": "string",
             "nullable": true,
-            "description": "下单转化率",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "下单转化率"
+            "description": "下单转化率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "下单转化率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
           },
           "PAY_BUYER_CNT": {
             "type": "string",
@@ -640,10 +644,12 @@
           "PAY_CONV_RATE": {
             "type": "string",
             "nullable": true,
-            "description": "商品支付转化率",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "商品支付转化率"
+            "description": "商品支付转化率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "商品支付转化率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
           },
           "PAY_NEW_BUYER_CNT": {
             "type": "string",
@@ -738,10 +744,12 @@
           "SEARCH_GUIDE_PAY_CONV_RATE": {
             "type": "string",
             "nullable": true,
-            "description": "搜索引导支付转化率",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "搜索引导支付转化率"
+            "description": "搜索引导支付转化率 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "搜索引导支付转化率",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 6
           },
           "SEARCH_GUIDE_VISITOR_CNT": {
             "type": "string",
@@ -807,7 +815,7 @@
             "items": {
               "$ref": "#/components/schemas/SycmRow"
             },
-            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+            "description": "本页数据；无数据时为[]。按PAY_DATE、ID升序排列。"
           },
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
@@ -841,7 +849,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
         "properties": {
           "SCENE_ID": {
             "type": "string",
@@ -885,26 +893,26 @@
             "x-max-utf8-bytes": 1000,
             "description": "计划名字；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过1000。"
           },
-          "ENTITY_ID": {
+          "PRODUCT_ID": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
             "x-max-utf8-bytes": 200,
-            "description": "主体ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+            "description": "商品ID；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
           },
-          "ENTITY_TYPE": {
+          "PRODUCT_TYPE": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
             "x-max-utf8-bytes": 200,
-            "description": "主体类型；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+            "description": "商品类型；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
           },
-          "ENTITY_NAME": {
+          "PRODUCT_NAME": {
             "type": "string",
             "minLength": 1,
             "maxLength": 1000,
             "x-max-utf8-bytes": 1000,
-            "description": "主体名称；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过1000。"
+            "description": "商品名称；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过1000。"
           },
           "BATCH_ID": {
             "type": "string",
@@ -927,14 +935,14 @@
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "description": "开始付款日期（包含），YYYY-MM-DD。",
             "example": "2026-10-01"
           },
           "endDate": {
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "description": "结束付款日期（包含），不得早于startDate；首尾合计最多31天。",
             "example": "2026-10-31"
           },
           "filters": {
@@ -969,16 +977,16 @@
         "additionalProperties": false,
         "required": [
           "ID",
-          "STAT_DATE",
+          "PAY_DATE",
           "SCENE_ID",
           "SCENE_NAME",
           "ORI_SUB_SCENE_ID",
           "ORI_SUB_SCENE_NAME",
           "PLAN_ID",
           "PLAN_NAME",
-          "ENTITY_ID",
-          "ENTITY_TYPE",
-          "ENTITY_NAME",
+          "PRODUCT_ID",
+          "PRODUCT_TYPE",
+          "PRODUCT_NAME",
           "IMPRESSION_CNT",
           "CLICK_CNT",
           "COST",
@@ -1071,14 +1079,14 @@
             "x-oracle-precision": 19,
             "x-oracle-scale": 0
           },
-          "STAT_DATE": {
+          "PAY_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "日期 保留源表YYYY-MM-DD字符串；查询条件使用startDate/endDate。",
+            "description": "付款日期 保留源表YYYY-MM-DD字符串；请求startDate/endDate使用YYYY-MM-DD。",
             "example": "2025-01-01",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
-            "x-oracle-comment": "日期"
+            "x-oracle-comment": "付款日期"
           },
           "SCENE_ID": {
             "type": "string",
@@ -1128,29 +1136,29 @@
             "x-oracle-data-length": 1000,
             "x-oracle-comment": "计划名字"
           },
-          "ENTITY_ID": {
+          "PRODUCT_ID": {
             "type": "string",
             "nullable": true,
-            "description": "主体ID",
+            "description": "商品ID",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
-            "x-oracle-comment": "主体ID"
+            "x-oracle-comment": "商品ID"
           },
-          "ENTITY_TYPE": {
+          "PRODUCT_TYPE": {
             "type": "string",
             "nullable": true,
-            "description": "主体类型",
+            "description": "商品类型",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
-            "x-oracle-comment": "主体类型"
+            "x-oracle-comment": "商品类型"
           },
-          "ENTITY_NAME": {
+          "PRODUCT_NAME": {
             "type": "string",
             "nullable": true,
-            "description": "主体名称",
+            "description": "商品名称",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 1000,
-            "x-oracle-comment": "主体名称"
+            "x-oracle-comment": "商品名称"
           },
           "IMPRESSION_CNT": {
             "type": "string",
@@ -1956,7 +1964,7 @@
             "items": {
               "$ref": "#/components/schemas/QztgRow"
             },
-            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+            "description": "本页数据；无数据时为[]。按PAY_DATE、ID升序排列。"
           },
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
@@ -1990,7 +1998,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或STAT_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
         "properties": {
           "PRODUCT_ID": {
             "type": "string",
@@ -2104,14 +2112,14 @@
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "开始统计日期（包含），YYYY-MM-DD。",
+            "description": "开始付款日期（包含），YYYY-MM-DD。",
             "example": "2026-10-01"
           },
           "endDate": {
             "type": "string",
             "format": "date",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "结束统计日期（包含），不得早于startDate；首尾合计最多31天。",
+            "description": "结束付款日期（包含），不得早于startDate；首尾合计最多31天。",
             "example": "2026-10-31"
           },
           "filters": {
@@ -2146,7 +2154,7 @@
         "additionalProperties": false,
         "required": [
           "ID",
-          "STAT_DATE",
+          "PAY_DATE",
           "PRODUCT_ID",
           "PRICE_RANGE",
           "TOTAL_ORDER_CNT",
@@ -2188,14 +2196,14 @@
             "x-oracle-precision": 19,
             "x-oracle-scale": 0
           },
-          "STAT_DATE": {
+          "PAY_DATE": {
             "type": "string",
             "nullable": true,
-            "description": "日期 保留源表YYYY-MM-DD字符串；查询条件使用startDate/endDate。",
+            "description": "付款日期 保留源表YYYY-MM-DD字符串；请求startDate/endDate使用YYYY-MM-DD。",
             "example": "2025-01-01",
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
-            "x-oracle-comment": "日期"
+            "x-oracle-comment": "付款日期"
           },
           "PRODUCT_ID": {
             "type": "string",
@@ -2409,7 +2417,7 @@
             "x-oracle-data-length": 22,
             "x-oracle-comment": "明日最终投放预算全站推广",
             "x-oracle-precision": 18,
-            "x-oracle-scale": 0
+            "x-oracle-scale": 6
           },
           "SUGGESTED_ADD_CART_COST": {
             "type": "string",
@@ -2465,7 +2473,7 @@
             "items": {
               "$ref": "#/components/schemas/TotRow"
             },
-            "description": "本页数据；无数据时为[]。按STAT_DATE、ID升序排列。"
+            "description": "本页数据；无数据时为[]。按PAY_DATE、ID升序排列。"
           },
           "pagination": {
             "$ref": "#/components/schemas/Pagination"

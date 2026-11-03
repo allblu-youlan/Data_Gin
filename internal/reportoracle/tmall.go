@@ -41,9 +41,9 @@ type TmallColumn struct {
 }
 
 type tmallTable struct {
-	name           string
-	statDateLayout string
-	columns        []TmallColumn
+	name          string
+	payDateLayout string
+	columns       []TmallColumn
 }
 
 func TmallColumns(dataset TmallDataset) []TmallColumn {
@@ -141,8 +141,8 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 	}
 	start, _ := time.Parse("2006-01-02", query.StartDate)
 	end, _ := time.Parse("2006-01-02", query.EndDate)
-	arguments := []any{start.Format(table.statDateLayout), end.AddDate(0, 0, 1).Format(table.statDateLayout)}
-	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a\nWHERE a.STAT_DATE >= :1 AND a.STAT_DATE < :2"
+	arguments := []any{start.Format(table.payDateLayout), end.AddDate(0, 0, 1).Format(table.payDateLayout)}
+	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a\nWHERE a.PAY_DATE >= :1 AND a.PAY_DATE < :2"
 	names := make([]string, 0, len(query.Filters))
 	for name := range query.Filters {
 		names = append(names, name)
@@ -152,7 +152,7 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 		arguments = append(arguments, query.Filters[name])
 		statement += fmt.Sprintf("\n  AND a.%s = :%d", name, len(arguments))
 	}
-	statement += fmt.Sprintf("\nORDER BY a.STAT_DATE, a.ID\nOFFSET :%d ROWS FETCH NEXT :%d ROWS ONLY", len(arguments)+1, len(arguments)+2)
+	statement += fmt.Sprintf("\nORDER BY a.PAY_DATE, a.ID\nOFFSET :%d ROWS FETCH NEXT :%d ROWS ONLY", len(arguments)+1, len(arguments)+2)
 	arguments = append(arguments, query.Offset, query.PageSize+1)
 	return statement, arguments
 }

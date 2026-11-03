@@ -38,29 +38,35 @@ func TestQueryTmallBindsDimensionsAndPreservesPrecisionAndNulls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || len(result[0]) != 36 || *result[0]["ID"] != "9007199254740993123" || *result[0]["STAT_DATE"] != "20261001" || *result[0]["PAY_AMT"] != "123456789012.123456" || *result[0]["PRODUCT_ID"] != "000123" || result[0]["PRODUCT_NAME"] != nil || *result[0]["CREATED_ODS"] != "2026-10-02 09:10:11" || !rows.closed {
+	if len(result) != 1 || len(result[0]) != 36 || *result[0]["ID"] != "9007199254740993123" || *result[0]["PAY_DATE"] != "20261001" || *result[0]["PAY_AMT"] != "123456789012.123456" || *result[0]["PRODUCT_ID"] != "000123" || result[0]["PRODUCT_NAME"] != nil || *result[0]["CREATED_ODS"] != "2026-10-02 09:10:11" || !rows.closed {
 		t.Fatalf("result=%+v closed=%v", result, rows.closed)
 	}
 }
 
 func TestTmallRejectsUnknownDatasetAndUnapprovedFilters(t *testing.T) {
 	for _, test := range []struct {
+		name    string
 		dataset TmallDataset
 		filters map[string]string
 	}{
-		{TmallDataset("ODS_OTHER_TABLE"), nil},
-		{TmallSycm, map[string]string{"PRODUCT_ID OR 1=1": "1"}},
-		{TmallSycm, map[string]string{"ENTITY_ID": "1"}},
-		{TmallQztg, map[string]string{"COST": "100"}},
-		{TmallTot, map[string]string{"PRODUCT_ID": " "}},
+		{"unknown dataset", TmallDataset("ODS_OTHER_TABLE"), nil},
+		{"SQL in column name", TmallSycm, map[string]string{"PRODUCT_ID OR 1=1": "1"}},
+		{"wrong dataset dimension", TmallSycm, map[string]string{"ENTITY_ID": "1"}},
+		{"removed entity ID", TmallQztg, map[string]string{"ENTITY_ID": "1"}},
+		{"removed entity type", TmallQztg, map[string]string{"ENTITY_TYPE": "商品"}},
+		{"removed entity name", TmallQztg, map[string]string{"ENTITY_NAME": "商品名称"}},
+		{"metric filter", TmallQztg, map[string]string{"COST": "100"}},
+		{"empty filter", TmallTot, map[string]string{"PRODUCT_ID": " "}},
 	} {
-		adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
-			t.Fatal("invalid query reached Oracle")
-			return nil, nil
+		t.Run(test.name, func(t *testing.T) {
+			adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+				t.Fatal("invalid query reached Oracle")
+				return nil, nil
+			})
+			if _, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: "2026-10-01", EndDate: "2026-10-01", Filters: test.filters, PageSize: 50}); err == nil {
+				t.Fatalf("accepted %+v", test)
+			}
 		})
-		if _, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: "2026-10-01", EndDate: "2026-10-01", Filters: test.filters, PageSize: 50}); err == nil {
-			t.Fatalf("accepted %+v", test)
-		}
 	}
 }
 
@@ -95,17 +101,17 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 		wantDates   []any
 	}{
 		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}, []any{"20251231", "20260101"}},
-		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "ENTITY_TYPE": "商品"}, []any{"商品", "001"}, []any{"2025-12-31", "2026-01-01"}},
+		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "PRODUCT_TYPE": "商品"}, []any{"001", "商品"}, []any{"2025-12-31", "2026-01-01"}},
 		{TmallTot, "ODS_TM_TOT_PRODUCT", 30, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}, []any{"2025-12-31", "2026-01-01"}},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
 			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
-				for _, fragment := range []string{"FROM YL_DBS." + test.table + " a", "a.STAT_DATE >= :1 AND a.STAT_DATE < :2", "ORDER BY a.STAT_DATE, a.ID", "OFFSET :5 ROWS FETCH NEXT :6 ROWS ONLY"} {
+				for _, fragment := range []string{"FROM YL_DBS." + test.table + " a", "a.PAY_DATE >= :1 AND a.PAY_DATE < :2", "ORDER BY a.PAY_DATE, a.ID", "OFFSET :5 ROWS FETCH NEXT :6 ROWS ONLY"} {
 					if !strings.Contains(statement, fragment) {
 						t.Fatalf("missing %q in %s", fragment, statement)
 					}
 				}
-				if strings.Contains(statement, "TO_DATE(a.STAT_DATE") || strings.Contains(statement, "TO_CHAR(a.STAT_DATE") || strings.Contains(statement, "COUNT(") {
+				if strings.Contains(statement, "TO_DATE(a.PAY_DATE") || strings.Contains(statement, "TO_CHAR(a.PAY_DATE") || strings.Contains(statement, "COUNT(") {
 					t.Fatalf("query disables index or adds a count: %s", statement)
 				}
 				want := append(append([]any{}, test.wantDates...), test.wantFilters...)
@@ -144,7 +150,7 @@ func TestQueryTmallBindsSourceDateRanges(t *testing.T) {
 	} {
 		t.Run(string(test.dataset)+"/"+test.name, func(t *testing.T) {
 			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
-				if !strings.Contains(statement, "WHERE a.STAT_DATE >= :1 AND a.STAT_DATE < :2") {
+				if !strings.Contains(statement, "WHERE a.PAY_DATE >= :1 AND a.PAY_DATE < :2") {
 					t.Fatalf("date range must compare the source column directly: %s", statement)
 				}
 				if args[0].Value != test.wantStart || args[1].Value != test.wantEnd {
@@ -155,6 +161,72 @@ func TestQueryTmallBindsSourceDateRanges(t *testing.T) {
 			_, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: test.start, EndDate: test.end, PageSize: 50})
 			if err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestQueryTmallReturnsCurrentColumnsAndExactDecimals(t *testing.T) {
+	for _, test := range []struct {
+		dataset TmallDataset
+		count   int
+		values  map[int]string
+		want    map[string]string
+		filters map[string]string
+	}{
+		{
+			dataset: TmallSycm, count: 36,
+			values: map[int]string{1: "20261001", 9: "0.123456", 16: "0.234567", 20: "0.345678", 30: "0.456789"},
+			want:   map[string]string{"PAY_DATE": "20261001", "DETAIL_BOUNCE_RATE": "0.123456", "ORDER_CONV_RATE": "0.234567", "PAY_CONV_RATE": "0.345678", "SEARCH_GUIDE_PAY_CONV_RATE": "0.456789"},
+		},
+		{
+			dataset: TmallQztg, count: 90,
+			values:  map[int]string{1: "2026-10-01", 8: "000123", 9: "商品", 10: "测试商品"},
+			want:    map[string]string{"PAY_DATE": "2026-10-01", "PRODUCT_ID": "000123", "PRODUCT_TYPE": "商品", "PRODUCT_NAME": "测试商品"},
+			filters: map[string]string{"PRODUCT_ID": "000123", "PRODUCT_TYPE": "商品", "PRODUCT_NAME": "测试商品"},
+		},
+		{
+			dataset: TmallTot, count: 30,
+			values: map[int]string{1: "2026-10-01", 25: "123456789012.123456"},
+			want:   map[string]string{"PAY_DATE": "2026-10-01", "TOMORROW_QZTG_BUDGET": "123456789012.123456"},
+		},
+	} {
+		t.Run(string(test.dataset), func(t *testing.T) {
+			values := make([]driver.Value, test.count)
+			for index, value := range test.values {
+				values[index] = value
+			}
+			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
+				for _, oldName := range []string{"STAT_DATE", "ENTITY_ID", "ENTITY_TYPE", "ENTITY_NAME"} {
+					if strings.Contains(statement, "a."+oldName) {
+						t.Fatalf("query contains removed column %s: %s", oldName, statement)
+					}
+				}
+				if test.dataset == TmallQztg {
+					for _, fragment := range []string{"a.PRODUCT_ID = :3", "a.PRODUCT_NAME = :4", "a.PRODUCT_TYPE = :5"} {
+						if !strings.Contains(statement, fragment) {
+							t.Fatalf("missing bound product filter %s: %s", fragment, statement)
+						}
+					}
+					if args[2].Value != "000123" || args[3].Value != "测试商品" || args[4].Value != "商品" {
+						t.Fatalf("unexpected product filter binds: %v", args)
+					}
+				}
+				return &bojunQueryTestRows{columns: make([]string, test.count), values: [][]driver.Value{values}}, nil
+			})
+			rows, err := adapter.QueryTmall(t.Context(), test.dataset, TmallQuery{StartDate: "2026-10-01", EndDate: "2026-10-01", Filters: test.filters, PageSize: 50})
+			if err != nil || len(rows) != 1 {
+				t.Fatalf("rows=%v error=%v", rows, err)
+			}
+			for name, want := range test.want {
+				if got := rows[0][name]; got == nil || *got != want {
+					t.Errorf("%s=%v want %q", name, got, want)
+				}
+			}
+			for _, oldName := range []string{"STAT_DATE", "ENTITY_ID", "ENTITY_TYPE", "ENTITY_NAME"} {
+				if _, exists := rows[0][oldName]; exists {
+					t.Errorf("response contains removed column %s", oldName)
+				}
 			}
 		})
 	}
