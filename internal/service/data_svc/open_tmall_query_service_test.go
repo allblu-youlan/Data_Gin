@@ -50,7 +50,7 @@ func TestOpenTmallQueryAuthorizesEachDatasetAndPaginates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if permissions.permission != test.permission || calls != 1 || len(result.Items) != 1 || len(result.Columns) == 0 || !reflect.DeepEqual(result.Pagination, OpenBojunQueryPagination{Page: 2, PageSize: 1, HasMore: true}) {
+			if permissions.permission != test.permission || calls != 1 || len(result.Items) != 1 || !reflect.DeepEqual(result.Pagination, OpenBojunQueryPagination{Page: 2, PageSize: 1, HasMore: true}) {
 				t.Fatalf("unexpected result: permission=%s result=%+v calls=%d", permissions.permission, result, calls)
 			}
 		})

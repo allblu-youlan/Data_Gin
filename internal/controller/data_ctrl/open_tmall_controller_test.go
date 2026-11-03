@@ -25,6 +25,7 @@ type fakeOpenTmallQueryService struct {
 	calls   int
 	err     error
 	request requestbody.OpenTmallQueryRequest
+	items   []reportoracle.TmallRow
 }
 
 func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, dataset reportoracle.TmallDataset, request requestbody.OpenTmallQueryRequest) (*data_svc.OpenTmallQueryDTO, error) {
@@ -34,15 +35,19 @@ func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, d
 	if service.err != nil {
 		return nil, service.err
 	}
+	items := service.items
+	if items == nil {
+		items = []reportoracle.TmallRow{}
+	}
 	return &data_svc.OpenTmallQueryDTO{
-		Items:      []reportoracle.TmallRow{},
-		Columns:    []reportoracle.TmallColumn{},
+		Items:      items,
 		Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50},
 	}, nil
 }
 
 func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 	page, pageSize := 2, 25
+	productID := "000123"
 	wantRequest := requestbody.OpenTmallQueryRequest{
 		StartDate: "2026-10-01", EndDate: "2026-10-31",
 		Filters: map[string]string{"BATCH_ID": "batch-20261001"}, Page: &page, PageSize: &pageSize,
@@ -56,25 +61,46 @@ func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 		{"tot", reportoracle.TmallTot},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			service := &fakeOpenTmallQueryService{}
-			recorder := performOpenTmallControllerRequest(service, "/api/open/tmall/"+test.path+"/query", `{"startDate":"2026-10-01","endDate":"2026-10-31","filters":{"BATCH_ID":"batch-20261001"},"page":2,"pageSize":25}`)
-			if recorder.Code != http.StatusOK || service.calls != 1 || service.actor != 17 || service.dataset != test.dataset || !reflect.DeepEqual(service.request, wantRequest) {
-				t.Fatalf("status=%d service=%+v body=%s", recorder.Code, service, recorder.Body.String())
-			}
-			var response struct {
-				Code int `json:"code"`
-				Data struct {
-					Items      []json.RawMessage                 `json:"items"`
-					Columns    []json.RawMessage                 `json:"columns"`
-					Pagination data_svc.OpenBojunQueryPagination `json:"pagination"`
-				} `json:"data"`
-			}
-			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if response.Code != 0 || response.Data.Items == nil || response.Data.Columns == nil ||
-				response.Data.Pagination != (data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}) {
-				t.Fatalf("unexpected response envelope: %s", recorder.Body.String())
+			for _, data := range []struct {
+				name  string
+				items []reportoracle.TmallRow
+			}{
+				{"empty", []reportoracle.TmallRow{}},
+				{"nonempty", []reportoracle.TmallRow{{"PRODUCT_ID": &productID, "PRODUCT_NAME": nil}}},
+			} {
+				t.Run(data.name, func(t *testing.T) {
+					service := &fakeOpenTmallQueryService{items: data.items}
+					recorder := performOpenTmallControllerRequest(service, "/api/open/tmall/"+test.path+"/query", `{"startDate":"2026-10-01","endDate":"2026-10-31","filters":{"BATCH_ID":"batch-20261001"},"page":2,"pageSize":25}`)
+					if recorder.Code != http.StatusOK || service.calls != 1 || service.actor != 17 || service.dataset != test.dataset || !reflect.DeepEqual(service.request, wantRequest) {
+						t.Fatalf("status=%d service=%+v body=%s", recorder.Code, service, recorder.Body.String())
+					}
+					var response struct {
+						Code int `json:"code"`
+						Data struct {
+							Items      []reportoracle.TmallRow           `json:"items"`
+							Pagination data_svc.OpenBojunQueryPagination `json:"pagination"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+						t.Fatal(err)
+					}
+					if response.Code != 0 || !reflect.DeepEqual(response.Data.Items, data.items) ||
+						response.Data.Pagination != (data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}) {
+						t.Fatalf("unexpected response envelope: %s", recorder.Body.String())
+					}
+					var rawResponse struct {
+						Data map[string]json.RawMessage `json:"data"`
+					}
+					if err := json.Unmarshal(recorder.Body.Bytes(), &rawResponse); err != nil {
+						t.Fatal(err)
+					}
+					if _, exists := rawResponse.Data["columns"]; exists {
+						t.Fatalf("response must omit columns metadata: %s", recorder.Body.String())
+					}
+					if len(rawResponse.Data) != 2 {
+						t.Fatalf("response data must contain only items and pagination: %s", recorder.Body.String())
+					}
+				})
 			}
 		})
 	}

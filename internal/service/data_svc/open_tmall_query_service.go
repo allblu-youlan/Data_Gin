@@ -29,9 +29,8 @@ type OpenTmallQueryService struct {
 }
 
 type OpenTmallQueryDTO struct {
-	Items      []reportoracle.TmallRow    `json:"items"`
-	Columns    []reportoracle.TmallColumn `json:"columns"`
-	Pagination OpenBojunQueryPagination   `json:"pagination"`
+	Items      []reportoracle.TmallRow  `json:"items"`
+	Pagination OpenBojunQueryPagination `json:"pagination"`
 }
 
 func NewOpenTmallQueryService() *OpenTmallQueryService {
@@ -103,5 +102,5 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	if rows == nil {
 		rows = []reportoracle.TmallRow{}
 	}
-	return &OpenTmallQueryDTO{Items: rows, Columns: reportoracle.TmallColumns(dataset), Pagination: pagination}, nil
+	return &OpenTmallQueryDTO{Items: rows, Pagination: pagination}, nil
 }
