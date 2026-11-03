@@ -5,6 +5,7 @@ import { YouzanDistributionPage } from '../backfillPages/YouzanDistributionPage'
 import type { LegacyTask } from '../backfillPages/youzanDistributionSupport'
 import { BusinessOverviewPage } from '../businessOverviewPages/BusinessOverviewPage'
 import { PassengerFlowPage } from '../passengerFlow/PassengerFlowPage'
+import { SalesSummaryPage } from '../salesSummary/SalesSummaryPage'
 import { DeliveryTasksPage } from '../configurationPages/DeliveryTasksPage/DeliveryTasksPage'
 import { DestinationsPage } from '../configurationPages/DestinationsPage/DestinationsPage'
 import { MethodsPage } from '../configurationPages/MethodsPage/MethodsPage'
@@ -55,6 +56,7 @@ export type PipelineDefinition = { id: number; name: string; code: string; enabl
 type WorkspaceRouterProps = {
   activeNav: NavKey
   actorID: string | null
+  username: string
   client: WorkspaceApiClient
   deliveryLogs: DeliveryLog[]
   destinations: DestinationDefinition[]
@@ -74,6 +76,8 @@ type WorkspaceRouterProps = {
   token: string
   transformRules: TransformRule[]
   navigate: (key: NavKey) => void
+  onLogout: () => void
+  onOpenNavigation: () => void
   onFetchSource: (sourceID: number) => Promise<ClientResponse>
   onLoadSteps: (runID: number) => void
   onRefresh: () => Promise<void>
@@ -100,6 +104,13 @@ export function WorkspaceRouter(props: WorkspaceRouterProps) {
   }
 
   if (activeNav === 'business_overview') return <BusinessOverviewPage client={client} />
+  if (activeNav === 'sales_summary') return <SalesSummaryPage
+    client={client}
+    username={props.username}
+    onLogout={props.onLogout}
+    onOpenNavigation={props.onOpenNavigation}
+    onNavigate={(target) => navigate(target === 'business-overview' ? 'business_overview' : target === 'store-info' ? 'store_info' : 'report_query')}
+  />
   if (activeNav === 'overview') return <RunOverviewPage runs={runs} deliveryLogs={deliveryLogs} monitoring={monitoring} stale={monitoringStale} overviewTotals={overviewTotals} onLoadSteps={onLoadSteps} />
   if (activeNav === 'runs') return <PipelineRunsPage client={client} pipelines={pipelines} onLoadSteps={onLoadSteps} onPipelineRunCompleted={() => void onRefresh()} refreshVersion={refreshVersion} />
   if (activeNav === 'delivery_logs') return <DeliveryLogsPage client={client} onRetryLog={onRetryDeliveryLog} />

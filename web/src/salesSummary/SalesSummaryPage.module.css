@@ -1,0 +1,126 @@
+.page {
+  --sales-blue: #2055a2;
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+  color: #303030;
+  font-family: 'Noto Sans SC Variable', 'Microsoft YaHei', sans-serif;
+  line-height: 1.4;
+}
+.page:fullscreen { overflow: auto; }
+.page button, .page input, .page select { font: inherit; }
+.page button { cursor: pointer; }
+.page button:disabled { cursor: wait; opacity: .65; }
+.page button:focus-visible, .page input:focus-visible { outline: 2px solid #367ce0; outline-offset: 3px; }
+.header {
+  display: flex;
+  align-items: stretch;
+  gap: 1.3cqw;
+  min-height: clamp(56px, 3.25cqw, 100px);
+  padding: 0 .65cqw;
+  background: var(--sales-blue);
+  color: white;
+}
+.identity { display: flex; align-items: center; gap: .5cqw; min-width: 0; flex: 1; font-size: clamp(17px, 1.13cqw, 35px); white-space: nowrap; }
+.brand { flex-shrink: 0; }
+.mallName { min-width: 60px; max-width: 14cqw; position: relative; }
+.mallName > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mallName select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.mallName:focus-within { outline: 2px solid white; outline-offset: 3px; }
+.storeCode { flex-shrink: 0; margin-left: .3cqw; padding: .3cqw .6cqw; border-radius: 4px; color: #295a9d; background: #fff; font-size: clamp(12px, .71cqw, 22px); }
+.primaryNav { display: flex; align-items: stretch; gap: .15cqw; white-space: nowrap; }
+.primaryNav button { background: transparent; color: inherit; border: 0; padding: 0 .7cqw; font-size: clamp(16px, 1.13cqw, 35px); }
+.primaryNav .primaryActive { background: #fff; color: #111; font-weight: 700; margin: .28cqw 0; }
+.headerTools { display: flex; align-items: center; gap: .8cqw; padding-left: 1cqw; }
+.headerTools button { position: relative; display: grid; place-items: center; color: inherit; background: transparent; border: 0; padding: .2cqw; }
+.headerTools svg { width: clamp(23px, 1.3cqw, 40px); height: clamp(23px, 1.3cqw, 40px); stroke-width: 2.1; }
+.hexagonDot { position: absolute; width: .33cqw; height: .33cqw; min-width: 5px; min-height: 5px; border: 2px solid white; border-radius: 50%; }
+.mobileMenu { display: none; }
+.secondaryNav { display: flex; align-items: stretch; justify-content: center; min-height: clamp(64px, 3.8cqw, 116px); gap: 2.5cqw; }
+.secondaryNav button { position: relative; border: 0; padding: .8cqw 0 0; background: transparent; color: #303030; font-size: clamp(18px, 1.2cqw, 37px); white-space: nowrap; }
+.secondaryNav .secondaryActive { color: #30548b; }
+.secondaryActive::after { position: absolute; content: ''; width: 1.3cqw; min-width: 22px; bottom: 0; height: 2px; background: #30548b; left: 50%; transform: translateX(-50%); }
+.divider { display: flex; justify-content: space-between; background: #f0f0f0; height: clamp(14px, 1.15cqw, 35px); margin: 0 1.3cqw; color: #aaa; }
+.divider svg { width: clamp(10px, .65cqw, 20px); height: 100%; fill: #aaa; stroke: white; stroke-width: 1px; }
+.content { display: flex; flex-direction: column; flex: 1; padding: .2cqw 1.95cqw 0; gap: .65cqw; }
+.filters { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: clamp(115px, 6.55cqw, 201px); background: #fff; padding: 1.05cqw 1.3cqw; border-radius: 7px; box-shadow: 0 3px 7px #00000016; }
+.periodControls { display: flex; align-items: center; gap: 0; font-size: clamp(15px, 1cqw, 31px); }
+.periodControls > strong { margin-right: 1.1cqw; color: #222; white-space: nowrap; }
+.periodButtons { display: flex; }
+.periodButtons button { background: #f8f9fa; color: #666; border: 1px solid #e6e7ea; border-radius: 5px; min-height: clamp(39px, 2.35cqw, 72px); min-width: 4.55cqw; padding: .4cqw .9cqw; }
+.periodButtons .periodActive { color: #2d5595; background: #f0f4fb; border-color: #cad6eb; }
+.dateControl { position: relative; }
+.dateRange { background: #2d5599; color: white; border: 1px solid #2d5599; border-radius: 5px; min-height: clamp(39px, 2.35cqw, 72px); padding: .4cqw 1.35cqw; white-space: nowrap; }
+.datePicker { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: 290px; padding: 18px; border: 1px solid #e3e6eb; border-radius: 6px; background: #fff; box-shadow: 0 6px 24px #0002; font-size: 14px; }
+.datePicker label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.datePicker input { min-width: 0; border: 1px solid #ccc; border-radius: 3px; padding: 7px; background: white; color: #303030; }
+.datePicker p { color: #b22; font-size: 13px; }
+.datePicker > div { display: flex; justify-content: flex-end; gap: 8px; }
+.datePicker button { border: 1px solid #ddd; border-radius: 3px; padding: 6px 14px; background: #fff; }
+.datePicker button[type='submit'] { background: #2d5599; color: white; border-color: #2d5599; }
+.refresh { align-self: flex-end; display: flex; align-items: center; gap: .6cqw; border: 1px solid #dcdde2; color: #666; background: #fff; border-radius: 3px; font-size: clamp(14px, .85cqw, 26px) !important; padding: .5cqw 1cqw; min-height: 35px; }
+.refresh svg { width: clamp(14px, .65cqw, 20px); height: clamp(14px, .65cqw, 20px); stroke-width: 1.3; }
+.salesPanel { flex: 1; background: #fff; border-radius: 7px 7px 0 0; padding: 1.05cqw; min-height: clamp(480px, 40cqw, 1240px); box-shadow: 0 2px 7px #00000012; }
+.salesPanel h1 { margin: 0 .5cqw 1cqw; font-size: clamp(18px, 1.05cqw, 32px); font-weight: 700; color: #070707; }
+.metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1.3cqw; }
+.metric { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8cqw; height: clamp(114px, 7.35cqw, 226px); border: 1px solid #ededed; border-radius: 9px; background: #fafafa; }
+.metric:nth-child(2) { box-shadow: 0 5px 9px #00000012; }
+.metricLabel { color: #6a6a6a; font-size: clamp(14px, .97cqw, 30px); white-space: nowrap; }
+.metricValue { color: #303030; font-size: clamp(26px, 1.7cqw, 52px); font-weight: 700; letter-spacing: .025em; line-height: 1.5; white-space: nowrap; }
+.statusBar { display: flex; align-items: center; justify-content: space-between; position: sticky; bottom: 0; z-index: 10; background: #fff; min-height: clamp(38px, 1.95cqw, 60px); padding: .15cqw .65cqw; gap: 1cqw; color: #5b5b5b; font-size: clamp(12px, .96cqw, 30px); }
+.systemMessage { display: flex; align-items: center; min-width: 0; flex: 1; gap: .35cqw; }
+.systemMessage > svg { width: clamp(17px, 1cqw, 31px); height: clamp(17px, 1cqw, 31px); color: #d62e33; fill: #d62e33; flex-shrink: 0; }
+.systemMessage > span:first-of-type { white-space: nowrap; }
+.messageText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(11px, .8cqw, 24px); }
+.statusDetails { display: flex; align-items: center; justify-content: flex-end; gap: .75cqw; white-space: nowrap; }
+.weather, .cloudStatus, .network, .offline { display: flex; align-items: center; gap: .3cqw; }
+.statusDetails svg { width: clamp(18px, 1.2cqw, 37px); height: clamp(18px, 1.2cqw, 37px); stroke-width: 1.6; }
+.network svg { color: #1ba864; stroke-width: 3; }
+.offline svg { color: #999; }
+.user { max-width: 25cqw; overflow: hidden; text-overflow: ellipsis; }
+.spinning { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@container (max-width: 1100px) {
+  .identity { gap: 5px; }
+  .mallName { max-width: 13cqw; }
+  .storeCode { max-width: 11cqw; overflow: hidden; text-overflow: ellipsis; }
+  .headerTools { gap: 5px; padding-left: 0; }
+  .primaryNav button { padding-inline: 7px; font-size: 15px; }
+  .statusBar { flex-wrap: wrap; gap: 3px 10px; padding: 5px 10px; }
+  .systemMessage { flex-basis: 100%; }
+  .statusDetails { margin-left: auto; gap: 10px; }
+  .user { max-width: 35cqw; }
+}
+@media (max-width: 840px) { .mobileMenu { display: grid; align-self: center; place-items: center; color: white; background: transparent; border: 0; padding: 4px; } }
+@container (max-width: 720px) {
+  .header { flex-wrap: wrap; gap: 0 10px; padding: 8px 10px; }
+  .identity { min-height: 34px; }
+  .mallName { max-width: 42cqw; }
+  .storeCode { display: none; }
+  .headerTools { gap: 8px; }
+  .headerTools svg { width: 21px; height: 21px; }
+  .primaryNav { order: 3; width: 100%; justify-content: center; min-height: 40px; gap: 12px; }
+  .primaryNav button { padding-inline: 10px; }
+  .secondaryNav { gap: 6cqw; min-height: 54px; }
+  .secondaryNav button { font-size: 15px; }
+  .filters { padding: 14px; }
+  .periodControls { flex-wrap: wrap; row-gap: 10px; }
+  .periodControls > strong { margin-right: 12px; }
+  .periodButtons button { min-width: 57px; }
+  .dateControl { margin-left: 46px; }
+  .dateRange { padding-inline: 15px; }
+  .datePicker { left: 50%; right: auto; width: min(290px, calc(100cqw - 40px)); transform: translateX(-50%); }
+  .refresh { margin-left: auto; padding: 7px 15px; }
+  .salesPanel { padding: 16px 12px; }
+  .salesPanel h1 { margin-bottom: 16px; }
+  .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .metric { height: 120px; gap: 10px; }
+  .statusDetails { flex-wrap: wrap; justify-content: flex-start; margin-left: 0; gap: 5px 12px; }
+  .user { max-width: 90cqw; }
+  .content { gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .spinning { animation: none; } }

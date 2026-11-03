@@ -27,6 +27,7 @@ import { canViewNavigationItem, resolveAccessibleNavigationItem } from './naviga
 
 export type NavKey =
   | 'business_overview'
+  | 'sales_summary'
   | 'overview'
   | 'runs'
   | 'delivery_logs'
@@ -74,6 +75,7 @@ export const navGroups: NavGroup[] = [
     label: '基础信息',
     items: [
       { key: 'business_overview', label: '营业概况', description: '销售日结与门店对账', icon: <ChartColumn aria-hidden="true" /> },
+      { key: 'sales_summary', label: '销售汇总', description: '已推送销售数据与经营指标', icon: <ChartColumn aria-hidden="true" /> },
       { key: 'store_info', label: '店铺信息', description: '店铺资料与坐标维护', icon: <Building2 aria-hidden="true" /> },
     ],
   },
@@ -167,7 +169,7 @@ const navItems = navGroups.flatMap((group) => group.items)
 const navKeys = navItems.map((item) => item.key)
 const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
-  'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'store_info',
+  'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'sales_summary', 'store_info',
   'mall_weather', 'passenger_flow', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
   'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
   'office_messages', 'office_push', 'table_email_notifications',
