@@ -34,7 +34,7 @@ func TestSalesSummaryProviderReusesPoolAndPreservesLocalDateRange(t *testing.T) 
 	query := reportoracle.SalesSummaryQuery{
 		Start:     time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC),
 		End:       time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
-		StoreCode: "ABCN001P014", ConfirmedDocNos: []string{"SENT"}, SkippedDocNos: []string{"SKIP"},
+		StoreCode: "ABCN001P014",
 	}
 	started := time.Now()
 	totals, err := provider.QuerySalesSummary(t.Context(), query)

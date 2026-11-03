@@ -4,17 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
 
 type SalesSummaryQuery struct {
-	Start           time.Time
-	End             time.Time
-	StoreCode       string
-	ConfirmedDocNos []string
-	SkippedDocNos   []string
+	Start     time.Time
+	End       time.Time
+	StoreCode string
 }
 
 type SalesSummaryTotals struct {
@@ -49,53 +46,7 @@ func buildSalesSummaryQuery(query SalesSummaryQuery) (string, []any, error) {
 		return "", nil, fmt.Errorf("query sales summary: invalid store or date range")
 	}
 	arguments := []any{storeCode, query.Start, query.End}
-	confirmed := salesSummaryDocNoPredicate(query.ConfirmedDocNos, false, &arguments)
-	skipped := salesSummaryDocNoPredicate(query.SkippedDocNos, true, &arguments)
-	pushed := "NVL(r.STATUS, '0') = '1'"
-	if confirmed != "" {
-		pushed += " OR " + confirmed
-	}
-	filter := "(" + pushed + ")"
-	if skipped != "" {
-		filter += "\n      AND " + skipped
-	}
-	return salesSummaryOrdersSQL + filter + salesSummaryTotalsSQL, arguments, nil
-}
-
-// Oracle permits at most 1000 expressions in one IN list. Multiple confirmed
-// groups are alternatives; every skipped group must be excluded.
-func salesSummaryDocNoPredicate(values []string, exclude bool, arguments *[]any) string {
-	seen := make(map[string]struct{}, len(values))
-	docNos := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		docNos = append(docNos, value)
-	}
-	if len(docNos) == 0 {
-		return ""
-	}
-	operator, joiner := " IN (", " OR "
-	if exclude {
-		operator, joiner = " NOT IN (", " AND "
-	}
-	groups := make([]string, 0, (len(docNos)+999)/1000)
-	for start := 0; start < len(docNos); start += 1000 {
-		end := min(start+1000, len(docNos))
-		placeholders := make([]string, 0, end-start)
-		for _, docNo := range docNos[start:end] {
-			*arguments = append(*arguments, docNo)
-			placeholders = append(placeholders, ":"+strconv.Itoa(len(*arguments)))
-		}
-		groups = append(groups, "r.DOCNO"+operator+strings.Join(placeholders, ", ")+")")
-	}
-	return "(" + strings.Join(groups, joiner) + ")"
+	return salesSummaryOrdersSQL + salesSummaryTotalsSQL, arguments, nil
 }
 
 const salesSummaryOrdersSQL = `WITH orders AS (
@@ -108,7 +59,7 @@ const salesSummaryOrdersSQL = `WITH orders AS (
           SELECT 1 FROM ` + bojunRetailSourceHeadTable + ` h
           WHERE h.ID = r.M_RETAIL_ID AND h.STATUS = 2 AND h.ISACTIVE = 'Y'
       )
-      AND `
+      AND r.IS_TOSHOP = 'Y'`
 
 // Item totals remain one row per order, so an order's pushed amount is never
 // multiplied by its number of items. A missing quantity retains the existing

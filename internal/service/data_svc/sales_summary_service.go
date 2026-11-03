@@ -59,7 +59,6 @@ type SalesSummaryResult struct {
 
 type salesSummaryStore interface {
 	FindMall(context.Context, string) (*model.Mall, error)
-	ReadPushEvidence(context.Context, string, int, int) ([]string, []string, error)
 	ReadDailyWeather(context.Context, uint, time.Time) ([]model.MallWeatherDaily, error)
 }
 
@@ -121,17 +120,10 @@ func (service *SalesSummaryService) Query(
 		StartDate: startDate, EndDate: endDate,
 		Mall: BusinessOverviewMallDTO{ID: mall.ID, MallCode: mall.MallCode, NameCN: mall.NameCN},
 	}
-	confirmed, skipped, err := service.store.ReadPushEvidence(
-		queryCtx, mallCode, statusTimeBillDate(start), statusTimeBillDate(end),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%w: read local push evidence: %v", ErrSalesSummaryUnavailable, err)
-	}
-	// Local orders only retain the incremental sync window. Historical totals
-	// must come from the source, with local delivery evidence correcting skips.
+	// Historical totals and the IS_TOSHOP flag come from the source; local
+	// incremental orders and delivery logs do not constrain the selected period.
 	totals, err := service.oracle.QuerySalesSummary(queryCtx, reportoracle.SalesSummaryQuery{
 		Start: start, End: end.AddDate(0, 0, 1), StoreCode: mallCode,
-		ConfirmedDocNos: confirmed, SkippedDocNos: skipped,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: query Oracle sales totals: %v", ErrSalesSummaryUnavailable, err)
@@ -194,46 +186,6 @@ func (store *salesSummaryDBStore) FindMall(ctx context.Context, code string) (*m
 		return nil, ErrSalesSummaryUnavailable
 	}
 	return data_dao.NewMallDAO(store.db).FindByCode(ctx, code)
-}
-
-func (store *salesSummaryDBStore) ReadPushEvidence(
-	ctx context.Context,
-	mallCode string,
-	start int,
-	end int,
-) ([]string, []string, error) {
-	// A policy skip also records success=true. Preserve real success separately
-	// so a later successful retry takes precedence over a previous skip.
-	rows, err := store.db.WithContext(ctx).Table("bojun_retail_orders AS orders").
-		Select(`orders.docno,
-MAX(CASE WHEN sent.success = TRUE AND COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy' THEN 1 ELSE 0 END) AS confirmed,
-MAX(CASE WHEN sent.response_body = 'skipped_by_order_push_policy' THEN 1 ELSE 0 END) AS skipped`).
-		Joins("JOIN delivery_logs AS sent ON sent.clean_record_id = orders.id").
-		Where("orders.c_store_code = ? AND orders.billdate >= ? AND orders.billdate <= ?", mallCode, start, end).
-		Where(`sent.source_code = 'bojun_order' OR
-(COALESCE(sent.source_code, '') = '' AND sent.destination_id = 0 AND sent.dataset_kind = 'retail_order')`).
-		Group("orders.docno").Having("confirmed = 1 OR skipped = 1").Order("orders.docno").Rows()
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-	var confirmed, skipped []string
-	for rows.Next() {
-		var docNo string
-		var hasSuccess, hasSkip int
-		if err := rows.Scan(&docNo, &hasSuccess, &hasSkip); err != nil {
-			return nil, nil, err
-		}
-		if hasSuccess != 0 {
-			confirmed = append(confirmed, docNo)
-		} else if hasSkip != 0 {
-			skipped = append(skipped, docNo)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	return confirmed, skipped, nil
 }
 
 func (store *salesSummaryDBStore) ReadDailyWeather(
