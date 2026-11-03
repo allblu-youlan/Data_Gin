@@ -3,7 +3,7 @@
   "info": {
     "title": "天猫数据开放接口",
     "version": "1.0.0",
-    "description": "提供生意参谋、全站推广、商品汇总三个只读分页查询接口。使用开放账号的 token 请求头认证，各接口分别授权。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。响应 data 仅包含 items 和 pagination；字段含义、Oracle 类型等信息见本文档的字段定义，不在响应中重复返回。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。"
+    "description": "提供生意参谋、全站推广、商品汇总三个只读分页查询接口。使用开放账号的 token 请求头认证，各接口分别授权。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。成功响应 data 仅包含 items 和 pagination；字段含义、Oracle 类型等信息见本文档的字段定义，不在响应中重复返回。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。"
   },
   "servers": [
     {
@@ -30,7 +30,7 @@
         ],
         "summary": "查询天猫生意参谋数据",
         "operationId": "queryTmallSycm",
-        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表PAY_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表PAY_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
         "x-required-permission": "tmall.sycm.read",
         "requestBody": {
           "required": true,
@@ -67,11 +67,51 @@
         },
         "responses": {
           "200": {
-            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "description": "业务成功时code=0，所有数值和ID保持字符串精度，NULL保留。历史全局IP限流（200000次/小时）可能以HTTP 200返回code=100429；该限流依赖异常或框架异常恢复可能以HTTP 200返回code=100500。调用方必须同时检查HTTP状态和code，非0表示失败。",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SycmQueryResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SycmQueryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                },
+                "examples": {
+                  "successEmpty": {
+                    "summary": "查询成功，无匹配数据",
+                    "value": {
+                      "code": 0,
+                      "msg": "请求成功",
+                      "data": {
+                        "items": [],
+                        "pagination": {
+                          "page": 1,
+                          "pageSize": 50,
+                          "hasMore": false
+                        }
+                      }
+                    }
+                  },
+                  "globalRateLimited": {
+                    "summary": "历史全局IP限流，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100429,
+                      "msg": "请求太频繁",
+                      "data": null
+                    }
+                  },
+                  "globalRateLimitUnavailable": {
+                    "summary": "历史全局限流依赖异常，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100500,
+                      "msg": "服务器内部错误",
+                      "data": null
+                    }
+                  }
                 }
               }
             }
@@ -104,7 +144,7 @@
         ],
         "summary": "查询天猫全站推广数据",
         "operationId": "queryTmallQztg",
-        "description": "只读查询 ODS_TM_QZTG_PRODUCT。需要独立权限 tmall.qztg.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_QZTG_PRODUCT。需要独立权限 tmall.qztg.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
         "x-required-permission": "tmall.qztg.read",
         "requestBody": {
           "required": true,
@@ -141,11 +181,51 @@
         },
         "responses": {
           "200": {
-            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "description": "业务成功时code=0，所有数值和ID保持字符串精度，NULL保留。历史全局IP限流（200000次/小时）可能以HTTP 200返回code=100429；该限流依赖异常或框架异常恢复可能以HTTP 200返回code=100500。调用方必须同时检查HTTP状态和code，非0表示失败。",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QztgQueryResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/QztgQueryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                },
+                "examples": {
+                  "successEmpty": {
+                    "summary": "查询成功，无匹配数据",
+                    "value": {
+                      "code": 0,
+                      "msg": "请求成功",
+                      "data": {
+                        "items": [],
+                        "pagination": {
+                          "page": 1,
+                          "pageSize": 50,
+                          "hasMore": false
+                        }
+                      }
+                    }
+                  },
+                  "globalRateLimited": {
+                    "summary": "历史全局IP限流，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100429,
+                      "msg": "请求太频繁",
+                      "data": null
+                    }
+                  },
+                  "globalRateLimitUnavailable": {
+                    "summary": "历史全局限流依赖异常，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100500,
+                      "msg": "服务器内部错误",
+                      "data": null
+                    }
+                  }
                 }
               }
             }
@@ -178,7 +258,7 @@
         ],
         "summary": "查询天猫商品汇总数据",
         "operationId": "queryTmallTot",
-        "description": "只读查询 ODS_TM_TOT_PRODUCT。需要独立权限 tmall.tot.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_TOT_PRODUCT。需要独立权限 tmall.tot.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
         "x-required-permission": "tmall.tot.read",
         "requestBody": {
           "required": true,
@@ -215,11 +295,51 @@
         },
         "responses": {
           "200": {
-            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "description": "业务成功时code=0，所有数值和ID保持字符串精度，NULL保留。历史全局IP限流（200000次/小时）可能以HTTP 200返回code=100429；该限流依赖异常或框架异常恢复可能以HTTP 200返回code=100500。调用方必须同时检查HTTP状态和code，非0表示失败。",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TotQueryResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TotQueryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                },
+                "examples": {
+                  "successEmpty": {
+                    "summary": "查询成功，无匹配数据",
+                    "value": {
+                      "code": 0,
+                      "msg": "请求成功",
+                      "data": {
+                        "items": [],
+                        "pagination": {
+                          "page": 1,
+                          "pageSize": 50,
+                          "hasMore": false
+                        }
+                      }
+                    }
+                  },
+                  "globalRateLimited": {
+                    "summary": "历史全局IP限流，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100429,
+                      "msg": "请求太频繁",
+                      "data": null
+                    }
+                  },
+                  "globalRateLimitUnavailable": {
+                    "summary": "历史全局限流依赖异常，以HTTP 200返回业务错误",
+                    "value": {
+                      "code": 100500,
+                      "msg": "服务器内部错误",
+                      "data": null
+                    }
+                  }
                 }
               }
             }
@@ -297,8 +417,9 @@
         "properties": {
           "code": {
             "type": "integer",
-            "description": "业务错误码；本接口错误码为100000加HTTP状态码。",
-            "example": 100422
+            "description": "业务错误码，非0表示失败。除历史全局限流等兼容路径外，通常为100000加HTTP状态码；HTTP 200也可能携带100429或100500，不能只按HTTP状态判断成功。",
+            "example": 100422,
+            "minimum": 1
           },
           "msg": {
             "type": "string",
@@ -319,7 +440,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。 省略 filters、传 null 或空对象 {} 均表示不增加维度筛选。",
         "properties": {
           "PRODUCT_NAME": {
             "type": "string",
@@ -849,7 +970,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。 省略 filters、传 null 或空对象 {} 均表示不增加维度筛选。",
         "properties": {
           "SCENE_ID": {
             "type": "string",
@@ -1998,7 +2119,7 @@
         "type": "object",
         "nullable": true,
         "additionalProperties": false,
-        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。",
+        "description": "可选精确匹配维度。键必须为以下Oracle原列名，多个条件按AND组合；不支持指标列、任意SQL、通配符或PAY_DATE。省略或null表示不加维度筛选。 省略 filters、传 null 或空对象 {} 均表示不增加维度筛选。",
         "properties": {
           "PRODUCT_ID": {
             "type": "string",
