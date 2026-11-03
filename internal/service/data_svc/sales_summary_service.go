@@ -2,7 +2,6 @@ package data_svc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,10 +11,10 @@ import (
 	"time"
 
 	"gin-biz-web-api/internal/dao/data_dao"
+	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/database"
-	"gin-biz-web-api/pkg/shanghaimall"
 
 	"gorm.io/gorm"
 )
@@ -60,11 +59,16 @@ type SalesSummaryResult struct {
 
 type salesSummaryStore interface {
 	FindMall(context.Context, string) (*model.Mall, error)
-	ReadPushedOrders(context.Context, string, int, int, func(model.BojunRetailOrder) error) error
+	ReadPushEvidence(context.Context, string, int, int) ([]string, []string, error)
 	ReadDailyWeather(context.Context, uint, time.Time) ([]model.MallWeatherDaily, error)
 }
 
+type salesSummaryOracle interface {
+	QuerySalesSummary(context.Context, reportoracle.SalesSummaryQuery) (reportoracle.SalesSummaryTotals, error)
+}
+
 type SalesSummaryService struct {
+	oracle    salesSummaryOracle
 	store     salesSummaryStore
 	mallScope businessOverviewMallScope
 	now       func() time.Time
@@ -72,6 +76,7 @@ type SalesSummaryService struct {
 
 func NewSalesSummaryService() *SalesSummaryService {
 	return &SalesSummaryService{
+		oracle:    NewOpenBojunOracleProvider(),
 		store:     &salesSummaryDBStore{db: database.DB},
 		mallScope: auth_svc.NewMallScopeService(database.DB),
 		now:       time.Now,
@@ -85,8 +90,9 @@ func (service *SalesSummaryService) Query(
 	startDate string,
 	endDate string,
 ) (*SalesSummaryResult, error) {
-	start, startErr := time.Parse(time.DateOnly, startDate)
-	end, endErr := time.Parse(time.DateOnly, endDate)
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	start, startErr := time.ParseInLocation(time.DateOnly, startDate, location)
+	end, endErr := time.ParseInLocation(time.DateOnly, endDate, location)
 	mallCode = strings.ToUpper(strings.TrimSpace(mallCode))
 	invalidDate := startErr != nil || endErr != nil || start.After(end)
 	if actor == 0 || invalidDate || !businessOverviewMallCodePattern.MatchString(mallCode) {
@@ -115,16 +121,25 @@ func (service *SalesSummaryService) Query(
 		StartDate: startDate, EndDate: endDate,
 		Mall: BusinessOverviewMallDTO{ID: mall.ID, MallCode: mall.MallCode, NameCN: mall.NameCN},
 	}
-	err = service.store.ReadPushedOrders(
-		queryCtx,
-		mallCode,
-		statusTimeBillDate(start),
-		statusTimeBillDate(end),
-		func(order model.BojunRetailOrder) error { return addSalesSummaryOrder(&result.Metrics, order) },
+	confirmed, skipped, err := service.store.ReadPushEvidence(
+		queryCtx, mallCode, statusTimeBillDate(start), statusTimeBillDate(end),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%w: summarize pushed orders: %v", ErrSalesSummaryUnavailable, err)
+		return nil, fmt.Errorf("%w: read local push evidence: %v", ErrSalesSummaryUnavailable, err)
 	}
+	// Local orders only retain the incremental sync window. Historical totals
+	// must come from the source, with local delivery evidence correcting skips.
+	totals, err := service.oracle.QuerySalesSummary(queryCtx, reportoracle.SalesSummaryQuery{
+		Start: start, End: end.AddDate(0, 0, 1), StoreCode: mallCode,
+		ConfirmedDocNos: confirmed, SkippedDocNos: skipped,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: query Oracle sales totals: %v", ErrSalesSummaryUnavailable, err)
+	}
+	result.Metrics.SalesAmount = totals.SalesAmount
+	result.Metrics.SalesQuantity = totals.SalesQuantity
+	result.Metrics.ReturnQuantity = totals.ReturnQuantity
+	result.Metrics.OrderCount = totals.OrderCount
 	finishSalesSummaryMetrics(&result.Metrics)
 	result.Weather = service.todayWeather(queryCtx, mall)
 	return result, nil
@@ -158,56 +173,6 @@ func (service *SalesSummaryService) todayWeather(ctx context.Context, mall *mode
 	}
 }
 
-func addSalesSummaryOrder(metrics *SalesSummaryMetrics, order model.BojunRetailOrder) error {
-	retail := shanghaimall.RetailOrderFromBojun(order)
-	metrics.SalesAmount += math.Round(retail.Amount*100) / 100
-	var items []struct {
-		Quantity json.Number `json:"qty"`
-	}
-	if order.ItemsJSON != "" {
-		if err := json.Unmarshal([]byte(order.ItemsJSON), &items); err != nil {
-			return fmt.Errorf("order %s item quantities: %w", order.DocNo, err)
-		}
-	}
-	var sales, returns float64
-	var hasQuantity bool
-	for _, item := range items {
-		if item.Quantity == "" {
-			continue
-		}
-		quantity, err := item.Quantity.Float64()
-		if err != nil {
-			return fmt.Errorf("order %s item quantity: %w", order.DocNo, err)
-		}
-		hasQuantity = true
-		if retail.IsRefund() && order.OrderTypeCode != "EXP" {
-			quantity = -math.Abs(quantity)
-		}
-		if quantity > 0 {
-			sales += quantity
-		} else {
-			returns += quantity
-		}
-	}
-	if !hasQuantity {
-		quantity := float64(order.TotalQty)
-		if retail.IsRefund() {
-			quantity = -math.Abs(quantity)
-		}
-		if quantity > 0 {
-			sales = quantity
-		} else {
-			returns = quantity
-		}
-	}
-	metrics.SalesQuantity += sales
-	metrics.ReturnQuantity += returns
-	if sales > 0 || (!retail.IsRefund() && returns == 0) {
-		metrics.OrderCount++
-	}
-	return nil
-}
-
 func finishSalesSummaryMetrics(metrics *SalesSummaryMetrics) {
 	metrics.SalesAmount = math.Round(metrics.SalesAmount*100) / 100
 	metrics.TotalQuantity = metrics.SalesQuantity + metrics.ReturnQuantity
@@ -231,51 +196,44 @@ func (store *salesSummaryDBStore) FindMall(ctx context.Context, code string) (*m
 	return data_dao.NewMallDAO(store.db).FindByCode(ctx, code)
 }
 
-func salesSummaryPushedOrdersQuery(db *gorm.DB, mallCode string, start, end int) *gorm.DB {
-	// synced=1 also includes policy skips and orders that never need a push.
-	// Require delivery evidence, or Oracle's confirmed status without a local skip.
-	return db.Model(&model.BojunRetailOrder{}).
-		Where("c_store_code = ? AND billdate >= ? AND billdate <= ?", mallCode, start, end).
-		Where(`EXISTS (
-SELECT 1 FROM delivery_logs AS sent
-WHERE sent.clean_record_id = bojun_retail_orders.id
-AND (sent.source_code = 'bojun_order' OR
-  (COALESCE(sent.source_code, '') = '' AND sent.destination_id = 0 AND sent.dataset_kind = 'retail_order'))
-AND sent.success = TRUE AND COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy'
-) OR (
-oracle_retail_id IS NOT NULL AND JSON_UNQUOTE(JSON_EXTRACT(raw_content_json, '$.STATUS')) = '1'
-AND NOT EXISTS (
-SELECT 1 FROM delivery_logs AS skipped
-WHERE skipped.clean_record_id = bojun_retail_orders.id
-AND (skipped.source_code = 'bojun_order' OR
-  (COALESCE(skipped.source_code, '') = '' AND skipped.destination_id = 0 AND skipped.dataset_kind = 'retail_order'))
-AND skipped.response_body = 'skipped_by_order_push_policy'
-))`)
-}
-
-func (store *salesSummaryDBStore) ReadPushedOrders(
+func (store *salesSummaryDBStore) ReadPushEvidence(
 	ctx context.Context,
 	mallCode string,
 	start int,
 	end int,
-	visit func(model.BojunRetailOrder) error,
-) error {
-	rows, err := salesSummaryPushedOrdersQuery(store.db.WithContext(ctx), mallCode, start, end).
-		Select("id", "docno", "oracle_retail_id", "order_type_code", "billdate", "push_amount", "tot_amt_actual", "tot_qty", "items_json").Rows()
+) ([]string, []string, error) {
+	// A policy skip also records success=true. Preserve real success separately
+	// so a later successful retry takes precedence over a previous skip.
+	rows, err := store.db.WithContext(ctx).Table("bojun_retail_orders AS orders").
+		Select(`orders.docno,
+MAX(CASE WHEN sent.success = TRUE AND COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy' THEN 1 ELSE 0 END) AS confirmed,
+MAX(CASE WHEN sent.response_body = 'skipped_by_order_push_policy' THEN 1 ELSE 0 END) AS skipped`).
+		Joins("JOIN delivery_logs AS sent ON sent.clean_record_id = orders.id").
+		Where("orders.c_store_code = ? AND orders.billdate >= ? AND orders.billdate <= ?", mallCode, start, end).
+		Where(`sent.source_code = 'bojun_order' OR
+(COALESCE(sent.source_code, '') = '' AND sent.destination_id = 0 AND sent.dataset_kind = 'retail_order')`).
+		Group("orders.docno").Having("confirmed = 1 OR skipped = 1").Order("orders.docno").Rows()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer rows.Close()
+	var confirmed, skipped []string
 	for rows.Next() {
-		var order model.BojunRetailOrder
-		if err := store.db.ScanRows(rows, &order); err != nil {
-			return err
+		var docNo string
+		var hasSuccess, hasSkip int
+		if err := rows.Scan(&docNo, &hasSuccess, &hasSkip); err != nil {
+			return nil, nil, err
 		}
-		if err := visit(order); err != nil {
-			return err
+		if hasSuccess != 0 {
+			confirmed = append(confirmed, docNo)
+		} else if hasSkip != 0 {
+			skipped = append(skipped, docNo)
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return confirmed, skipped, nil
 }
 
 func (store *salesSummaryDBStore) ReadDailyWeather(

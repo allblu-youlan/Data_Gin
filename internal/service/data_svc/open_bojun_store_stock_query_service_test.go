@@ -44,6 +44,12 @@ func (f *fakeOpenBojunOracle) QueryBojunProductInfos(ctx context.Context, q repo
 	f.productInfoQuery, f.ctx = q, ctx
 	return f.productInfos, f.err
 }
+
+func (f *fakeOpenBojunOracle) QuerySalesSummary(ctx context.Context, _ reportoracle.SalesSummaryQuery) (reportoracle.SalesSummaryTotals, error) {
+	f.ctx = ctx
+	return reportoracle.SalesSummaryTotals{}, f.err
+}
+
 func newTestBojunProvider(oracle *fakeOpenBojunOracle, opened *int) *OpenBojunOracleProvider {
 	return newOpenBojunOracleProvider(openBojunProductOracleConfig(), func(context.Context, reportoracle.Config) (openBojunOracle, error) {
 		*opened++

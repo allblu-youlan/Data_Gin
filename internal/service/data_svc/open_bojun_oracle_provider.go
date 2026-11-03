@@ -14,6 +14,7 @@ type openBojunOracle interface {
 	QueryBojunStores(context.Context, reportoracle.BojunStoreQuery) ([]reportoracle.BojunStoreRow, error)
 	QueryBojunStocks(context.Context, reportoracle.BojunStockQuery) ([]reportoracle.BojunStockRow, error)
 	QueryBojunProductInfos(context.Context, reportoracle.BojunProductInfoQuery) ([]reportoracle.BojunProductInfoRow, error)
+	QuerySalesSummary(context.Context, reportoracle.SalesSummaryQuery) (reportoracle.SalesSummaryTotals, error)
 }
 
 type openBojunOracleOpener func(context.Context, reportoracle.Config) (openBojunOracle, error)
@@ -22,7 +23,7 @@ type openBojunQueryPermissionReader interface {
 	HasPermission(context.Context, uint, string, time.Time) (bool, error)
 }
 
-// OpenBojunOracleProvider owns the lazily opened pool shared by store, stock and product info queries.
+// OpenBojunOracleProvider owns the lazily opened pool for default Oracle queries.
 type OpenBojunOracleProvider struct {
 	config    appConfig.ReportInputOracleConfig
 	configErr error
