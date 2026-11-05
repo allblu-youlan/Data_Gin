@@ -2218,6 +2218,13 @@
             "maxLength": 200,
             "x-max-utf8-bytes": 200,
             "description": "导入批次号；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
+          },
+          "DELIVERY_LEVEL": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "x-max-utf8-bytes": 200,
+            "description": "投放等级；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过200。"
           }
         }
       },
@@ -2267,7 +2274,10 @@
           "startDate": "2026-10-01",
           "endDate": "2026-10-31",
           "page": 1,
-          "pageSize": 50
+          "pageSize": 50,
+          "filters": {
+            "DELIVERY_LEVEL": "一级"
+          }
         }
       },
       "TotRow": {
@@ -2303,9 +2313,11 @@
           "SUGGESTED_ADD_CART_COST",
           "BATCH_ID",
           "CREATED_ODS",
-          "UPDATED_ODS"
+          "UPDATED_ODS",
+          "DELIVERY_LEVEL",
+          "TARGET_EFFECTIVE_ROI"
         ],
-        "description": "ODS_TM_TOT_PRODUCT 的全部30个字段。每个字段均返回；数据库NULL保留为null，非NULL值全部为字符串。",
+        "description": "ODS_TM_TOT_PRODUCT 的全部32个字段。每个字段均返回；数据库NULL保留为null，非NULL值全部为字符串。",
         "properties": {
           "ID": {
             "type": "string",
@@ -2577,6 +2589,26 @@
             "x-oracle-comment": "修改时间",
             "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
             "example": "2026-10-01 09:30:00"
+          },
+          "DELIVERY_LEVEL": {
+            "type": "string",
+            "nullable": true,
+            "description": "投放等级",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200,
+            "x-oracle-comment": "投放等级",
+            "example": "一级"
+          },
+          "TARGET_EFFECTIVE_ROI": {
+            "type": "string",
+            "nullable": true,
+            "description": "目标有效ROI 以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "目标有效ROI",
+            "x-oracle-precision": 38,
+            "x-oracle-scale": 18,
+            "example": "2.123456789012345678"
           }
         }
       },

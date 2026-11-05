@@ -56,6 +56,8 @@ func TestTmallRejectsUnknownDatasetAndUnapprovedFilters(t *testing.T) {
 		{"removed entity type", TmallQztg, map[string]string{"ENTITY_TYPE": "商品"}},
 		{"removed entity name", TmallQztg, map[string]string{"ENTITY_NAME": "商品名称"}},
 		{"metric filter", TmallQztg, map[string]string{"COST": "100"}},
+		{"ROI is not a dimension", TmallTot, map[string]string{"TARGET_EFFECTIVE_ROI": "1"}},
+		{"delivery level too long", TmallTot, map[string]string{"DELIVERY_LEVEL": strings.Repeat("a", 201)}},
 		{"empty filter", TmallTot, map[string]string{"PRODUCT_ID": " "}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -72,7 +74,7 @@ func TestTmallRejectsUnknownDatasetAndUnapprovedFilters(t *testing.T) {
 
 func TestQueryTmallClosesRowsAndPropagatesReadFailure(t *testing.T) {
 	failure := errors.New("connection interrupted")
-	rows := &bojunQueryTestRows{columns: make([]string, 30), nextErr: failure}
+	rows := &bojunQueryTestRows{columns: make([]string, 32), nextErr: failure}
 	adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) { return rows, nil })
 	_, err := adapter.QueryTmall(t.Context(), TmallTot, TmallQuery{StartDate: "2026-10-01", EndDate: "2026-10-01", PageSize: 50})
 	if !errors.Is(err, failure) || !rows.closed {
@@ -102,7 +104,7 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 	}{
 		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}, []any{"20251231", "20260101"}},
 		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "PRODUCT_TYPE": "商品"}, []any{"001", "商品"}, []any{"2025-12-31", "2026-01-01"}},
-		{TmallTot, "ODS_TM_TOT_PRODUCT", 30, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}, []any{"2025-12-31", "2026-01-01"}},
+		{TmallTot, "ODS_TM_TOT_PRODUCT", 32, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}, []any{"2025-12-31", "2026-01-01"}},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
 			adapter := newBojunQueryTestAdapter(t, func(_ context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
@@ -186,9 +188,10 @@ func TestQueryTmallReturnsCurrentColumnsAndExactDecimals(t *testing.T) {
 			filters: map[string]string{"PRODUCT_ID": "000123", "PRODUCT_TYPE": "商品", "PRODUCT_NAME": "测试商品"},
 		},
 		{
-			dataset: TmallTot, count: 30,
-			values: map[int]string{1: "2026-10-01", 25: "123456789012.123456"},
-			want:   map[string]string{"PAY_DATE": "2026-10-01", "TOMORROW_QZTG_BUDGET": "123456789012.123456"},
+			dataset: TmallTot, count: 32,
+			values:  map[int]string{1: "2026-10-01", 25: "123456789012.123456", 30: "一级", 31: "12345678901234567890.123456789012345678"},
+			want:    map[string]string{"PAY_DATE": "2026-10-01", "TOMORROW_QZTG_BUDGET": "123456789012.123456", "DELIVERY_LEVEL": "一级", "TARGET_EFFECTIVE_ROI": "12345678901234567890.123456789012345678"},
+			filters: map[string]string{"DELIVERY_LEVEL": "一级"},
 		},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
@@ -200,6 +203,11 @@ func TestQueryTmallReturnsCurrentColumnsAndExactDecimals(t *testing.T) {
 				for _, oldName := range []string{"STAT_DATE", "ENTITY_ID", "ENTITY_TYPE", "ENTITY_NAME"} {
 					if strings.Contains(statement, "a."+oldName) {
 						t.Fatalf("query contains removed column %s: %s", oldName, statement)
+					}
+				}
+				if test.dataset == TmallTot {
+					if !strings.Contains(statement, "a.DELIVERY_LEVEL = :3") || !strings.Contains(statement, "a.TARGET_EFFECTIVE_ROI") || args[2].Value != "一级" {
+						t.Fatalf("unexpected delivery filter or projection: %s %v", statement, args)
 					}
 				}
 				if test.dataset == TmallQztg {

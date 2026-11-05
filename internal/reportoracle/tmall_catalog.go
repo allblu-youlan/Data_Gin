@@ -164,5 +164,7 @@ var tmallTables = map[TmallDataset]tmallTable{
 		{Name: "BATCH_ID", Comment: "导入批次号", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
 		{Name: "CREATED_ODS", Comment: "创建时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
 		{Name: "UPDATED_ODS", Comment: "修改时间", DataType: "DATE", Length: 7, Nullable: false, Filterable: false},
+		{Name: "DELIVERY_LEVEL", Comment: "投放等级", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
+		{Name: "TARGET_EFFECTIVE_ROI", Comment: "目标有效ROI", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: false},
 	}},
 }
