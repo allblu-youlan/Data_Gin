@@ -136,7 +136,7 @@ cleanupLoop:
 			objectKey := strings.TrimSpace(matchJob.ResultObjectKey)
 			if objectKey != "" {
 				if !validExcelMatchResultObjectKey(matchJob.ResultObjectKey, matchJob.ID, cleaner.objectKeyPrefix) {
-					err := errors.New("excel match cleaner: invalid result object key")
+					err := fmt.Errorf("excel match cleaner: job %d: invalid result object key %q", matchJob.ID, matchJob.ResultObjectKey)
 					cleaner.logError(ctx, matchJob.ID, "OSS结果文件Key非法，已跳过删除", err)
 					cleanupErrors = append(cleanupErrors, cleaner.releaseAfterError(ctx, matchJob, claimUnix, err))
 					continue
@@ -245,7 +245,7 @@ func validExcelMatchResultObjectKey(value string, expectedJobID uint, expectedPr
 			return false
 		}
 	}
-	if len(parts) != 5 || (parts[4] != excelMatchResultFileName && parts[4] != "result.zip") {
+	if len(parts) != 5 || !validExcelMatchResultFilename(parts[4]) {
 		return false
 	}
 	objectDate, err := time.Parse("2006/01/02", strings.Join(parts[:3], "/"))
@@ -255,4 +255,24 @@ func validExcelMatchResultObjectKey(value string, expectedJobID uint, expectedPr
 	jobID, err := strconv.ParseUint(parts[3], 10, 64)
 	return err == nil && jobID > 0 && jobID == uint64(expectedJobID) &&
 		value == path.Join(expectedPrefix, objectDate.Format("2006/01/02"), parts[3], parts[4])
+}
+
+func validExcelMatchResultFilename(name string) bool {
+	switch name {
+	case excelMatchResultFileName, "result.zip", "matched_results.zip":
+		return true
+	}
+
+	indexText, matched := strings.CutPrefix(name, "matched_")
+	format := "matched_%03d.xlsx"
+	if !matched {
+		// Earlier workflows named each step's result match_<step>.xlsx.
+		indexText, matched = strings.CutPrefix(name, "match_")
+		format = "match_%d.xlsx"
+	}
+	if !matched {
+		return false
+	}
+	index, err := strconv.ParseUint(strings.TrimSuffix(indexText, ".xlsx"), 10, 64)
+	return err == nil && index > 0 && name == fmt.Sprintf(format, index)
 }

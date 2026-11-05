@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,9 @@ func TestExcelMatchJobCleanerRejectsObjectOutsideExcelNamespace(t *testing.T) {
 	if err == nil {
 		t.Fatal("Cleanup() error=nil, want invalid object key error")
 	}
+	if !strings.Contains(err.Error(), "job 17") {
+		t.Fatalf("invalid key error lacks task identity: %v", err)
+	}
 	if result.Scanned != 1 || len(objects.deleted) != 0 || len(store.finished) != 0 {
 		t.Fatalf("invalid key cleanup result=%+v deleted=%v finished=%v", result, objects.deleted, store.finished)
 	}
@@ -137,6 +141,16 @@ func TestValidExcelMatchResultObjectKey(t *testing.T) {
 	}{
 		{name: "without prefix", value: "excel-match-results/2026/07/26/17/result.xlsx", want: true},
 		{name: "Oracle split archive", value: "excel-match-results/2026/07/26/17/result.zip", want: true},
+		{name: "workflow match", value: "excel-match-results/2026/07/26/17/matched_001.xlsx", want: true},
+		{name: "workflow large index", value: "excel-match-results/2026/07/26/17/matched_1000.xlsx", want: true},
+		{name: "workflow archive", value: "excel-match-results/2026/07/26/17/matched_results.zip", want: true},
+		{name: "legacy workflow match", value: "excel-match-results/2026/07/26/17/match_1.xlsx", want: true},
+		{name: "legacy workflow last step", value: "excel-match-results/2026/07/26/17/match_20.xlsx", want: true},
+		{name: "workflow wrong job", value: "excel-match-results/2026/07/26/18/matched_001.xlsx"},
+		{name: "workflow zero index", value: "excel-match-results/2026/07/26/17/matched_000.xlsx"},
+		{name: "workflow malformed index", value: "excel-match-results/2026/07/26/17/matched_1.xlsx"},
+		{name: "workflow unsupported file", value: "excel-match-results/2026/07/26/17/matched_001.exe"},
+		{name: "legacy workflow zero index", value: "excel-match-results/2026/07/26/17/match_0.xlsx"},
 		{name: "other prefix", value: "warehouse/prod/excel-match-results/2026/07/26/17/result.xlsx"},
 		{name: "wrong namespace", value: "weather/2026/07/26/17/result.xlsx"},
 		{name: "path traversal", value: "excel-match-results/2026/07/26/../result.xlsx"},
