@@ -103,8 +103,11 @@ func AccessLog() gin.HandlerFunc {
 		}
 		c.Writer = responseBodyWriter
 
-		// 获取请求数据
-		requestBody := accessLogRequestBody(c.Request)
+		accessLogEnabled := logger.Logger != nil && logger.Logger.Core().Enabled(zap.InfoLevel)
+		var requestBody []byte
+		if accessLogEnabled {
+			requestBody = accessLogRequestBody(c.Request)
+		}
 
 		// 设置开始时间
 		start := time.Now()
@@ -114,6 +117,10 @@ func AccessLog() gin.HandlerFunc {
 
 		// http 响应状态码
 		responseStatus := responseBodyWriter.Status()
+		logAccessRequestError(c, responseBodyWriter)
+		if !accessLogEnabled {
+			return
+		}
 
 		requestURL, requestURI, requestQuery := sanitizedAccessLogURL(c.Request)
 
@@ -150,7 +157,6 @@ func AccessLog() gin.HandlerFunc {
 		logFields = append(logFields, zap.String("response_body", logResponseBody))
 
 		// 记录访问日志
-		logAccessRequestError(c, responseBodyWriter)
 		logger.Info("HTTP Access Log [ "+cast.ToString(responseStatus)+" ]", logFields...)
 
 	}

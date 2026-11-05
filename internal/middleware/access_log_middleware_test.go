@@ -7,11 +7,69 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
+	"gin-biz-web-api/pkg/config"
+	"gin-biz-web-api/pkg/logger"
 )
+
+func TestAccessLogDoesNotReadRequestBodyWhenInfoIsDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	if config.Instance() == nil {
+		directory := t.TempDir()
+		if err := os.WriteFile(filepath.Join(directory, "config.yaml"), []byte("app: {}\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		config.NewConfig("", directory+string(os.PathSeparator))
+	}
+	settings := config.Instance()
+	previousPath := settings.Get("cfg.upload.static_fs_relative_path")
+	settings.Set("cfg.upload.static_fs_relative_path", "/uploads/")
+	core, logs := observer.New(zap.WarnLevel)
+	previousLogger := logger.Logger
+	logger.Logger = zap.New(core)
+	t.Cleanup(func() {
+		logger.Logger = previousLogger
+		settings.Set("cfg.upload.static_fs_relative_path", previousPath)
+	})
+	body := &accessLogCountingReader{reader: strings.NewReader(`{"value":"original"}`)}
+	request := httptest.NewRequest(http.MethodPost, "/test", body)
+	request.Header.Set("Content-Type", "application/json")
+	router := gin.New()
+	router.Use(AccessLog())
+	router.POST("/test", func(c *gin.Context) {
+		if body.reads != 0 {
+			t.Error("disabled access log consumed the request before its handler")
+		}
+		payload, err := io.ReadAll(c.Request.Body)
+		if err != nil || string(payload) != `{"value":"original"}` {
+			t.Fatalf("handler body=%q err=%v", payload, err)
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0})
+	})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || logs.Len() != 0 {
+		t.Fatalf("status=%d logs=%d", recorder.Code, logs.Len())
+	}
+}
+
+type accessLogCountingReader struct {
+	reader io.Reader
+	reads  int
+}
+
+func (reader *accessLogCountingReader) Read(data []byte) (int, error) {
+	reader.reads++
+	return reader.reader.Read(data)
+}
 
 func TestAccessLogRedactsFeishuOAuthWithoutChangingRequest(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/feishu-mention-view/callback?code=oauth-secret&state=state-secret", nil)
