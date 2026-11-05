@@ -167,8 +167,9 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 	result.WatermarkBefore = state.LastRetailID
 	result.WatermarkAfter = state.LastRetailID
 	token := service.newLeaseToken()
+	leaseRefreshedAt := service.now()
 	state, acquired, err := service.stateStore.AcquireLease(
-		ctx, bojunOracleDatasourceCode, token, service.now(), service.leaseTTL,
+		ctx, bojunOracleDatasourceCode, token, leaseRefreshedAt, service.leaseTTL,
 	)
 	if err != nil {
 		return result, err
@@ -213,23 +214,29 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 			break
 		}
 		for _, row := range rows {
+			now := service.now()
+			if !now.Before(leaseRefreshedAt.Add(service.leaseTTL / 3)) {
+				if err := service.stateStore.RenewLease(
+					ctx, bojunOracleDatasourceCode, token, now, service.leaseTTL,
+				); err != nil {
+					return result, err
+				}
+				leaseRefreshedAt = now
+			}
 			if err := service.processRow(
 				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
 			); err != nil {
 				return result, err
 			}
-			if err := service.stateStore.RenewLease(
-				ctx, bojunOracleDatasourceCode, token, service.now(), service.leaseTTL,
-			); err != nil {
-				return result, err
-			}
 		}
 		nextWatermark := rows[len(rows)-1].RetailID
+		advancedAt := service.now()
 		if err := service.stateStore.Advance(
-			ctx, bojunOracleDatasourceCode, token, watermark, nextWatermark, service.now(), service.leaseTTL,
+			ctx, bojunOracleDatasourceCode, token, watermark, nextWatermark, advancedAt, service.leaseTTL,
 		); err != nil {
 			return result, err
 		}
+		leaseRefreshedAt = advancedAt
 		watermark = nextWatermark
 		result.WatermarkAfter = watermark
 		if len(rows) < service.batchSize {

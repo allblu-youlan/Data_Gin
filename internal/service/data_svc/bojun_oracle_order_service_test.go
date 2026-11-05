@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -33,6 +35,7 @@ func (fakeBojunOracleDecryptor) Decrypt(string, string) (string, error) { return
 
 type fakeBojunOracleConnection struct {
 	rows          []reportoracle.BojunRetailRow
+	pages         [][]reportoracle.BojunRetailRow
 	maxID         uint64
 	queryAfter    uint64
 	queryCalls    int
@@ -50,6 +53,9 @@ type fakeBojunOracleConnection struct {
 func (connection *fakeBojunOracleConnection) QueryBojunRetailAfterID(_ context.Context, afterID uint64, _ int) ([]reportoracle.BojunRetailRow, error) {
 	connection.queryAfter = afterID
 	connection.queryCalls++
+	if connection.pages != nil {
+		return append([]reportoracle.BojunRetailRow(nil), connection.pages[connection.queryCalls-1]...), nil
+	}
 	return append([]reportoracle.BojunRetailRow(nil), connection.rows...), nil
 }
 
@@ -86,6 +92,10 @@ type fakeBojunOracleStateStore struct {
 	advancedTo    uint64
 	renewCalls    int
 	releaseCalls  int
+	renewTimes    []time.Time
+	renewErr      error
+	checkExpiry   bool
+	leaseExpires  time.Time
 }
 
 type fakeBojunOracleRetailStore struct {
@@ -179,9 +189,10 @@ func (store *fakeBojunOracleRetailStore) UpdateOracleBusinessFields(
 }
 
 type fakeBojunOraclePusher struct {
-	result bojunOrderPushResult
-	calls  int
-	orders []model.BojunRetailOrder
+	result     bojunOrderPushResult
+	calls      int
+	orders     []model.BojunRetailOrder
+	beforePush func()
 }
 
 func TestPreserveMissingBojunOracleFieldsKeepsExistingValues(t *testing.T) {
@@ -257,6 +268,9 @@ func (pusher *fakeBojunOraclePusher) PushNewOrderWithPolicy(
 	_ int,
 	_ OrderPushSkipPolicy,
 ) bojunOrderPushResult {
+	if pusher.beforePush != nil {
+		pusher.beforePush()
+	}
 	pusher.calls++
 	pusher.orders = append(pusher.orders, *order)
 	return pusher.result
@@ -276,19 +290,32 @@ func (store *fakeBojunOracleStateStore) Initialize(_ context.Context, _ string, 
 	return &store.state, true, nil
 }
 
-func (store *fakeBojunOracleStateStore) AcquireLease(context.Context, string, string, time.Time, time.Duration) (*model.BojunOracleSyncState, bool, error) {
+func (store *fakeBojunOracleStateStore) AcquireLease(_ context.Context, _, _ string, now time.Time, ttl time.Duration) (*model.BojunOracleSyncState, bool, error) {
+	store.leaseExpires = now.Add(ttl)
 	state := store.state
 	return &state, store.leaseAcquired, nil
 }
 
-func (store *fakeBojunOracleStateStore) Advance(_ context.Context, _ string, _ string, expected, next uint64, _ time.Time, _ time.Duration) error {
+func (store *fakeBojunOracleStateStore) Advance(_ context.Context, _ string, _ string, expected, next uint64, now time.Time, ttl time.Duration) error {
+	if store.checkExpiry && !now.Before(store.leaseExpires) {
+		return data_dao.ErrBojunOracleSyncLeaseLost
+	}
 	store.advancedFrom = expected
 	store.advancedTo = next
+	store.leaseExpires = now.Add(ttl)
 	return nil
 }
 
-func (store *fakeBojunOracleStateStore) RenewLease(context.Context, string, string, time.Time, time.Duration) error {
+func (store *fakeBojunOracleStateStore) RenewLease(_ context.Context, _, _ string, now time.Time, ttl time.Duration) error {
 	store.renewCalls++
+	store.renewTimes = append(store.renewTimes, now)
+	if store.renewErr != nil {
+		return store.renewErr
+	}
+	if store.checkExpiry && !now.Before(store.leaseExpires) {
+		return data_dao.ErrBojunOracleSyncLeaseLost
+	}
+	store.leaseExpires = now.Add(ttl)
 	return nil
 }
 
@@ -384,11 +411,151 @@ func TestBojunOracleIncrementalAdvancesAfterPersistingBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SyncIncremental() error = %v", err)
 	}
-	if connection.queryAfter != 10 || state.advancedFrom != 10 || state.advancedTo != 11 || state.renewCalls != 1 || state.releaseCalls != 1 {
+	if connection.queryAfter != 10 || state.advancedFrom != 10 || state.advancedTo != 11 || state.renewCalls != 0 || state.releaseCalls != 1 {
 		t.Fatalf("query/state = after:%d from:%d to:%d renews:%d releases:%d", connection.queryAfter, state.advancedFrom, state.advancedTo, state.renewCalls, state.releaseCalls)
 	}
 	if result.RetailCount != 1 || result.WatermarkAfter != 11 || !result.LeaseAcquired {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestBojunOracleIncrementalRenewsLeaseByElapsedTime(t *testing.T) {
+	renewFailure := errors.New("lease renewal failed")
+	tests := []struct {
+		name          string
+		rowCounts     []int
+		clockSeconds  []int
+		renewSeconds  []int
+		renewErr      error
+		wantErr       error
+		wantWatermark uint64
+		wantRows      int
+	}{
+		{
+			name: "fast page", rowCounts: []int{3},
+			clockSeconds:  []int{0, 1, 2, 3, 4, 4},
+			wantWatermark: 13, wantRows: 3,
+		},
+		{
+			name: "slow page renews each third of ttl", rowCounts: []int{3},
+			clockSeconds: []int{0, 40, 60, 80, 81, 81}, renewSeconds: []int{40, 80},
+			wantWatermark: 13, wantRows: 3,
+		},
+		{
+			name: "advance refreshes renewal interval", rowCounts: []int{4, 1},
+			clockSeconds:  []int{0, 5, 15, 25, 35, 35, 50, 50, 50},
+			wantWatermark: 15, wantRows: 5,
+		},
+		{
+			name: "renew failure stops page", rowCounts: []int{3},
+			clockSeconds: []int{0, 40, 40}, renewSeconds: []int{40},
+			renewErr: renewFailure, wantErr: renewFailure, wantWatermark: 10, wantRows: 0,
+		},
+		{
+			name: "slow query still renews before expiry", rowCounts: []int{1},
+			clockSeconds: []int{0, 110, 110, 110}, renewSeconds: []int{110},
+			wantWatermark: 11, wantRows: 1,
+		},
+		{
+			name: "expired lease after slow query fails cas", rowCounts: []int{1},
+			clockSeconds: []int{0, 120, 120}, renewSeconds: []int{120},
+			wantErr: data_dao.ErrBojunOracleSyncLeaseLost, wantWatermark: 10, wantRows: 0,
+		},
+		{
+			name: "expired lease at advance fails cas", rowCounts: []int{1},
+			clockSeconds: []int{0, 30, 120, 120},
+			wantErr:      data_dao.ErrBojunOracleSyncLeaseLost, wantWatermark: 10, wantRows: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			startedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+			connection := &fakeBojunOracleConnection{}
+			retailID := uint64(10)
+			for _, rowCount := range tt.rowCounts {
+				var rows []reportoracle.BojunRetailRow
+				for range rowCount {
+					retailID++
+					rows = append(rows, reportoracle.BojunRetailRow{
+						RetailID: retailID, DocNo: "SALE-" + strconv.FormatUint(retailID, 10),
+						StatusTime: startedAt, IsToShop: "N",
+					})
+				}
+				connection.pages = append(connection.pages, rows)
+			}
+			connection.maxID = retailID
+			state := &fakeBojunOracleStateStore{
+				state: model.BojunOracleSyncState{
+					SourceCode: bojunOracleDatasourceCode, LastRetailID: 10, Initialized: true,
+				},
+				leaseAcquired: true, checkExpiry: true, renewErr: tt.renewErr,
+			}
+			service := newTestBojunOracleOrderService(connection, state)
+			service.batchSize = 4
+			clockCalls := 0
+			service.now = func() time.Time {
+				if clockCalls >= len(tt.clockSeconds) {
+					t.Fatalf("unexpected clock call %d", clockCalls+1)
+				}
+				current := startedAt.Add(time.Duration(tt.clockSeconds[clockCalls]) * time.Second)
+				clockCalls++
+				return current
+			}
+
+			result, err := service.SyncIncremental(t.Context())
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error=%v, want %v", err, tt.wantErr)
+			}
+			var renewSeconds []int
+			for _, renewedAt := range state.renewTimes {
+				renewSeconds = append(renewSeconds, int(renewedAt.Sub(startedAt)/time.Second))
+			}
+			if !reflect.DeepEqual(renewSeconds, tt.renewSeconds) {
+				t.Fatalf("renewed at seconds %v, want %v", renewSeconds, tt.renewSeconds)
+			}
+			if result.WatermarkAfter != tt.wantWatermark || result.TotalCount != tt.wantRows || state.releaseCalls != 1 {
+				t.Fatalf("result=%+v releases=%d, want watermark=%d rows=%d and one release", result, state.releaseCalls, tt.wantWatermark, tt.wantRows)
+			}
+			if service.rawDataDAO.(*fakeBojunRawDataCreator).created != tt.wantRows || result.RetailCount != tt.wantRows {
+				t.Fatalf("result=%+v, want exactly %d persisted orders", result, tt.wantRows)
+			}
+		})
+	}
+}
+
+func TestBojunOracleSlowQueryRenewsLeaseBeforePush(t *testing.T) {
+	startedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+		RetailID: 11, DocNo: "SALE-11", StatusTime: startedAt, IsToShop: "Y",
+	}}}
+	state := &fakeBojunOracleStateStore{
+		state: model.BojunOracleSyncState{
+			SourceCode: bojunOracleDatasourceCode, LastRetailID: 10, Initialized: true,
+		},
+		leaseAcquired: true, checkExpiry: true,
+	}
+	service := newTestBojunOracleOrderService(connection, state)
+	clockCalls := 0
+	service.now = func() time.Time {
+		clockCalls++
+		if clockCalls == 1 {
+			return startedAt
+		}
+		return startedAt.Add(110 * time.Second)
+	}
+	pusher := &fakeBojunOraclePusher{
+		result: bojunOrderPushResult{Success: true},
+		beforePush: func() {
+			if state.renewCalls != 1 || !state.leaseExpires.Equal(startedAt.Add(230*time.Second)) {
+				t.Fatalf("push started before lease renewal, renews=%d expires=%v", state.renewCalls, state.leaseExpires)
+			}
+		},
+	}
+	service.pushService = pusher
+
+	result, err := service.SyncIncremental(t.Context())
+	if err != nil || result.WatermarkAfter != 11 || pusher.calls != 1 || len(connection.writeBackIDs) != 1 {
+		t.Fatalf("result=%+v error=%v pushes=%d write-backs=%v", result, err, pusher.calls, connection.writeBackIDs)
 	}
 }
 
