@@ -418,6 +418,122 @@ func TestOutboxDispatcherRunBacksOffWhileIdleAndResetsAfterWork(t *testing.T) {
 	}
 }
 
+func TestOutboxDispatcherRunDrainsFullBatchesBeforeWaiting(t *testing.T) {
+	store := &scriptedOutboxStore{rows: [][]model.AsyncJobOutbox{
+		nil,
+		nil,
+		{weatherOutboxRow(1, 0), weatherOutboxRow(2, 0)},
+		{weatherOutboxRow(3, 0), weatherOutboxRow(4, 0)},
+		{weatherOutboxRow(5, 0)},
+		nil,
+	}}
+	publisher := &fakeMallWeatherPublisher{}
+	dispatcher := newTestOutboxDispatcher(t, store, publisher, time.Now())
+	dispatcher.batchSize = 2
+	var delays []time.Duration
+	var publishedBeforeWait []int
+	dispatcher.wait = func(_ context.Context, delay time.Duration) error {
+		delays = append(delays, delay)
+		publishedBeforeWait = append(publishedBeforeWait, len(publisher.calls))
+		if len(delays) == 4 {
+			return context.Canceled
+		}
+		return nil
+	}
+
+	if err := dispatcher.Run(t.Context()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	wantPublished := []int{0, 0, 5, 5}
+	wantDelays := []time.Duration{time.Second, 2 * time.Second, time.Second, time.Second}
+	for index := range wantPublished {
+		if publishedBeforeWait[index] != wantPublished[index] || delays[index] != wantDelays[index] {
+			t.Fatalf("wait %d: published=%d delay=%v, want published=%d delay=%v",
+				index, publishedBeforeWait[index], delays[index], wantPublished[index], wantDelays[index])
+		}
+	}
+}
+
+func TestOutboxDispatcherRunBacksOffAfterFullBatchFailure(t *testing.T) {
+	store := &scriptedOutboxStore{rows: [][]model.AsyncJobOutbox{
+		{weatherOutboxRow(1, 0), weatherOutboxRow(2, 0)},
+		{weatherOutboxRow(3, 0)},
+	}}
+	publisher := &fakeMallWeatherPublisher{errors: []error{errors.New("redis unavailable"), nil}}
+	dispatcher := newTestOutboxDispatcher(t, store, publisher, time.Now())
+	dispatcher.batchSize = 2
+	dispatcher.retryBase = 5 * time.Second
+	var delay time.Duration
+	dispatcher.wait = func(_ context.Context, nextDelay time.Duration) error {
+		delay = nextDelay
+		return context.Canceled
+	}
+
+	if err := dispatcher.Run(t.Context()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	if delay != 5*time.Second || len(publisher.calls) != 2 {
+		t.Fatalf("delay=%v published=%d, want 5s backoff after the first batch", delay, len(publisher.calls))
+	}
+}
+
+func TestOutboxDispatcherRunStopsBetweenFullBatches(t *testing.T) {
+	store := &scriptedOutboxStore{rows: [][]model.AsyncJobOutbox{
+		{weatherOutboxRow(1, 0), weatherOutboxRow(2, 0)},
+		{weatherOutboxRow(3, 0)},
+	}}
+	publisher := &fakeMallWeatherPublisher{}
+	dispatcher := newTestOutboxDispatcher(t, store, publisher, time.Now())
+	dispatcher.batchSize = 2
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	dispatcher.onPublished = func(row model.AsyncJobOutbox, _ time.Time) {
+		if row.ID == 2 {
+			cancel()
+		}
+	}
+	waits := 0
+	dispatcher.wait = func(ctx context.Context, _ time.Duration) error {
+		waits++
+		return ctx.Err()
+	}
+
+	if err := dispatcher.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	if waits != 0 || len(publisher.calls) != 2 {
+		t.Fatalf("waits=%d published=%d, want immediate cancellation after the first batch", waits, len(publisher.calls))
+	}
+}
+
+func TestOutboxDispatcherRunDrainsBatchesAtStoreLimit(t *testing.T) {
+	rows := make([]model.AsyncJobOutbox, 500)
+	for index := range rows {
+		rows[index] = weatherOutboxRow(uint(index+1), 0)
+	}
+	store := &scriptedOutboxStore{rows: [][]model.AsyncJobOutbox{rows, {weatherOutboxRow(501, 0)}}}
+	publisher := &fakeMallWeatherPublisher{}
+	registry, err := NewOutboxTaskRegistry(MallWeatherOutboxTaskDefinitions(2, 5*time.Minute)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatcher, err := NewOutboxDispatcher(store, publisher, registry, OutboxDispatcherConfig{
+		WorkerID: "test-dispatcher", BatchSize: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatcher.wait = func(context.Context, time.Duration) error { return context.Canceled }
+
+	if err := dispatcher.Run(t.Context()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	if len(publisher.calls) != 501 || store.claimLimits[0] != 500 {
+		t.Fatalf("published=%d claim limit=%d, want 501 publications using the store's 500-row limit",
+			len(publisher.calls), store.claimLimits[0])
+	}
+}
+
 func TestOutboxBackoffIsBounded(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -479,10 +595,12 @@ type recoveringOutboxStore struct {
 }
 
 type scriptedOutboxStore struct {
-	rows [][]model.AsyncJobOutbox
+	rows        [][]model.AsyncJobOutbox
+	claimLimits []int
 }
 
-func (store *scriptedOutboxStore) ClaimBatch(context.Context, string, []string, time.Time, time.Duration, int) ([]model.AsyncJobOutbox, error) {
+func (store *scriptedOutboxStore) ClaimBatch(_ context.Context, _ string, _ []string, _ time.Time, _ time.Duration, limit int) ([]model.AsyncJobOutbox, error) {
+	store.claimLimits = append(store.claimLimits, limit)
 	if len(store.rows) == 0 {
 		return nil, nil
 	}
