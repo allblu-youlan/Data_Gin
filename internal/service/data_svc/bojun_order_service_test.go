@@ -11,6 +11,8 @@ import (
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/orderpush"
 	"gin-biz-web-api/pkg/shanghaimall"
+
+	"gorm.io/gorm"
 )
 
 type fakeBojunRawDataCreator struct {
@@ -28,15 +30,18 @@ func (f *fakeBojunRawDataCreator) Create(ctx context.Context, rawData *model.Raw
 }
 
 type fakeBojunRetailOrderWriter struct {
-	existing map[string]bool
-	orders   map[string]*model.BojunRetailOrder
-	created  []string
-	updated  []string
-	failFind bool
+	existing    map[string]bool
+	orders      map[string]*model.BojunRetailOrder
+	created     []string
+	updated     []string
+	failFind    bool
+	findCalls   int
+	existsCalls int
 }
 
 func (f *fakeBojunRetailOrderWriter) ExistsByDocNo(ctx context.Context, docNo string) (bool, error) {
 	_ = ctx
+	f.existsCalls++
 	if f.failFind {
 		return false, errors.New("find failed")
 	}
@@ -59,6 +64,10 @@ func (f *fakeBojunRetailOrderWriter) CreateIfNotExists(ctx context.Context, orde
 }
 
 func (f *fakeBojunRetailOrderWriter) FindByDocNo(_ context.Context, docNo string) (*model.BojunRetailOrder, error) {
+	f.findCalls++
+	if f.failFind {
+		return nil, errors.New("find failed")
+	}
 	if order := f.orders[docNo]; order != nil {
 		copyOrder := *order
 		return &copyOrder, nil
@@ -66,7 +75,7 @@ func (f *fakeBojunRetailOrderWriter) FindByDocNo(_ context.Context, docNo string
 	if f.existing[docNo] {
 		return &model.BojunRetailOrder{DocNo: docNo}, nil
 	}
-	return nil, errors.New("order not found")
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (f *fakeBojunRetailOrderWriter) UpdateAPIBusinessFields(_ context.Context, order *model.BojunRetailOrder) error {
@@ -457,6 +466,9 @@ func TestProcessBojunOrderRecordConfirmWritesOnlyNewRows(t *testing.T) {
 	if len(result.Samples) != 1 || result.Samples[0].Status != "created" {
 		t.Fatalf("samples = %+v, want created sample", result.Samples)
 	}
+	if orderWriter.findCalls != 1 || orderWriter.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one lookup before creating a new order", orderWriter.findCalls, orderWriter.existsCalls)
+	}
 }
 
 func TestProcessBojunOrderRecordSkipsExistingRows(t *testing.T) {
@@ -480,6 +492,9 @@ func TestProcessBojunOrderRecordSkipsExistingRows(t *testing.T) {
 	}
 	if rawCreator.created != 0 || len(orderWriter.created) != 0 {
 		t.Fatalf("existing row wrote data: raw=%d orders=%v", rawCreator.created, orderWriter.created)
+	}
+	if orderWriter.findCalls != 1 || orderWriter.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one lookup of the existing order", orderWriter.findCalls, orderWriter.existsCalls)
 	}
 }
 

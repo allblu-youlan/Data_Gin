@@ -86,16 +86,21 @@ func (dao *BojunRetailOrderDAO) ExistsByDocNo(ctx context.Context, docNo string)
 }
 
 func (dao *BojunRetailOrderDAO) CreateIfNotExists(ctx context.Context, order *model.BojunRetailOrder) (bool, error) {
-	exists, err := dao.ExistsByDocNo(ctx, order.DocNo)
-	if err != nil {
+	_, err := dao.Create(ctx, order)
+	if err == nil {
+		return true, nil
+	}
+	if !isMySQLDuplicateKeyError(err) {
 		return false, err
+	}
+	exists, lookupErr := dao.ExistsByDocNo(ctx, order.DocNo)
+	if lookupErr != nil {
+		return false, lookupErr
 	}
 	if exists {
 		return false, nil
 	}
-
-	_, err = dao.Create(ctx, order)
-	return err == nil, err
+	return false, err
 }
 
 func (dao *BojunRetailOrderDAO) CreateOrUpdateWithCreated(ctx context.Context, order *model.BojunRetailOrder) (bool, error) {
