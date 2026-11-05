@@ -47,3 +47,19 @@ func BenchmarkSalesSummaryRetailConversion(b *testing.B) {
 		salesSummaryBenchmarkRetail = shanghaimall.RetailOrderFromBojun(order)
 	}
 }
+
+func BenchmarkSalesSummaryReadPushedOrders(b *testing.B) {
+	store := &salesSummaryDBStore{db: salesSummaryTestDB(b, salesSummaryBenchmarkFixture(1000))}
+	ctx := b.Context()
+	b.ReportAllocs()
+	for b.Loop() {
+		var metrics SalesSummaryMetrics
+		err := store.ReadPushedOrders(ctx, "ABCN001A003", 20261001, 20261105, func(order model.BojunRetailOrder) error {
+			return addSalesSummaryOrder(&metrics, order)
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+		salesSummaryBenchmarkMetrics = metrics
+	}
+}

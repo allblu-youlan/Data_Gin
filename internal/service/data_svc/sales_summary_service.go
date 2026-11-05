@@ -2,6 +2,7 @@ package data_svc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -278,15 +279,23 @@ func (store *salesSummaryDBStore) ReadPushedOrders(
 	visit func(model.BojunRetailOrder) error,
 ) error {
 	rows, err := salesSummaryPushedOrdersQuery(store.db.WithContext(ctx), mallCode, start, end).
-		Select("id", "docno", "oracle_retail_id", "order_type_code", "billdate", "push_amount", "tot_amt_actual", "tot_qty", "items_json").Rows()
+		Select("docno", "oracle_retail_id", "order_type_code", "push_amount", "tot_amt_actual", "tot_qty", "items_json").Rows()
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+	var docNo, orderTypeCode, itemsJSON sql.NullString
+	var pushAmount, totalAmount sql.NullFloat64
+	var totalQuantity sql.Null[int]
+	var oracleRetailID *uint64
 	for rows.Next() {
-		var order model.BojunRetailOrder
-		if err := store.db.ScanRows(rows, &order); err != nil {
+		if err := rows.Scan(&docNo, &oracleRetailID, &orderTypeCode, &pushAmount, &totalAmount, &totalQuantity, &itemsJSON); err != nil {
 			return err
+		}
+		order := model.BojunRetailOrder{
+			DocNo: docNo.String, OracleRetailID: oracleRetailID, OrderTypeCode: orderTypeCode.String,
+			PushAmount: pushAmount.Float64, TotalAmtActual: totalAmount.Float64,
+			TotalQty: totalQuantity.V, ItemsJSON: itemsJSON.String,
 		}
 		if err := visit(order); err != nil {
 			return err
