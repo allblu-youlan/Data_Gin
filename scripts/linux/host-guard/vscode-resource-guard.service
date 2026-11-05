@@ -1,0 +1,16 @@
+[Unit]
+Description=Resource guard for root VS Code process trees
+After=local-fs.target
+ConditionPathExists=/sys/fs/cgroup/memory/memory.move_charge_at_immigrate
+
+[Service]
+ExecStart=/usr/bin/python3 -u /usr/local/sbin/vscode-resource-guard.py
+Restart=on-failure
+RestartSec=30
+Nice=5
+CPUQuota=20%
+MemoryMax=128M
+TasksMax=16
+
+[Install]
+WantedBy=multi-user.target
