@@ -20,12 +20,11 @@ func Initialize() {
 
 	// 初始化配置文件信息
 	setupConfig()
+	// 在其他基础模块初始化前启用全局错误记录。
+	setupLogger()
 	if err := validateReportCenterRuntime(); err != nil {
 		console.Exit("invalid report center runtime configuration: %v", err)
 	}
-
-	// 初始化日志
-	setupLogger()
 
 	// 初始化数据库
 	setupDB()

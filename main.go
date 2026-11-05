@@ -120,7 +120,7 @@ func main() {
 	cmd.RegisterGlobalFlags(rootCmd)
 
 	// 在程序结束时，确保日志缓冲区中的所有日志都被写入
-	defer zap.L().Sync()
+	defer func() { _ = zap.L().Sync() }()
 	// 关闭数据库连接
 	defer database.Close()
 	// 关闭 redis 连接
