@@ -683,7 +683,10 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 		if pushErr == nil {
 			pushErr = errors.New("mall push returned an unsuccessful result")
 		}
-		statusErr := service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 2)
+		var statusErr error
+		if !pushResult.SyncStatusSaved {
+			statusErr = service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 2)
+		}
 		writeBackErr := connection.UpdateBojunRetailPushStatus(ctx, row.RetailID, false, pushDate)
 		return errors.Join(
 			fmt.Errorf("push bojun Oracle retail order %s: %w", order.DocNo, pushErr),
@@ -695,6 +698,9 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 		result.FailedCount++
 		statusErr := service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 3)
 		return errors.Join(fmt.Errorf("write back successful bojun Oracle push %s: %w", order.DocNo, err), statusErr)
+	}
+	if pushResult.SyncStatusSaved {
+		return nil
 	}
 	return service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1)
 }
