@@ -57,11 +57,20 @@ type bojunOracleSyncStateStore interface {
 }
 
 type bojunOracleRetailOrderStore interface {
-	FindByDocNo(context.Context, string) (*model.BojunRetailOrder, error)
+	bojunOrderReader
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
 	UpdateSyncStatus(context.Context, uint, int) error
 	UpdateOracleBusinessFields(context.Context, *model.BojunRetailOrder) error
+}
+
+type bojunOraclePageOrderStore struct {
+	bojunOracleRetailOrderStore
+	lookup *bojunOrderPageLookup
+}
+
+func (store bojunOraclePageOrderStore) FindByDocNo(ctx context.Context, docNo string) (*model.BojunRetailOrder, error) {
+	return store.lookup.FindByDocNo(ctx, docNo)
 }
 
 type bojunOracleExistingOrderMode uint8
@@ -213,6 +222,7 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		if len(rows) == 0 {
 			break
 		}
+		pageService := service.withPageOrderLookup(ctx, rows)
 		for _, row := range rows {
 			now := service.now()
 			if !now.Before(leaseRefreshedAt.Add(service.leaseTTL / 3)) {
@@ -223,7 +233,7 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 				}
 				leaseRefreshedAt = now
 			}
-			if err := service.processRow(
+			if err := pageService.processRow(
 				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
 			); err != nil {
 				return result, err
@@ -330,8 +340,9 @@ func (service *BojunOracleOrderService) runByStatusTime(
 		if len(rows) == 0 {
 			break
 		}
+		pageService := service.withPageOrderLookup(ctx, rows)
 		for _, row := range rows {
-			if err := service.processRow(
+			if err := pageService.processRow(
 				ctx, connection, row, page, confirmWrite, bojunOracleExistingOrderBackfillDetails,
 				result, pushSkipConfig,
 			); err != nil {
@@ -365,6 +376,19 @@ func (service *BojunOracleOrderService) open(ctx context.Context) (bojunOracleCo
 		return nil, nil, fmt.Errorf("open bojun Oracle datasource: %w", err)
 	}
 	return connection, datasource, nil
+}
+
+func (service *BojunOracleOrderService) withPageOrderLookup(ctx context.Context, rows []reportoracle.BojunRetailRow) BojunOracleOrderService {
+	docNos := make([]string, 0, len(rows))
+	for _, row := range rows {
+		docNos = append(docNos, row.DocNo)
+	}
+	pageService := *service
+	pageService.retailOrderDAO = bojunOraclePageOrderStore{
+		bojunOracleRetailOrderStore: service.retailOrderDAO,
+		lookup:                      newBojunOrderPageLookup(ctx, service.retailOrderDAO, docNos),
+	}
+	return pageService
 }
 
 func (service *BojunOracleOrderService) processRow(

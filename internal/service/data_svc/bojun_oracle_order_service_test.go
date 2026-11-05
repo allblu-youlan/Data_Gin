@@ -108,6 +108,26 @@ type fakeBojunOracleRetailStore struct {
 	findCalls       int
 	existsCalls     int
 	findErr         error
+	batchFindCalls  int
+	batchFindErr    error
+	afterBatchRead  func()
+}
+
+func (store *fakeBojunOracleRetailStore) FindByDocNos(_ context.Context, docNos []string) ([]model.BojunRetailOrder, error) {
+	store.batchFindCalls++
+	if store.batchFindErr != nil {
+		return nil, store.batchFindErr
+	}
+	var orders []model.BojunRetailOrder
+	for _, docNo := range docNos {
+		if order := store.orders[docNo]; order != nil {
+			orders = append(orders, *order)
+		}
+	}
+	if store.afterBatchRead != nil {
+		store.afterBatchRead()
+	}
+	return orders, nil
 }
 
 func (store *fakeBojunOracleRetailStore) ExistsByDocNo(_ context.Context, docNo string) (bool, error) {
@@ -620,8 +640,8 @@ func TestBojunOracleExistingSuccessfulOrderRetriesOnlyWriteBack(t *testing.T) {
 	if store.updates[77] != 1 || result.WatermarkAfter != retailID {
 		t.Fatalf("updates=%v result=%+v", store.updates, result)
 	}
-	if store.findCalls != 1 || store.existsCalls != 0 {
-		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	if store.batchFindCalls != 1 || store.findCalls != 0 || store.existsCalls != 0 {
+		t.Fatalf("batch calls=%d find calls=%d existence calls=%d, want one batch lookup", store.batchFindCalls, store.findCalls, store.existsCalls)
 	}
 }
 
@@ -731,6 +751,9 @@ func TestBojunOracleSupplementCASNoopDoesNotAdvanceWatermark(t *testing.T) {
 	if state.advancedTo != 0 || result.WatermarkAfter != 132 || result.FailedCount != 1 {
 		t.Fatalf("watermark advanced after incomplete supplement: state=%+v result=%+v", state, result)
 	}
+	if store.batchFindCalls != 1 || store.findCalls != 1 {
+		t.Fatalf("batch calls=%d live finds=%d, want a fresh lookup after the supplement CAS", store.batchFindCalls, store.findCalls)
+	}
 }
 
 func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
@@ -763,8 +786,8 @@ func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
 			result,
 		)
 	}
-	if store.findCalls != 1 || store.existsCalls != 0 {
-		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	if store.batchFindCalls != 1 || store.findCalls != 0 || store.existsCalls != 0 {
+		t.Fatalf("batch calls=%d find calls=%d existence calls=%d, want one batch lookup", store.batchFindCalls, store.findCalls, store.existsCalls)
 	}
 }
 
@@ -805,8 +828,8 @@ func TestBojunOracleDetailBackfillReconcilesBusinessFields(t *testing.T) {
 		result.UpdatedCount != 1 || result.RetailCount != 0 || store.backfillUpdates != 1 {
 		t.Fatalf("result=%+v updates=%d", result, store.backfillUpdates)
 	}
-	if store.findCalls != 1 || store.existsCalls != 0 {
-		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	if store.batchFindCalls != 1 || store.findCalls != 0 || store.existsCalls != 0 {
+		t.Fatalf("batch calls=%d find calls=%d existence calls=%d, want one batch lookup", store.batchFindCalls, store.findCalls, store.existsCalls)
 	}
 }
 
