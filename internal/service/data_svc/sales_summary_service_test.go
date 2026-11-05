@@ -10,6 +10,7 @@ import (
 
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/cache"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -43,6 +44,8 @@ func TestSalesSummaryMetricsUsePushedAmountAndItemQuantities(t *testing.T) {
 
 type fakeSalesSummaryStore struct {
 	called       bool
+	readCalls    int
+	orderErr     error
 	code         string
 	start        int
 	end          int
@@ -62,8 +65,57 @@ func (store *fakeSalesSummaryStore) ReadPushedOrders(
 	end int,
 	visit func(model.BojunRetailOrder) error,
 ) error {
+	store.readCalls++
+	if store.orderErr != nil {
+		return store.orderErr
+	}
 	store.code, store.start, store.end = code, start, end
 	return visit(model.BojunRetailOrder{TotalAmtActual: 80, TotalQty: 2, OrderTypeCode: "CMR"})
+}
+
+func TestSalesSummaryCachesSuccessfulTotalsAfterAuthorization(t *testing.T) {
+	store := &fakeSalesSummaryStore{}
+	scope := &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A003"}}
+	service := &SalesSummaryService{
+		store: store, mallScope: scope, now: time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		result, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31")
+		if err != nil || result.Metrics.SalesAmount != 80 {
+			t.Fatalf("query=%+v err=%v", result, err)
+		}
+		result.Metrics.SalesAmount = 999
+	}
+	if store.readCalls != 1 {
+		t.Fatalf("repeated summary read orders %d times", store.readCalls)
+	}
+	if _, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-02", "2026-10-31"); err != nil {
+		t.Fatal(err)
+	}
+	if store.readCalls != 2 {
+		t.Fatal("different date range reused the wrong summary")
+	}
+	scope.err = auth_svc.ErrMallScopeForbidden
+	if _, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31"); !errors.Is(err, ErrSalesSummaryForbidden) {
+		t.Fatalf("cached summary bypassed authorization: %v", err)
+	}
+}
+
+func TestSalesSummaryDoesNotCacheFailedAggregation(t *testing.T) {
+	store := &fakeSalesSummaryStore{orderErr: errors.New("database unavailable")}
+	service := &SalesSummaryService{
+		store: store, mallScope: &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A003"}}, now: time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	if _, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31"); err == nil {
+		t.Fatal("failed aggregation succeeded")
+	}
+	store.orderErr = nil
+	result, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31")
+	if err != nil || result.Metrics.SalesAmount != 80 || store.readCalls != 2 {
+		t.Fatalf("recovered summary=%+v calls=%d err=%v", result, store.readCalls, err)
+	}
 }
 
 func (store *fakeSalesSummaryStore) ReadDailyWeather(

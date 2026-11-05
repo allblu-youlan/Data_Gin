@@ -14,6 +14,7 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/cache"
 	"gin-biz-web-api/pkg/database"
 	"gin-biz-web-api/pkg/shanghaimall"
 
@@ -65,16 +66,24 @@ type salesSummaryStore interface {
 }
 
 type SalesSummaryService struct {
-	store     salesSummaryStore
-	mallScope businessOverviewMallScope
-	now       func() time.Time
+	store        salesSummaryStore
+	mallScope    businessOverviewMallScope
+	now          func() time.Time
+	metricsCache *cache.MemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics]
+}
+
+type salesSummaryCacheKey struct {
+	MallCode string
+	Start    int
+	End      int
 }
 
 func NewSalesSummaryService() *SalesSummaryService {
 	return &SalesSummaryService{
-		store:     &salesSummaryDBStore{db: database.DB},
-		mallScope: auth_svc.NewMallScopeService(database.DB),
-		now:       time.Now,
+		store:        &salesSummaryDBStore{db: database.DB},
+		mallScope:    auth_svc.NewMallScopeService(database.DB),
+		now:          time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
 	}
 }
 
@@ -115,19 +124,28 @@ func (service *SalesSummaryService) Query(
 		StartDate: startDate, EndDate: endDate,
 		Mall: BusinessOverviewMallDTO{ID: mall.ID, MallCode: mall.MallCode, NameCN: mall.NameCN},
 	}
-	err = service.store.ReadPushedOrders(
-		queryCtx,
-		mallCode,
-		statusTimeBillDate(start),
-		statusTimeBillDate(end),
-		func(order model.BojunRetailOrder) error { return addSalesSummaryOrder(&result.Metrics, order) },
-	)
+	key := salesSummaryCacheKey{MallCode: mallCode, Start: statusTimeBillDate(start), End: statusTimeBillDate(end)}
+	result.Metrics, err = service.readMetrics(queryCtx, key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: summarize pushed orders: %v", ErrSalesSummaryUnavailable, err)
 	}
 	finishSalesSummaryMetrics(&result.Metrics)
 	result.Weather = service.todayWeather(queryCtx, mall)
 	return result, nil
+}
+
+func (service *SalesSummaryService) readMetrics(ctx context.Context, key salesSummaryCacheKey) (SalesSummaryMetrics, error) {
+	if metrics, found := service.metricsCache.Get(key); found {
+		return metrics, nil
+	}
+	var metrics SalesSummaryMetrics
+	err := service.store.ReadPushedOrders(ctx, key.MallCode, key.Start, key.End, func(order model.BojunRetailOrder) error {
+		return addSalesSummaryOrder(&metrics, order)
+	})
+	if err == nil {
+		service.metricsCache.Set(key, metrics)
+	}
+	return metrics, err
 }
 
 func (service *SalesSummaryService) todayWeather(ctx context.Context, mall *model.Mall) *SalesSummaryWeather {
