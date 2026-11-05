@@ -1,0 +1,19 @@
+[Unit]
+Description=Host resource sampler
+RequiresMountsFor=/mnt/host-monitor
+ConditionPathIsMountPoint=/mnt
+
+[Service]
+Environment=LC_ALL=C S_COLORS=never
+UMask=0077
+Restart=always
+RestartSec=10
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=10%
+MemoryMax=96M
+TasksMax=16
+ExecStart=/bin/sh -c 'exec /usr/bin/stdbuf -oL /usr/bin/iostat -x -y -t vda vdb 10 >> /mnt/host-monitor/iostat.log'
+
+[Install]
+WantedBy=multi-user.target
