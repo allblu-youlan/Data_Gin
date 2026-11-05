@@ -79,6 +79,64 @@ func TestClientClassifiesHTTPFailures(t *testing.T) {
 	}
 }
 
+func TestClientHTTPFailureRetryAfter(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		header string
+		want   time.Duration
+	}{
+		{name: "rate limit seconds", status: http.StatusTooManyRequests, header: "90", want: 90 * time.Second},
+		{name: "server failure seconds", status: http.StatusServiceUnavailable, header: "120", want: 2 * time.Minute},
+		{name: "permanent authentication", status: http.StatusUnauthorized, header: "90"},
+		{name: "missing header", status: http.StatusTooManyRequests},
+		{name: "invalid header", status: http.StatusTooManyRequests, header: "invalid-header-secret"},
+		{name: "duration overflow", status: http.StatusTooManyRequests, header: "9223372037"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Retry-After", test.header)
+				w.WriteHeader(test.status)
+				fmt.Fprint(w, "Rate limit exceeded")
+			}))
+			response, err := client.FetchWeather(t.Context(), validWeatherRequest())
+			providerError := requireProviderError(t, err)
+			var hint interface{ RetryDelay() time.Duration }
+			if !errors.As(err, &hint) {
+				t.Fatal("HTTP failure does not expose a retry delay")
+			}
+			if got := hint.RetryDelay(); got != test.want {
+				t.Fatalf("RetryDelay()=%v want %v", got, test.want)
+			}
+			if response == nil || response.HTTPStatus != test.status || string(response.RawBody) != "Rate limit exceeded" {
+				t.Fatalf("response=%+v", response)
+			}
+			if providerError.HTTPStatus != test.status || strings.Contains(err.Error(), "invalid-header-secret") {
+				t.Fatalf("unsafe or incorrect error=%v", err)
+			}
+		})
+	}
+}
+
+func TestClientHTTPFailureRetryAfterDate(t *testing.T) {
+	retryAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Second)
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", retryAt.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, "Rate limit exceeded")
+	}))
+	startedAt := time.Now()
+	_, err := client.FetchWeather(t.Context(), validWeatherRequest())
+	finishedAt := time.Now()
+	var hint interface{ RetryDelay() time.Duration }
+	if !errors.As(err, &hint) {
+		t.Fatal("HTTP failure does not expose a retry delay")
+	}
+	if got := hint.RetryDelay(); got < retryAt.Sub(finishedAt) || got > retryAt.Sub(startedAt) {
+		t.Fatalf("RetryDelay()=%v outside HTTP-date interval", got)
+	}
+}
+
 func TestClientRejectsProviderBusinessAndMalformedEnvelopes(t *testing.T) {
 	tests := []struct {
 		name   string

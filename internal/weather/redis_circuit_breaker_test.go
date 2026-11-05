@@ -11,8 +11,8 @@ import (
 
 func TestRedisCircuitBreakerAllowsFromRedisState(t *testing.T) {
 	client := &fakeRedisCircuitBreakerClient{results: []interface{}{
-		[]interface{}{int64(1), "closed"},
-		[]interface{}{int64(0), "open"},
+		[]interface{}{int64(1), "closed", int64(0)},
+		[]interface{}{int64(0), "open", int64(60000)},
 	}}
 	breaker, err := newRedisCircuitBreaker(client, RedisCircuitBreakerConfig{
 		Key: "app:circuit:caiyun", FailureThreshold: 3, OpenTimeout: time.Minute, ProbeTTL: time.Second,
@@ -21,13 +21,13 @@ func TestRedisCircuitBreakerAllowsFromRedisState(t *testing.T) {
 		t.Fatalf("newRedisCircuitBreaker() error=%v", err)
 	}
 
-	allowed, err := breaker.Allow(context.Background())
-	if err != nil || !allowed {
-		t.Fatalf("Allow() allowed=%t error=%v, want allowed", allowed, err)
+	allowed, remaining, err := breaker.Allow(context.Background())
+	if err != nil || !allowed || remaining != 0 {
+		t.Fatalf("Allow() allowed=%t remaining=%s error=%v, want allowed", allowed, remaining, err)
 	}
-	allowed, err = breaker.Allow(context.Background())
-	if err != nil || allowed {
-		t.Fatalf("Allow() allowed=%t error=%v, want blocked", allowed, err)
+	allowed, remaining, err = breaker.Allow(context.Background())
+	if err != nil || allowed || remaining != time.Minute {
+		t.Fatalf("Allow() allowed=%t remaining=%s error=%v, want blocked for one minute", allowed, remaining, err)
 	}
 	if len(client.calls) != 2 || client.calls[0].key != "app:circuit:caiyun" ||
 		client.calls[0].args[0] != int64(time.Minute/time.Millisecond) {
@@ -79,6 +79,35 @@ func TestRedisCircuitBreakerRejectsInvalidConfiguration(t *testing.T) {
 	}
 }
 
+func TestRedisCircuitBreakerPassesRateLimitMinimumDelay(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		retryAfter time.Duration
+		wantDelay  time.Duration
+	}{
+		{name: "missing delay", wantDelay: time.Minute},
+		{name: "negative delay", retryAfter: -time.Second, wantDelay: time.Minute},
+		{name: "long delay", retryAfter: 3 * time.Minute, wantDelay: 3 * time.Minute},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeRedisCircuitBreakerClient{results: []interface{}{[]interface{}{"open", int64(3)}}}
+			breaker, err := newRedisCircuitBreaker(client, RedisCircuitBreakerConfig{
+				Key: "app:circuit:caiyun", FailureThreshold: 3, OpenTimeout: time.Minute, ProbeTTL: time.Second,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := breaker.ReportRateLimited(t.Context(), test.retryAfter); err != nil {
+				t.Fatal(err)
+			}
+			if len(client.calls) != 1 || len(client.calls[0].args) != 5 ||
+				client.calls[0].args[3] != time.Minute.Milliseconds() || client.calls[0].args[4] != test.wantDelay.Milliseconds() {
+				t.Fatalf("rate limit report calls=%+v, want minimum delay=%s", client.calls, test.wantDelay)
+			}
+		})
+	}
+}
+
 func TestRedisCircuitBreakerPropagatesRedisFailure(t *testing.T) {
 	client := &fakeRedisCircuitBreakerClient{errors: []error{errors.New("redis unavailable")}}
 	breaker, err := newRedisCircuitBreaker(client, RedisCircuitBreakerConfig{
@@ -87,7 +116,7 @@ func TestRedisCircuitBreakerPropagatesRedisFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newRedisCircuitBreaker() error=%v", err)
 	}
-	if _, err := breaker.Allow(context.Background()); err == nil {
+	if _, _, err := breaker.Allow(context.Background()); err == nil {
 		t.Fatal("Allow() error=nil")
 	}
 }

@@ -14,43 +14,49 @@ local probe_ttl_ms = tonumber(ARGV[2])
 local ttl_ms = tonumber(ARGV[3])
 local redis_time = redis.call("TIME")
 local now_ms = redis_time[1] * 1000 + math.floor(redis_time[2] / 1000)
-local state = redis.call("HMGET", KEYS[1], "state", "opened_ms", "probe_until_ms")
+local state = redis.call("HMGET", KEYS[1], "state", "opened_ms", "probe_until_ms", "open_until_ms")
 local status = state[1]
 local opened_ms = tonumber(state[2]) or 0
 local probe_until_ms = tonumber(state[3]) or 0
+local open_until_ms = tonumber(state[4]) or 0
+if open_until_ms <= 0 then
+  open_until_ms = opened_ms + open_timeout_ms
+end
 
 if status == "open" then
-  if now_ms - opened_ms < open_timeout_ms then
-    return {0, "open"}
+  if now_ms < open_until_ms then
+    return {0, "open", open_until_ms - now_ms}
   end
   if now_ms < probe_until_ms then
-    return {0, "open"}
+    return {0, "open", probe_until_ms - now_ms}
   end
   redis.call("HMSET", KEYS[1], "state", "half_open", "probe_until_ms", now_ms + probe_ttl_ms)
   redis.call("PEXPIRE", KEYS[1], ttl_ms)
-  return {1, "half_open"}
+  return {1, "half_open", 0}
 end
 
 if status == "half_open" then
   if now_ms < probe_until_ms then
-    return {0, "open"}
+    return {0, "open", probe_until_ms - now_ms}
   end
   redis.call("HMSET", KEYS[1], "probe_until_ms", now_ms + probe_ttl_ms)
   redis.call("PEXPIRE", KEYS[1], ttl_ms)
-  return {1, "half_open"}
+  return {1, "half_open", 0}
 end
 
 redis.call("PEXPIRE", KEYS[1], ttl_ms)
-return {1, "closed"}
+return {1, "closed", 0}
 `
 
 const redisCircuitReportScript = `
 local failure_threshold = tonumber(ARGV[1])
 local ttl_ms = tonumber(ARGV[2])
 local success = tonumber(ARGV[3])
+local open_timeout_ms = tonumber(ARGV[4])
+local minimum_delay_ms = tonumber(ARGV[5])
 local redis_time = redis.call("TIME")
 local now_ms = redis_time[1] * 1000 + math.floor(redis_time[2] / 1000)
-local state = redis.call("HMGET", KEYS[1], "state", "failures")
+local state = redis.call("HMGET", KEYS[1], "state", "failures", "opened_ms", "open_until_ms")
 local status = state[1]
 local failures = tonumber(state[2]) or 0
 
@@ -67,22 +73,36 @@ if status == "half_open" then
 else
   failures = failures + 1
 end
+if minimum_delay_ms > 0 then
+  failures = math.max(failures, failure_threshold)
+end
 
-if failures >= failure_threshold then
-  redis.call("HMSET", KEYS[1], "state", "open", "failures", failures, "opened_ms", now_ms, "probe_until_ms", 0)
-  redis.call("PEXPIRE", KEYS[1], ttl_ms)
+if failures >= failure_threshold or status == "open" then
+  local open_until_ms = now_ms + math.max(open_timeout_ms, minimum_delay_ms)
+  if status == "open" then
+    local previous_open_until_ms = tonumber(state[4]) or 0
+    if previous_open_until_ms <= 0 then
+      previous_open_until_ms = (tonumber(state[3]) or 0) + open_timeout_ms
+    end
+    open_until_ms = math.max(open_until_ms, previous_open_until_ms)
+  end
+  local retention_ms = ttl_ms - open_timeout_ms
+  local retained_ttl_ms = math.max(ttl_ms, open_until_ms - now_ms + retention_ms, redis.call("PTTL", KEYS[1]))
+  redis.call("HMSET", KEYS[1], "state", "open", "failures", failures, "opened_ms", now_ms, "open_until_ms", open_until_ms, "probe_until_ms", 0)
+  redis.call("PEXPIRE", KEYS[1], retained_ttl_ms)
   return {"open", failures}
 end
 
-redis.call("HMSET", KEYS[1], "state", "closed", "failures", failures, "opened_ms", 0, "probe_until_ms", 0)
+redis.call("HMSET", KEYS[1], "state", "closed", "failures", failures, "opened_ms", 0, "open_until_ms", 0, "probe_until_ms", 0)
 redis.call("PEXPIRE", KEYS[1], ttl_ms)
 return {"closed", failures}
 `
 
 type ProviderCircuitBreaker interface {
-	Allow(ctx context.Context) (bool, error)
+	Allow(ctx context.Context) (bool, time.Duration, error)
 	ReportSuccess(ctx context.Context) error
 	ReportFailure(ctx context.Context) error
+	ReportRateLimited(ctx context.Context, retryAfter time.Duration) error
 }
 
 type redisCircuitBreakerClient interface {
@@ -129,9 +149,9 @@ func newRedisCircuitBreaker(client redisCircuitBreakerClient, cfg RedisCircuitBr
 	}, nil
 }
 
-func (breaker *RedisCircuitBreaker) Allow(ctx context.Context) (bool, error) {
+func (breaker *RedisCircuitBreaker) Allow(ctx context.Context) (bool, time.Duration, error) {
 	if breaker == nil || breaker.client == nil || ctx == nil {
-		return false, fmt.Errorf("weather circuit breaker: invalid allow")
+		return false, 0, fmt.Errorf("weather circuit breaker: invalid allow")
 	}
 	result, err := breaker.client.Eval(
 		ctx,
@@ -142,28 +162,40 @@ func (breaker *RedisCircuitBreaker) Allow(ctx context.Context) (bool, error) {
 		breaker.stateTTLMS,
 	).Result()
 	if err != nil {
-		return false, fmt.Errorf("weather circuit breaker: allow: %w", err)
+		return false, 0, fmt.Errorf("weather circuit breaker: allow: %w", err)
 	}
 	values, ok := result.([]interface{})
-	if !ok || len(values) != 2 {
-		return false, fmt.Errorf("weather circuit breaker: invalid allow response")
+	if !ok || len(values) != 3 {
+		return false, 0, fmt.Errorf("weather circuit breaker: invalid allow response")
 	}
 	allowed, ok := redisInteger(values[0])
 	if !ok || (allowed != 0 && allowed != 1) {
-		return false, fmt.Errorf("weather circuit breaker: invalid allow result")
+		return false, 0, fmt.Errorf("weather circuit breaker: invalid allow result")
 	}
-	return allowed == 1, nil
+	waitMS, ok := redisInteger(values[2])
+	if !ok || waitMS < 0 {
+		return false, 0, fmt.Errorf("weather circuit breaker: invalid retry delay")
+	}
+	return allowed == 1, time.Duration(waitMS) * time.Millisecond, nil
 }
 
 func (breaker *RedisCircuitBreaker) ReportSuccess(ctx context.Context) error {
-	return breaker.report(ctx, true)
+	return breaker.report(ctx, true, 0)
 }
 
 func (breaker *RedisCircuitBreaker) ReportFailure(ctx context.Context) error {
-	return breaker.report(ctx, false)
+	return breaker.report(ctx, false, 0)
 }
 
-func (breaker *RedisCircuitBreaker) report(ctx context.Context, success bool) error {
+func (breaker *RedisCircuitBreaker) ReportRateLimited(ctx context.Context, retryAfter time.Duration) error {
+	if breaker == nil {
+		return fmt.Errorf("weather circuit breaker: invalid report")
+	}
+	minimumDelay := max(retryAfter, time.Duration(breaker.openTimeoutMS)*time.Millisecond)
+	return breaker.report(ctx, false, minimumDelay)
+}
+
+func (breaker *RedisCircuitBreaker) report(ctx context.Context, success bool, minimumDelay time.Duration) error {
 	if breaker == nil || breaker.client == nil || ctx == nil {
 		return fmt.Errorf("weather circuit breaker: invalid report")
 	}
@@ -178,6 +210,8 @@ func (breaker *RedisCircuitBreaker) report(ctx context.Context, success bool) er
 		breaker.failureThreshold,
 		breaker.stateTTLMS,
 		successValue,
+		breaker.openTimeoutMS,
+		minimumDelay.Milliseconds(),
 	).Result()
 	if err != nil {
 		return fmt.Errorf("weather circuit breaker: report: %w", err)

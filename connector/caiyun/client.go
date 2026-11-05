@@ -39,6 +39,7 @@ type ProviderError struct {
 	Code       string
 	HTTPStatus int
 	Retryable  bool
+	RetryAfter time.Duration
 	cause      error
 }
 
@@ -66,6 +67,13 @@ func (err *ProviderError) Unwrap() error {
 		return nil
 	}
 	return err.cause
+}
+
+func (err *ProviderError) RetryDelay() time.Duration {
+	if err == nil || !err.Retryable {
+		return 0
+	}
+	return err.RetryAfter
 }
 
 type Client struct {
@@ -176,6 +184,7 @@ func (client *Client) execute(request *http.Request, endpointKind string, valida
 		classification := providerhttp.ClassifyRetry(httpResponse.StatusCode, nil)
 		return response, &ProviderError{
 			Class: classification.Class, HTTPStatus: httpResponse.StatusCode, Retryable: classification.Retryable,
+			RetryAfter: providerhttp.RetryAfter(httpResponse.Header, time.Now()),
 		}
 	}
 	if jsonErr != nil {

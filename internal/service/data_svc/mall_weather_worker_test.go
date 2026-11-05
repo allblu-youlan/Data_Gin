@@ -852,21 +852,22 @@ func (limiter *fakeWeatherRateLimiter) Wait(context.Context) error {
 }
 
 type fakeWeatherCircuitBreaker struct {
-	allowed      bool
-	allowErr     error
-	successErr   error
-	failureErr   error
-	allowCalls   int
-	successCalls int
-	failureCalls int
+	allowed         bool
+	allowErr        error
+	allowRetryAfter time.Duration
+	successErr      error
+	failureErr      error
+	allowCalls      int
+	successCalls    int
+	failureCalls    int
 }
 
-func (breaker *fakeWeatherCircuitBreaker) Allow(context.Context) (bool, error) {
+func (breaker *fakeWeatherCircuitBreaker) Allow(context.Context) (bool, time.Duration, error) {
 	breaker.allowCalls++
 	if breaker.allowErr != nil {
-		return false, breaker.allowErr
+		return false, 0, breaker.allowErr
 	}
-	return breaker.allowed, nil
+	return breaker.allowed, breaker.allowRetryAfter, nil
 }
 
 func (breaker *fakeWeatherCircuitBreaker) ReportSuccess(context.Context) error {
@@ -875,6 +876,11 @@ func (breaker *fakeWeatherCircuitBreaker) ReportSuccess(context.Context) error {
 }
 
 func (breaker *fakeWeatherCircuitBreaker) ReportFailure(context.Context) error {
+	breaker.failureCalls++
+	return breaker.failureErr
+}
+
+func (breaker *fakeWeatherCircuitBreaker) ReportRateLimited(context.Context, time.Duration) error {
 	breaker.failureCalls++
 	return breaker.failureErr
 }

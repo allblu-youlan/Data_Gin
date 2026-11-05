@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -86,12 +85,5 @@ func classifyBotBusinessCode(code int) providerhttp.RetryClassification {
 }
 
 func botRetryAfter(header http.Header, now time.Time) time.Duration {
-	value := strings.TrimSpace(header.Get("Retry-After"))
-	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
-		return time.Duration(seconds) * time.Second
-	}
-	if date, err := http.ParseTime(value); err == nil && date.After(now) {
-		return date.Sub(now)
-	}
-	return 0
+	return providerhttp.RetryAfter(header, now)
 }

@@ -119,3 +119,13 @@ func TestBotCardRejectsOversizedActualBody(t *testing.T) {
 		t.Fatalf("date delay=%v", got)
 	}
 }
+
+func TestBotRetryAfterRejectsDurationOverflow(t *testing.T) {
+	for _, value := range []string{"9223372037", "18446744074", "9223372036854775808"} {
+		t.Run(value, func(t *testing.T) {
+			if got := botRetryAfter(http.Header{"Retry-After": []string{value}}, time.Now()); got != 0 {
+				t.Fatalf("botRetryAfter(%q)=%v want zero", value, got)
+			}
+		})
+	}
+}

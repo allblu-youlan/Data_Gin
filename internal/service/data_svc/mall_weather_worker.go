@@ -16,6 +16,7 @@ import (
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/logger"
+	"gin-biz-web-api/pkg/providerhttp"
 
 	"go.uber.org/zap"
 )
@@ -107,6 +108,7 @@ type mallWeatherFailure struct {
 	FinishedAt        time.Time
 	ParserVersion     string
 	ParseWarningsJSON model.JSONText
+	RetryAfter        time.Duration
 }
 
 type mallWeatherModelBatch struct {
@@ -228,7 +230,7 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 			ErrorMessageSafe: "weather provider rate limit could not be acquired", FinishedAt: processor.now().UTC(),
 		}, err, true)
 	}
-	allowed, err := processor.breaker.Allow(ctx)
+	allowed, retryAfter, err := processor.breaker.Allow(ctx)
 	if err != nil {
 		return processor.finishFailure(ctx, execution, mallWeatherFailure{
 			AttemptStatus: "transport_failed", ErrorClass: "circuit", ErrorCode: "CIRCUIT_CHECK_FAILED",
@@ -240,8 +242,10 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 		return processor.finishFailure(ctx, execution, mallWeatherFailure{
 			AttemptStatus: "provider_skipped", ErrorClass: "circuit_open", ErrorCode: "CIRCUIT_OPEN",
 			ErrorMessageSafe: "weather provider circuit is open", FinishedAt: processor.now().UTC(),
+			RetryAfter: retryAfter,
 		}, fmt.Errorf("weather provider circuit is open"), true)
 	}
+	recordMallWeatherProviderCircuitOpen(processor.metrics, false)
 	response, providerErr := processor.fetch(ctx, start, &execution.Mall)
 	finishedAt := processor.now().UTC()
 	if response != nil && response.EndpointKind != start.Payload.EndpointKind {
@@ -249,6 +253,9 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 	}
 	if providerErr == nil && (response == nil || len(response.RawBody) == 0) {
 		providerErr = &caiyun.ProviderError{Class: "invalid_response"}
+	}
+	if providerErr != nil {
+		processor.reportProviderCircuitFailure(ctx, providerErr)
 	}
 	recordMallWeatherProviderRequest(processor.metrics, start.Payload.EndpointKind, providerErr == nil)
 	recordMallWeatherProviderRateLimited(processor.metrics, providerErr)
@@ -262,7 +269,7 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 			return processor.finishFailure(ctx, execution, mallWeatherFailure{
 				AttemptStatus: "persist_failed", ErrorClass: "snapshot", ErrorCode: "SNAPSHOT_FAILED",
 				ErrorMessageSafe: "weather response snapshot could not be stored", FinishedAt: finishedAt,
-			}, snapshotErr, true)
+			}, errors.Join(snapshotErr, providerErr), true)
 		}
 		execution.Run.ResponseChecksum = snapshot.ResponseChecksum
 		if err := processor.store.RecordResponse(ctx, execution, response, snapshot); err != nil {
@@ -272,11 +279,10 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 			return processor.finishFailure(ctx, execution, mallWeatherFailure{
 				AttemptStatus: "persist_failed", ErrorClass: "database", ErrorCode: "SNAPSHOT_RECORD_FAILED",
 				ErrorMessageSafe: "weather response snapshot could not be recorded", FinishedAt: finishedAt,
-			}, err, true)
+			}, errors.Join(err, providerErr), true)
 		}
 	}
 	if providerErr != nil {
-		processor.reportProviderCircuitFailure(ctx, providerErr)
 		failure, retryable := classifyWeatherProviderFailure(providerErr, response, finishedAt)
 		return processor.finishFailure(ctx, execution, failure, providerErr, retryable)
 	}
@@ -316,11 +322,20 @@ func (processor *MallWeatherProcessor) reportProviderCircuitSuccess(ctx context.
 		logger.Warn("Mall weather provider circuit success report failed", zap.Error(err))
 		return
 	}
-	recordMallWeatherProviderCircuitOpen(processor.metrics, false)
 }
 
 func (processor *MallWeatherProcessor) reportProviderCircuitFailure(ctx context.Context, cause error) {
-	if err := processor.breaker.ReportFailure(ctx); err != nil {
+	var providerError *caiyun.ProviderError
+	var err error
+	if errors.As(cause, &providerError) && providerError != nil && providerError.Class == providerhttp.ErrorClassRateLimited {
+		err = processor.breaker.ReportRateLimited(ctx, providerError.RetryDelay())
+		if err == nil {
+			recordMallWeatherProviderCircuitOpen(processor.metrics, true)
+		}
+	} else {
+		err = processor.breaker.ReportFailure(ctx)
+	}
+	if err != nil {
 		logger.Warn("Mall weather provider circuit failure report failed", zap.Error(err), zap.NamedError("cause", cause))
 	}
 }
@@ -403,10 +418,21 @@ func (processor *MallWeatherProcessor) finishFailure(ctx context.Context, execut
 	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 		return cause
 	}
-	processError := &MallWeatherProcessError{Retryable: retryable, Code: failure.ErrorCode, cause: cause}
-	if retryable && (failure.ErrorClass == "rate_limited" || failure.ErrorClass == "circuit_open") {
+	processError := &MallWeatherProcessError{
+		Retryable: retryable, Code: failure.ErrorCode, cause: cause, retryDelay: failure.RetryAfter,
+	}
+	var providerError *caiyun.ProviderError
+	rateLimited := failure.ErrorClass == string(providerhttp.ErrorClassRateLimited)
+	if retryable && errors.As(cause, &providerError) && providerError != nil {
+		processError.retryDelay = max(processError.retryDelay, providerError.RetryDelay())
+		rateLimited = rateLimited || providerError.Class == providerhttp.ErrorClassRateLimited
+	}
+	if retryable && (rateLimited || failure.ErrorClass == "circuit_open") {
+		processError.retryDelay = max(processError.retryDelay, processor.config.CircuitOpenTimeout)
+	}
+	if processError.retryDelay > 0 && processError.retryDelay <= time.Duration(math.MaxInt64)-time.Second {
 		// Asynq stores retry timestamps in whole seconds, while the circuit uses milliseconds.
-		processError.retryDelay = processor.config.CircuitOpenTimeout + time.Second
+		processError.retryDelay += time.Second
 	}
 	return processError
 }
