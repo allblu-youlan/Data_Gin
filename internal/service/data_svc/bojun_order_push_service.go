@@ -76,10 +76,14 @@ func (s *BojunOrderPushService) PushNewOrderWithPolicy(ctx context.Context, orde
 	}
 	if policy.ShouldSkip(position) {
 		s.writePolicySkippedLog(ctx, order, target, policy, position)
-		if err := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1); err != nil {
-			return bojunOrderPushResult{Target: target, Skipped: true, Error: err}
+		statusErr := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1)
+		return bojunOrderPushResult{
+			Target:          target,
+			Success:         true,
+			Skipped:         true,
+			SyncStatusSaved: statusErr == nil,
+			Error:           statusErr,
 		}
-		return bojunOrderPushResult{Target: target, Success: true, Skipped: true, SyncStatusSaved: true}
 	}
 
 	traceID := uuid.NewString()

@@ -12,6 +12,7 @@ import (
 
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/orderpush"
 )
 
 type bojunStatusRecordingStore struct {
@@ -129,5 +130,76 @@ func TestBojunOraclePushPersistsStatusForOtherPushers(t *testing.T) {
 		if (err != nil) == success || !slices.Equal(store.statuses, []int{wantStatus}) {
 			t.Fatalf("push success = %t, error = %v, status writes = %v", success, err, store.statuses)
 		}
+	}
+}
+
+func TestBojunOraclePolicySkipRetriesLocalStatusBeforeAdvancing(t *testing.T) {
+	tests := []struct {
+		name         string
+		failuresLeft int
+		writeBackErr error
+		wantStatuses []int
+		wantSynced   int
+		wantError    bool
+	}{
+		{name: "saved once", wantStatuses: []int{1}, wantSynced: 1},
+		{name: "retry status", failuresLeft: 1, wantStatuses: []int{1, 1}, wantSynced: 1},
+		{name: "status unavailable", failuresLeft: 2, wantStatuses: []int{1, 1}, wantError: true},
+		{name: "Oracle write-back pending", failuresLeft: 1, writeBackErr: errors.New("Oracle update failed"), wantStatuses: []int{1, 3}, wantSynced: 3, wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalTransport := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = originalTransport })
+			http.DefaultTransport = bojunHenglongTestTransport(func(*http.Request) (*http.Response, error) {
+				t.Error("skipped order sent a mall HTTP request")
+				return nil, errors.New("unexpected HTTP request")
+			})
+			statusTime := time.Date(2026, 11, 5, 10, 0, 0, 0, time.Local)
+			connection := &fakeBojunOracleConnection{
+				maxID: 12,
+				rows: []reportoracle.BojunRetailRow{
+					{RetailID: 11, DocNo: "NO-TARGET-11", StoreCode: "UNKNOWN", StatusTime: statusTime, IsToShop: "Y"},
+					{RetailID: 12, DocNo: "SKIP-12", StoreCode: "ABCN002A001", StatusTime: statusTime, IsToShop: "Y"},
+				},
+				writeBackErr: tt.writeBackErr,
+			}
+			state := &fakeBojunOracleStateStore{
+				state:         model.BojunOracleSyncState{SourceCode: bojunOracleDatasourceCode, LastRetailID: 10, Initialized: true},
+				leaseAcquired: true,
+			}
+			service := newTestBojunOracleOrderService(connection, state)
+			store := &bojunStatusRecordingStore{
+				fakeBojunOracleRetailStore: service.retailOrderDAO.(*fakeBojunOracleRetailStore),
+				failuresLeft:               tt.failuresLeft,
+			}
+			service.retailOrderDAO = store
+			service.pushService = &BojunOrderPushService{
+				retailOrderDAO: store,
+				logDAO:         &fakeDeliveryLogCreator{},
+				pipelineRunDAO: &fakeBojunPipelineRunRecorder{},
+			}
+			service.skipPolicy = bojunPageTestSkipConfig{config: OrderPushSkipConfig{Targets: []orderpush.TargetSkipPolicy{
+				{TargetCode: bojunPushTargetHangzhouHenglong, Cycle: 2, Skip: 1},
+			}}}
+
+			result, err := service.SyncIncremental(t.Context())
+			if (err != nil) != tt.wantError {
+				t.Fatalf("SyncIncremental() error = %v, want error %t", err, tt.wantError)
+			}
+			if !slices.Equal(store.statuses, tt.wantStatuses) || store.orders["SKIP-12"].Synced != tt.wantSynced {
+				t.Fatalf("status writes = %v, stored = %d, want writes %v, stored %d", store.statuses, store.orders["SKIP-12"].Synced, tt.wantStatuses, tt.wantSynced)
+			}
+			if !slices.Equal(connection.writeBackIDs, []uint64{12}) || !slices.Equal(connection.writeBackOK, []bool{true}) {
+				t.Fatalf("Oracle write-back IDs = %v, statuses = %v", connection.writeBackIDs, connection.writeBackOK)
+			}
+			wantWatermark := uint64(12)
+			if tt.wantError {
+				wantWatermark = 10
+			}
+			if result.WatermarkAfter != wantWatermark || result.SkippedCount != 1 {
+				t.Fatalf("watermark = %d, want %d, skipped = %d", result.WatermarkAfter, wantWatermark, result.SkippedCount)
+			}
+		})
 	}
 }
