@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,6 +53,49 @@ type fakeSalesSummaryStore struct {
 	end          int
 	weatherStart time.Time
 	weatherErr   error
+}
+
+type concurrentSalesSummaryStore struct {
+	salesSummaryStore
+	readCalls atomic.Int32
+}
+
+func (store *concurrentSalesSummaryStore) ReadPushedOrders(
+	ctx context.Context, _ string, _, _ int, visit func(model.BojunRetailOrder) error,
+) error {
+	store.readCalls.Add(1)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(20 * time.Millisecond):
+		return visit(model.BojunRetailOrder{TotalAmtActual: 80, TotalQty: 2, OrderTypeCode: "CMR"})
+	}
+}
+
+func TestSalesSummaryCoalescesConcurrentMetricLoads(t *testing.T) {
+	store := &concurrentSalesSummaryStore{}
+	service := &SalesSummaryService{
+		store: store, metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	key := salesSummaryCacheKey{MallCode: "ABCN001A003", Start: 20261001, End: 20261031}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			metrics, err := service.readMetrics(t.Context(), key)
+			if err != nil || metrics.SalesAmount != 80 || metrics.SalesQuantity != 2 || metrics.OrderCount != 1 {
+				t.Errorf("shared aggregation = %+v, error = %v", metrics, err)
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if calls := store.readCalls.Load(); calls != 1 {
+		t.Fatalf("concurrent aggregation read orders %d times, want 1", calls)
+	}
 }
 
 func (store *fakeSalesSummaryStore) FindMall(_ context.Context, code string) (*model.Mall, error) {

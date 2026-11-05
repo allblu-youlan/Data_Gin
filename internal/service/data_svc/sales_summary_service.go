@@ -135,17 +135,13 @@ func (service *SalesSummaryService) Query(
 }
 
 func (service *SalesSummaryService) readMetrics(ctx context.Context, key salesSummaryCacheKey) (SalesSummaryMetrics, error) {
-	if metrics, found := service.metricsCache.Get(key); found {
-		return metrics, nil
-	}
-	var metrics SalesSummaryMetrics
-	err := service.store.ReadPushedOrders(ctx, key.MallCode, key.Start, key.End, func(order model.BojunRetailOrder) error {
-		return addSalesSummaryOrder(&metrics, order)
+	return service.metricsCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (SalesSummaryMetrics, error) {
+		var metrics SalesSummaryMetrics
+		err := service.store.ReadPushedOrders(loadCtx, key.MallCode, key.Start, key.End, func(order model.BojunRetailOrder) error {
+			return addSalesSummaryOrder(&metrics, order)
+		})
+		return metrics, err
 	})
-	if err == nil {
-		service.metricsCache.Set(key, metrics)
-	}
-	return metrics, err
 }
 
 func (service *SalesSummaryService) todayWeather(ctx context.Context, mall *model.Mall) *SalesSummaryWeather {
