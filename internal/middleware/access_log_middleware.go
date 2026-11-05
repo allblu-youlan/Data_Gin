@@ -19,6 +19,7 @@ import (
 	"gin-biz-web-api/pkg/helper/strx"
 	"gin-biz-web-api/pkg/logger"
 	"gin-biz-web-api/pkg/providerhttp"
+	"gin-biz-web-api/pkg/responses"
 )
 
 const maxAccessLogResponseBodyBytes = 64 << 10
@@ -149,9 +150,44 @@ func AccessLog() gin.HandlerFunc {
 		logFields = append(logFields, zap.String("response_body", logResponseBody))
 
 		// 记录访问日志
+		logAccessRequestError(c, responseBodyWriter)
 		logger.Info("HTTP Access Log [ "+cast.ToString(responseStatus)+" ]", logFields...)
 
 	}
+}
+
+func logAccessRequestError(c *gin.Context, writer *AccessLogWriter) {
+	var response struct {
+		Code *int            `json:"code"`
+		Msg  json.RawMessage `json:"msg"`
+		Data json.RawMessage `json:"data"`
+		Err  json.RawMessage `json:"err"`
+	}
+	decoded := json.Unmarshal(writer.body.Bytes(), &response) == nil
+	// ErrResponse and ErrResponseStr already record the original error before
+	// rendering this legacy envelope. Other application errors still need a fallback.
+	if decoded && response.Code != nil && *response.Code == 201 && len(response.Msg) > 0 &&
+		bytes.Equal(bytes.TrimSpace(response.Data), []byte("{}")) && len(response.Err) > 0 {
+		return
+	}
+	businessFailure := decoded && response.Code != nil && *response.Code != 0 && *response.Code != 200
+	if writer.Status() < http.StatusBadRequest && len(c.Errors) == 0 && !businessFailure {
+		return
+	}
+	message := http.StatusText(writer.Status())
+	if decoded && len(response.Msg) > 0 {
+		message = sanitizedAccessLogBody("application/json", response.Msg, nil)
+	}
+	fields := []zap.Field{zap.Int("response_status", writer.Status())}
+	if response.Code != nil {
+		fields = append(fields, zap.Int("business_code", *response.Code))
+	}
+	level := zap.WarnLevel
+	privateFailure := len(c.Errors.ByType(gin.ErrorTypePrivate)) > 0 && !businessFailure && writer.Status() < http.StatusBadRequest
+	if writer.Status() >= http.StatusInternalServerError || privateFailure {
+		level = zap.ErrorLevel
+	}
+	responses.LogRequestFailure(c, level, message, fields...)
 }
 
 // accessLogRequestBody only captures a bounded preview and restores every

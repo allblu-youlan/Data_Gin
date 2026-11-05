@@ -39,12 +39,13 @@ func Recovery() gin.HandlerFunc {
 				}
 				// 链接中断的情况
 				if brokenPipe {
-					logger.Error(
+					logger.Warn(
 						c.Request.URL.Path,
 						zap.Time("time", time.Now()),
 						zap.Any("error", err),
 						zap.String("request", string(httpRequest)),
 					)
+					responses.MarkRequestErrorLogged(c)
 					_ = c.Error(err.(error))
 					c.Abort()
 					// 链接已断开，无法写状态码
@@ -59,6 +60,7 @@ func Recovery() gin.HandlerFunc {
 					// fmt.Println(zap.Stack("stacktrace").String)  // 可以打印出调用堆栈信息
 					zap.Stack("stacktrace"), // 调用堆栈信息
 				)
+				responses.MarkRequestErrorLogged(c)
 
 				// 返回 500 状态码
 				responses.New(c).ToErrorResponse(errcode.InternalServerError.WithDetails(fmt.Sprintf("recovery panic err: %v", err)))
