@@ -2,6 +2,7 @@ package send
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -12,6 +13,8 @@ import (
 
 	"gin-biz-web-api/pkg/config"
 )
+
+const salesRequestTimeout = 10 * time.Second
 
 var salesXMLSensitiveTags = regexp.MustCompile(`(?is)<(password|licensekey)>(.*?)</(password|licensekey)>`)
 
@@ -148,14 +151,17 @@ func buildSoapXML(payAmount float64, tid string, completedAt *time.Time, storeco
 }
 
 func sendPostRequest(xmlData string) (string, error) {
-	result, err := sendPostRequestWithResult(xmlData)
+	result, err := sendPostRequestWithResult(context.Background(), xmlData)
 	if result != nil {
 		return result.ResponseBody, err
 	}
 	return "", err
 }
 
-func sendPostRequestWithResult(xmlData string) (*SalesDataResult, error) {
+func sendPostRequestWithResult(ctx context.Context, xmlData string) (*SalesDataResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, salesRequestTimeout)
+	defer cancel()
+
 	headers := map[string]string{
 		"Content-Type": "text/xml; charset=utf-8",
 		"SOAPAction":   "http://tempurl.org/postsalescreate",
@@ -163,7 +169,7 @@ func sendPostRequestWithResult(xmlData string) (*SalesDataResult, error) {
 
 	salesAPIURL := config.GetString("cfg.henglong.sales_api_url")
 
-	req, err := http.NewRequest("POST", salesAPIURL, bytes.NewBufferString(xmlData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, salesAPIURL, bytes.NewBufferString(xmlData))
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +178,7 @@ func sendPostRequestWithResult(xmlData string) (*SalesDataResult, error) {
 		req.Header.Set(key, value)
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return &SalesDataResult{RequestBody: redactSalesXML(xmlData)}, err
 	}
@@ -209,8 +214,21 @@ func SendSalesDataWithResult(
 	mallitemcode string,
 	salestype string,
 ) (*SalesDataResult, error) {
+	return SendSalesDataWithResultContext(context.Background(), payAmount, tid, completedAt, storecode, mallitemcode, salestype)
+}
+
+// SendSalesDataWithResultContext bounds the request by the caller's context and the sales request timeout.
+func SendSalesDataWithResultContext(
+	ctx context.Context,
+	payAmount float64,
+	tid string,
+	completedAt *time.Time,
+	storecode string,
+	mallitemcode string,
+	salestype string,
+) (*SalesDataResult, error) {
 	xmlData := buildSoapXML(payAmount, tid, completedAt, storecode, mallitemcode, salestype)
-	result, err := sendPostRequestWithResult(xmlData)
+	result, err := sendPostRequestWithResult(ctx, xmlData)
 	if err == nil && result != nil && !result.Success && result.HTTPStatus >= http.StatusOK && result.HTTPStatus < http.StatusMultipleChoices {
 		result.Success = isDuplicateSalesResponse(result.ResponseBody, tid)
 	}

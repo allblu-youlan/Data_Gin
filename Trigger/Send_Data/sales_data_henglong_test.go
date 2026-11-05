@@ -1,6 +1,7 @@
 package send
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -66,14 +67,44 @@ func TestSendSalesDataWithResultRecognizesDuplicateTransaction(t *testing.T) {
 			if result.ResponseBody != tt.response || result.HTTPStatus != status {
 				t.Fatalf("response was changed: %+v", result)
 			}
+			if strings.Contains(result.RequestBody, "test-password") || strings.Contains(result.RequestBody, "test-license") ||
+				!strings.Contains(result.RequestBody, "<password>***</password>") || !strings.Contains(result.RequestBody, "<licensekey>***</licensekey>") {
+				t.Fatal("result request body contains unredacted credentials")
+			}
 		})
+	}
+}
+
+func TestSendSalesDataWithResultBoundsRequestLifetime(t *testing.T) {
+	setupSalesDataTestConfig(t)
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	http.DefaultTransport = salesDataTestTransport(func(request *http.Request) (*http.Response, error) {
+		deadline, ok := request.Context().Deadline()
+		if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > 10*time.Second {
+			return nil, fmt.Errorf("sales request requires a deadline within 10 seconds, got %v", deadline)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("<responsecode>0</responsecode>")),
+			Header:     make(http.Header),
+			Request:    request,
+		}, nil
+	})
+
+	result, err := SendSalesDataWithResult(88, "ORDER-1", nil, "416201", "E6600000099", "SA")
+	if err != nil || result == nil || !result.Success {
+		t.Fatalf("bounded sales request failed, error = %v", err)
+	}
+	if _, err := SendSalesData(88, "ORDER-2", nil, "416201", "E6600000099", "SA"); err != nil {
+		t.Fatalf("bounded legacy sales request failed, error = %v", err)
 	}
 }
 
 func setupSalesDataTestConfig(t *testing.T) {
 	t.Helper()
 	configDir := t.TempDir()
-	configBody := []byte("HengLong:\n  TillID: \"01\"\n")
+	configBody := []byte("HengLong:\n  TillID: \"01\"\n  Password: test-password\n  LicenseKey: test-license\n")
 	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), configBody, 0o600); err != nil {
 		t.Fatalf("write test config: %v", err)
 	}

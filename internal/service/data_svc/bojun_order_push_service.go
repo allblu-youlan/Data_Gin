@@ -178,7 +178,8 @@ func (s *BojunOrderPushService) pushHangzhouHenglong(
 	}
 	issuedAt := app.TimeNowInTimezone()
 
-	result, err := send.SendSalesDataWithResult(
+	result, err := send.SendSalesDataWithResultContext(
+		ctx,
 		retailOrder.Amount,
 		order.DocNo,
 		&issuedAt,
