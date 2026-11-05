@@ -73,7 +73,7 @@ func TestReportWorkersUseDedicatedQueues(t *testing.T) {
 		job.ReportExportQueueName:  88,
 		job.ReportCleanupQueueName: 77,
 	}
-	specs := queueJobServerSpecs(configured, 10, true, 2, 4, 5, 1)
+	specs := queueJobServerSpecs(configured, 10, true, 2, 4, 5, 1, false, 20)
 	if len(specs) != 4 {
 		t.Fatalf("server specs = %#v", specs)
 	}
@@ -101,7 +101,7 @@ func TestReportWorkersUseDedicatedQueues(t *testing.T) {
 }
 
 func TestQueueJobServerSpecsDoNotInventDefaultQueue(t *testing.T) {
-	specs := queueJobServerSpecs(map[string]int{job.ReportQueueName: 2}, 10, true, 2, 4, 2, 1)
+	specs := queueJobServerSpecs(map[string]int{job.ReportQueueName: 2}, 10, true, 2, 4, 2, 1, false, 20)
 	if len(specs) != 3 || specs[0].name != "report run" || specs[1].name != "report export" || specs[2].name != "report cleanup" {
 		t.Fatalf("server specs = %#v", specs)
 	}
