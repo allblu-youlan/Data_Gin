@@ -32,7 +32,7 @@ type rawDataCreator interface {
 }
 
 type bojunRetailOrderWriter interface {
-	FindByDocNo(ctx context.Context, docNo string) (*model.BojunRetailOrder, error)
+	bojunOrderReader
 	CreateIfNotExists(ctx context.Context, order *model.BojunRetailOrder) (bool, error)
 	UpdateAPIBusinessFields(ctx context.Context, order *model.BojunRetailOrder) error
 }
@@ -173,11 +173,20 @@ func (s *BojunOrderService) runOrders(ctx context.Context, startTime, endTime st
 		}
 		result.FetchPages++
 
+		docNos := make([]string, 0, len(records))
+		for _, record := range records {
+			docNos = append(docNos, stringFromAny(record["docno"]))
+		}
+		pageService := *s
+		pageService.retailOrderDAO = bojunAPIPageOrderWriter{
+			bojunRetailOrderWriter: s.retailOrderDAO,
+			lookup:                 newBojunOrderPageLookup(ctx, s.retailOrderDAO, docNos),
+		}
 		for _, record := range records {
 			if err := ctx.Err(); err != nil {
 				return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
 			}
-			if err := s.processBojunOrderRecord(ctx, record, method, normalizedStart, normalizedEnd, pageInfo.Current, confirmWrite, result, pushSkipConfig); err != nil {
+			if err := pageService.processBojunOrderRecord(ctx, record, method, normalizedStart, normalizedEnd, pageInfo.Current, confirmWrite, result, pushSkipConfig); err != nil {
 				return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
 			}
 		}

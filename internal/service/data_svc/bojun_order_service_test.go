@@ -30,13 +30,29 @@ func (f *fakeBojunRawDataCreator) Create(ctx context.Context, rawData *model.Raw
 }
 
 type fakeBojunRetailOrderWriter struct {
-	existing    map[string]bool
-	orders      map[string]*model.BojunRetailOrder
-	created     []string
-	updated     []string
-	failFind    bool
-	findCalls   int
-	existsCalls int
+	existing       map[string]bool
+	orders         map[string]*model.BojunRetailOrder
+	created        []string
+	updated        []string
+	failFind       bool
+	findCalls      int
+	existsCalls    int
+	batchFindCalls int
+	batchFindErr   error
+}
+
+func (f *fakeBojunRetailOrderWriter) FindByDocNos(_ context.Context, docNos []string) ([]model.BojunRetailOrder, error) {
+	f.batchFindCalls++
+	if f.batchFindErr != nil {
+		return nil, f.batchFindErr
+	}
+	var orders []model.BojunRetailOrder
+	for _, docNo := range docNos {
+		if order := f.orders[docNo]; order != nil {
+			orders = append(orders, *order)
+		}
+	}
+	return orders, nil
 }
 
 func (f *fakeBojunRetailOrderWriter) ExistsByDocNo(ctx context.Context, docNo string) (bool, error) {
