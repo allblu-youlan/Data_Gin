@@ -50,15 +50,18 @@ local ttl_ms = tonumber(ARGV[2])
 local success = tonumber(ARGV[3])
 local redis_time = redis.call("TIME")
 local now_ms = redis_time[1] * 1000 + math.floor(redis_time[2] / 1000)
+local state = redis.call("HMGET", KEYS[1], "state", "failures")
+local status = state[1]
+local failures = tonumber(state[2]) or 0
 
 if success == 1 then
+  if status == "open" then
+    return {"open", failures}
+  end
   redis.call("DEL", KEYS[1])
   return {"closed", 0}
 end
 
-local state = redis.call("HMGET", KEYS[1], "state", "failures")
-local status = state[1]
-local failures = tonumber(state[2]) or 0
 if status == "half_open" then
   failures = failure_threshold
 else

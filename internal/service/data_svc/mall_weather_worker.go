@@ -222,6 +222,12 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 			ErrorMessageSafe: "mall weather request point is not eligible", FinishedAt: processor.now().UTC(),
 		}, err, false)
 	}
+	if err := processor.limiter.Wait(ctx); err != nil {
+		return processor.finishFailure(ctx, execution, mallWeatherFailure{
+			AttemptStatus: "transport_failed", ErrorClass: "rate_limit", ErrorCode: "RATE_LIMIT_FAILED",
+			ErrorMessageSafe: "weather provider rate limit could not be acquired", FinishedAt: processor.now().UTC(),
+		}, err, true)
+	}
 	allowed, err := processor.breaker.Allow(ctx)
 	if err != nil {
 		return processor.finishFailure(ctx, execution, mallWeatherFailure{
@@ -236,13 +242,6 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 			ErrorMessageSafe: "weather provider circuit is open", FinishedAt: processor.now().UTC(),
 		}, fmt.Errorf("weather provider circuit is open"), true)
 	}
-	if err := processor.limiter.Wait(ctx); err != nil {
-		return processor.finishFailure(ctx, execution, mallWeatherFailure{
-			AttemptStatus: "transport_failed", ErrorClass: "rate_limit", ErrorCode: "RATE_LIMIT_FAILED",
-			ErrorMessageSafe: "weather provider rate limit could not be acquired", FinishedAt: processor.now().UTC(),
-		}, err, true)
-	}
-
 	response, providerErr := processor.fetch(ctx, start, &execution.Mall)
 	finishedAt := processor.now().UTC()
 	if response != nil && response.EndpointKind != start.Payload.EndpointKind {

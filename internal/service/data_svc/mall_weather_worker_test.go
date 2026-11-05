@@ -427,6 +427,29 @@ func TestMallWeatherProcessorSkipsProviderWhenCircuitIsOpen(t *testing.T) {
 	}
 }
 
+func TestMallWeatherProcessorChecksCircuitAfterWaitingForRateLimit(t *testing.T) {
+	provider := &fakeMallWeatherProvider{}
+	store := newFakeMallWeatherTaskStore(data_dao.FetchAttemptDispositionAcquired)
+	breaker := &fakeWeatherCircuitBreaker{allowed: true}
+	limiter := &fakeWeatherRateLimiter{onWait: func() { breaker.allowed = false }}
+	processor := newTestMallWeatherProcessorWithGuardMetricsAndBreaker(
+		t, provider, store, &fakeWeatherTaskLocker{acquired: true}, limiter,
+		noopMallWeatherMetricRecorder{}, breaker,
+	)
+
+	err := processor.Process(t.Context(), job.TypeMallWeatherFast, job.MallTaskPayload{
+		MallID: 7, TaskWindow: "fast:7:202611052340",
+	})
+	var processError *MallWeatherProcessError
+	if !errors.As(err, &processError) || !processError.Retryable || processError.Code != "CIRCUIT_OPEN" ||
+		provider.weatherCalls != 0 || limiter.calls != 1 || breaker.allowCalls != 1 || breaker.failureCalls != 0 {
+		t.Fatalf("Process() error=%v providerCalls=%d limiterCalls=%d breaker=%+v", err, provider.weatherCalls, limiter.calls, breaker)
+	}
+	if store.failure.ErrorClass != "circuit_open" || !reflect.DeepEqual(store.events, []string{"start", "fail"}) {
+		t.Fatalf("failure=%+v events=%v", store.failure, store.events)
+	}
+}
+
 func TestMallWeatherProcessorReportsProviderCircuitSuccess(t *testing.T) {
 	raw := readMallWeatherFixture(t, "../../../connector/caiyun/testdata/weather_v26_realtime.json")
 	provider := &fakeMallWeatherProvider{weatherResponse: &caiyun.ProviderResponse{
@@ -815,12 +838,16 @@ func newTestMallWeatherProcessorWithGuardMetricsAndBreaker(
 }
 
 type fakeWeatherRateLimiter struct {
-	calls int
-	err   error
+	calls  int
+	err    error
+	onWait func()
 }
 
 func (limiter *fakeWeatherRateLimiter) Wait(context.Context) error {
 	limiter.calls++
+	if limiter.onWait != nil {
+		limiter.onWait()
+	}
 	return limiter.err
 }
 

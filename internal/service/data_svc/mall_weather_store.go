@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"gin-biz-web-api/connector/caiyun"
@@ -18,6 +17,7 @@ import (
 	projectredis "gin-biz-web-api/pkg/redis"
 	"gin-biz-web-api/pkg/storage"
 
+	redisv8 "github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -88,15 +88,10 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 		return nil, err
 	}
 	qps := config.GetFloat64("cfg.caiyun.qps")
-	burst := int(math.Ceil(qps))
-	if burst < 1 {
-		burst = 1
-	}
-	limiter, err := weatherdomain.NewRedisTokenBucketLimiter(
+	limiter, err := newMallWeatherRateLimiter(
 		redisInstance.Client,
 		projectredis.GenNamespace("rate:mall_weather:caiyun"),
 		qps,
-		burst,
 	)
 	if err != nil {
 		return nil, err
@@ -124,6 +119,10 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 		LockReleaseTimeout: time.Duration(config.GetInt("cfg.mall_weather.lock_release_timeout_seconds")) * time.Second,
 		CircuitOpenTimeout: circuitOpenTimeout,
 	}, time.Now, mallWeatherRuntimeMetrics)
+}
+
+func newMallWeatherRateLimiter(client *redisv8.Client, key string, qps float64) (*weatherdomain.RedisTokenBucketLimiter, error) {
+	return weatherdomain.NewRedisTokenBucketLimiter(client, key, qps, 1)
 }
 
 func newWeatherSnapshotObjectStore() (weatherdomain.SnapshotObjectStore, error) {
