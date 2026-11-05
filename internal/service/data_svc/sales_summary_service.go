@@ -177,7 +177,10 @@ func (service *SalesSummaryService) todayWeather(ctx context.Context, mall *mode
 }
 
 func addSalesSummaryOrder(metrics *SalesSummaryMetrics, order model.BojunRetailOrder) error {
-	retail := shanghaimall.RetailOrderFromBojun(order)
+	amount, _ := shanghaimall.AmountsFromBojun(&order)
+	retail := shanghaimall.RetailOrder{
+		Amount: amount, OrderTypeCode: order.OrderTypeCode,
+	}
 	metrics.SalesAmount += math.Round(retail.Amount*100) / 100
 	var items []struct {
 		Quantity json.Number `json:"qty"`

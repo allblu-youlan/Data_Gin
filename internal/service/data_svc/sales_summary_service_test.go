@@ -208,6 +208,25 @@ func TestSalesSummaryEmptyOrdersAndQuantityFallback(t *testing.T) {
 	}
 }
 
+func TestSalesSummaryHeaderQuantityAggregationAllocationBudget(t *testing.T) {
+	order := model.BojunRetailOrder{
+		DocNo: "HEADER-QUANTITY", BillDate: 20261105, OrderTypeCode: "CMR",
+		TotalAmtActual: 99, TotalQty: 5,
+	}
+	var metrics SalesSummaryMetrics
+	var err error
+	allocations := testing.AllocsPerRun(100, func() {
+		metrics = SalesSummaryMetrics{}
+		err = addSalesSummaryOrder(&metrics, order)
+	})
+	if err != nil || metrics.SalesAmount != 99 || metrics.SalesQuantity != 5 || metrics.OrderCount != 1 {
+		t.Fatalf("header quantity aggregation = %+v, error = %v", metrics, err)
+	}
+	if allocations > 1 {
+		t.Fatalf("header quantity aggregation allocated %.0f times per order, want at most 1", allocations)
+	}
+}
+
 func TestSalesSummaryNegativeAmountRefundAndExchangeQuantities(t *testing.T) {
 	var refund SalesSummaryMetrics
 	if err := addSalesSummaryOrder(&refund, model.BojunRetailOrder{
