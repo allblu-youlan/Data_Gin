@@ -111,7 +111,7 @@ func getKerryAPIKey(ctx context.Context, cfg kerryConfig) (string, error) {
 	defer resp.Body.Close()
 
 	var payload map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := decodeAndDrainJSON(resp.Body, &payload); err != nil {
 		return "", err
 	}
 	content, _ := payload["content"].(map[string]interface{})

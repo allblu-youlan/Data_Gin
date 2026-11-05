@@ -61,7 +61,7 @@ func (dao *MallWeatherExportProfileDAO) Save(
 			row.Version = 1
 			row.CreatedBy = row.UpdatedBy
 			if err := tx.Create(row).Error; err != nil {
-				if isMallWeatherExportProfileDuplicate(err) {
+				if isMySQLDuplicateKeyError(err) {
 					return ErrMallWeatherExportProfileConflict
 				}
 				return fmt.Errorf("mall weather export profile: create: %w", err)
@@ -204,7 +204,7 @@ func sameMallWeatherExportProfileJSON(left, right model.JSONText) bool {
 	return reflect.DeepEqual(leftValue, rightValue)
 }
 
-func isMallWeatherExportProfileDuplicate(err error) bool {
+func isMySQLDuplicateKeyError(err error) bool {
 	var mysqlError *mysqlDriver.MySQLError
 	return errors.As(err, &mysqlError) && mysqlError.Number == 1062
 }

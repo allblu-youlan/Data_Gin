@@ -14,6 +14,7 @@ import (
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/cache"
 	"gin-biz-web-api/pkg/database"
 
 	"gorm.io/gorm"
@@ -67,18 +68,26 @@ type salesSummaryOracle interface {
 }
 
 type SalesSummaryService struct {
-	oracle    salesSummaryOracle
-	store     salesSummaryStore
-	mallScope businessOverviewMallScope
-	now       func() time.Time
+	oracle       salesSummaryOracle
+	store        salesSummaryStore
+	mallScope    businessOverviewMallScope
+	now          func() time.Time
+	metricsCache *cache.MemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics]
+}
+
+type salesSummaryCacheKey struct {
+	MallCode string
+	Start    int
+	End      int
 }
 
 func NewSalesSummaryService() *SalesSummaryService {
 	return &SalesSummaryService{
-		oracle:    NewOpenBojunOracleProvider(),
-		store:     &salesSummaryDBStore{db: database.DB},
-		mallScope: auth_svc.NewMallScopeService(database.DB),
-		now:       time.Now,
+		oracle:       NewOpenBojunOracleProvider(),
+		store:        &salesSummaryDBStore{db: database.DB},
+		mallScope:    auth_svc.NewMallScopeService(database.DB),
+		now:          time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
 	}
 }
 
@@ -122,19 +131,28 @@ func (service *SalesSummaryService) Query(
 	}
 	// Historical totals and the IS_TOSHOP flag come from the source; local
 	// incremental orders and delivery logs do not constrain the selected period.
-	totals, err := service.oracle.QuerySalesSummary(queryCtx, reportoracle.SalesSummaryQuery{
+	result.Metrics, err = service.readMetrics(queryCtx, reportoracle.SalesSummaryQuery{
 		Start: start, End: end.AddDate(0, 0, 1), StoreCode: mallCode,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: query Oracle sales totals: %v", ErrSalesSummaryUnavailable, err)
 	}
-	result.Metrics.SalesAmount = totals.SalesAmount
-	result.Metrics.SalesQuantity = totals.SalesQuantity
-	result.Metrics.ReturnQuantity = totals.ReturnQuantity
-	result.Metrics.OrderCount = totals.OrderCount
 	finishSalesSummaryMetrics(&result.Metrics)
 	result.Weather = service.todayWeather(queryCtx, mall)
 	return result, nil
+}
+
+func (service *SalesSummaryService) readMetrics(ctx context.Context, query reportoracle.SalesSummaryQuery) (SalesSummaryMetrics, error) {
+	key := salesSummaryCacheKey{
+		MallCode: query.StoreCode, Start: statusTimeBillDate(query.Start), End: statusTimeBillDate(query.End),
+	}
+	return service.metricsCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (SalesSummaryMetrics, error) {
+		totals, err := service.oracle.QuerySalesSummary(loadCtx, query)
+		return SalesSummaryMetrics{
+			SalesAmount: totals.SalesAmount, SalesQuantity: totals.SalesQuantity,
+			ReturnQuantity: totals.ReturnQuantity, OrderCount: totals.OrderCount,
+		}, err
+	})
 }
 
 func (service *SalesSummaryService) todayWeather(ctx context.Context, mall *model.Mall) *SalesSummaryWeather {

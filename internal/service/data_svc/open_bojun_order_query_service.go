@@ -19,6 +19,7 @@ import (
 	"gin-biz-web-api/internal/requestbody"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/cache"
 	"gin-biz-web-api/pkg/database"
 )
 
@@ -48,7 +49,8 @@ var (
 type OpenBojunOrderQueryService struct {
 	orders      openBojunOrderReader
 	permissions openBojunOrderPermissionReader
-	mallScope   *auth_svc.MallScopeService
+	mallScope   openBojunOrderDetailMallScope
+	countCache  *cache.MemoryTTL[string, int64]
 	now         func() time.Time
 }
 
@@ -164,7 +166,10 @@ func newOpenBojunOrderQueryService(
 	if orders == nil || permissions == nil || now == nil {
 		panic("open bojun order query service: nil dependency")
 	}
-	return &OpenBojunOrderQueryService{orders: orders, permissions: permissions, now: now}
+	return &OpenBojunOrderQueryService{
+		orders: orders, permissions: permissions, now: now,
+		countCache: cache.NewMemoryTTL[string, int64](30*time.Second, 256),
+	}
 }
 
 func (service *OpenBojunOrderQueryService) Query(
@@ -202,7 +207,7 @@ func (service *OpenBojunOrderQueryService) Query(
 		query.SnapshotMaxID = &snapshotMaxID
 		query.SnapshotAt = service.now().UTC()
 	}
-	totalItems, err := service.orders.CountOpenOrders(queryCtx, query)
+	totalItems, err := service.countOpenOrders(queryCtx, query)
 	if err != nil {
 		return nil, fmt.Errorf("open bojun order query: count orders: %w", err)
 	}
@@ -259,6 +264,18 @@ func (service *OpenBojunOrderQueryService) Query(
 			SnapshotAt: formatOpenBojunSnapshotAt(query.SnapshotAt),
 		},
 	}, nil
+}
+
+func (service *OpenBojunOrderQueryService) countOpenOrders(ctx context.Context, query data_dao.OpenBojunOrderQuery) (int64, error) {
+	snapshotID := "none"
+	if query.SnapshotMaxID != nil {
+		snapshotID = strconv.FormatUint(uint64(*query.SnapshotMaxID), 10)
+	}
+	// Cursor snapshots encode seconds, so the first page uses the same precision.
+	key := openBojunOrderQueryHash(query, 0) + "|" + snapshotID + "|" + strconv.FormatInt(query.SnapshotAt.Unix(), 10)
+	return service.countCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (int64, error) {
+		return service.orders.CountOpenOrders(loadCtx, query)
+	})
 }
 
 func (service *OpenBojunOrderQueryService) authorize(ctx context.Context, actorUserID uint) error {

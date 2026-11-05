@@ -18,6 +18,7 @@ import (
 	"gin-biz-web-api/pkg/config"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -56,12 +57,20 @@ type bojunOracleSyncStateStore interface {
 }
 
 type bojunOracleRetailOrderStore interface {
-	ExistsByDocNo(context.Context, string) (bool, error)
-	FindByDocNo(context.Context, string) (*model.BojunRetailOrder, error)
+	bojunOrderReader
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
 	UpdateSyncStatus(context.Context, uint, int) error
 	UpdateOracleBusinessFields(context.Context, *model.BojunRetailOrder) error
+}
+
+type bojunOraclePageOrderStore struct {
+	bojunOracleRetailOrderStore
+	lookup *bojunOrderPageLookup
+}
+
+func (store bojunOraclePageOrderStore) FindByDocNo(ctx context.Context, docNo string) (*model.BojunRetailOrder, error) {
+	return store.lookup.FindByDocNo(ctx, docNo)
 }
 
 type bojunOracleExistingOrderMode uint8
@@ -167,8 +176,9 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 	result.WatermarkBefore = state.LastRetailID
 	result.WatermarkAfter = state.LastRetailID
 	token := service.newLeaseToken()
+	leaseRefreshedAt := service.now()
 	state, acquired, err := service.stateStore.AcquireLease(
-		ctx, bojunOracleDatasourceCode, token, service.now(), service.leaseTTL,
+		ctx, bojunOracleDatasourceCode, token, leaseRefreshedAt, service.leaseTTL,
 	)
 	if err != nil {
 		return result, err
@@ -212,24 +222,31 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		if len(rows) == 0 {
 			break
 		}
+		pageService := service.withPageOrderLookup(ctx, rows)
 		for _, row := range rows {
-			if err := service.processRow(
-				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
-			); err != nil {
-				return result, err
+			now := service.now()
+			if !now.Before(leaseRefreshedAt.Add(service.leaseTTL / 3)) {
+				if err := service.stateStore.RenewLease(
+					ctx, bojunOracleDatasourceCode, token, now, service.leaseTTL,
+				); err != nil {
+					return result, err
+				}
+				leaseRefreshedAt = now
 			}
-			if err := service.stateStore.RenewLease(
-				ctx, bojunOracleDatasourceCode, token, service.now(), service.leaseTTL,
+			if err := pageService.processRow(
+				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
 			); err != nil {
 				return result, err
 			}
 		}
 		nextWatermark := rows[len(rows)-1].RetailID
+		advancedAt := service.now()
 		if err := service.stateStore.Advance(
-			ctx, bojunOracleDatasourceCode, token, watermark, nextWatermark, service.now(), service.leaseTTL,
+			ctx, bojunOracleDatasourceCode, token, watermark, nextWatermark, advancedAt, service.leaseTTL,
 		); err != nil {
 			return result, err
 		}
+		leaseRefreshedAt = advancedAt
 		watermark = nextWatermark
 		result.WatermarkAfter = watermark
 		if len(rows) < service.batchSize {
@@ -323,8 +340,9 @@ func (service *BojunOracleOrderService) runByStatusTime(
 		if len(rows) == 0 {
 			break
 		}
+		pageService := service.withPageOrderLookup(ctx, rows)
 		for _, row := range rows {
-			if err := service.processRow(
+			if err := pageService.processRow(
 				ctx, connection, row, page, confirmWrite, bojunOracleExistingOrderBackfillDetails,
 				result, pushSkipConfig,
 			); err != nil {
@@ -360,6 +378,19 @@ func (service *BojunOracleOrderService) open(ctx context.Context) (bojunOracleCo
 	return connection, datasource, nil
 }
 
+func (service *BojunOracleOrderService) withPageOrderLookup(ctx context.Context, rows []reportoracle.BojunRetailRow) BojunOracleOrderService {
+	docNos := make([]string, 0, len(rows))
+	for _, row := range rows {
+		docNos = append(docNos, row.DocNo)
+	}
+	pageService := *service
+	pageService.retailOrderDAO = bojunOraclePageOrderStore{
+		bojunOracleRetailOrderStore: service.retailOrderDAO,
+		lookup:                      newBojunOrderPageLookup(ctx, service.retailOrderDAO, docNos),
+	}
+	return pageService
+}
+
 func (service *BojunOracleOrderService) processRow(
 	ctx context.Context,
 	connection bojunOracleConnection,
@@ -377,20 +408,15 @@ func (service *BojunOracleOrderService) processRow(
 		return fmt.Errorf("build bojun Oracle retail order %d: %w", row.RetailID, err)
 	}
 	sample := bojunOraclePreviewItem(order)
-	exists, err := service.retailOrderDAO.ExistsByDocNo(ctx, order.DocNo)
-	if err != nil {
+	existing, err := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		result.FailedCount++
 		return fmt.Errorf("check bojun Oracle order %s existence: %w", order.DocNo, err)
 	}
-	if exists {
+	if err == nil {
 		result.ExistingCount++
 		if existingMode == bojunOracleExistingOrderBackfillDetails {
-			return service.processExistingDetailBackfill(ctx, order, confirmWrite, result, sample)
-		}
-		existing, findErr := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
-		if findErr != nil {
-			result.FailedCount++
-			return fmt.Errorf("load existing bojun Oracle order %s: %w", order.DocNo, findErr)
+			return service.processExistingDetailBackfill(ctx, order, existing, confirmWrite, result, sample)
 		}
 		if !confirmWrite {
 			result.PreviewCount++
@@ -450,16 +476,12 @@ func (service *BojunOracleOrderService) processRow(
 func (service *BojunOracleOrderService) processExistingDetailBackfill(
 	ctx context.Context,
 	order *model.BojunRetailOrder,
+	existing *model.BojunRetailOrder,
 	confirmWrite bool,
 	result *BojunOrderSyncResult,
 	sample BojunOrderPreviewItem,
 ) error {
 	result.WritableCount++
-	existing, err := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
-	if err != nil {
-		result.FailedCount++
-		return fmt.Errorf("load existing bojun Oracle order %s: %w", order.DocNo, err)
-	}
 	preserveMissingBojunOracleFields(order, existing)
 	if !confirmWrite {
 		result.PreviewCount++
@@ -661,7 +683,10 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 		if pushErr == nil {
 			pushErr = errors.New("mall push returned an unsuccessful result")
 		}
-		statusErr := service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 2)
+		var statusErr error
+		if !pushResult.SyncStatusSaved {
+			statusErr = service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 2)
+		}
 		writeBackErr := connection.UpdateBojunRetailPushStatus(ctx, row.RetailID, false, pushDate)
 		return errors.Join(
 			fmt.Errorf("push bojun Oracle retail order %s: %w", order.DocNo, pushErr),
@@ -673,6 +698,9 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 		result.FailedCount++
 		statusErr := service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 3)
 		return errors.Join(fmt.Errorf("write back successful bojun Oracle push %s: %w", order.DocNo, err), statusErr)
+	}
+	if pushResult.SyncStatusSaved {
+		return nil
 	}
 	return service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1)
 }

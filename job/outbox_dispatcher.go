@@ -18,6 +18,7 @@ const (
 	defaultOutboxIdlePollMax   = 10 * time.Second
 	defaultOutboxLockTimeout   = time.Minute
 	defaultOutboxBatchSize     = 100
+	maxOutboxBatchSize         = 500 // Matches AsyncJobOutboxDAO's claim limit.
 	defaultOutboxRetryBase     = 5 * time.Second
 	defaultOutboxRetryMax      = 5 * time.Minute
 	safeInvalidOutboxTaskError = "invalid outbox task"
@@ -249,6 +250,9 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = defaultOutboxBatchSize
 	}
+	if cfg.BatchSize > maxOutboxBatchSize {
+		cfg.BatchSize = maxOutboxBatchSize
+	}
 	if cfg.RetryBase <= 0 {
 		cfg.RetryBase = defaultOutboxRetryBase
 	}
@@ -285,10 +289,9 @@ func NewOutboxDispatcher(store OutboxStore, publisher TaskPublisher, registry *O
 	}, nil
 }
 
-// Run dispatches immediately, then waits between cycles until ctx is cancelled.
-// Empty cycles use a bounded idle backoff, while a cycle that finds work resets
-// to the normal poll interval. Consecutive failures use the separate retry
-// backoff so a database outage is not polled every second.
+// Run drains successful full batches immediately until ctx is cancelled.
+// Partial batches wait the normal poll interval, empty cycles use bounded idle
+// backoff, and consecutive failures use the separate retry backoff.
 func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 	consecutiveFailures := 0
 	consecutiveIdleCycles := 0
@@ -299,7 +302,7 @@ func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 		}
 
 		delay := dispatcher.pollInterval
-		hadWork, err := dispatcher.dispatchOnce(ctx)
+		claimedCount, err := dispatcher.dispatchOnce(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			if dispatcher.onCycleError != nil {
 				dispatcher.onCycleError(err)
@@ -309,8 +312,11 @@ func (dispatcher *OutboxDispatcher) Run(ctx context.Context) error {
 			consecutiveIdleCycles = 0
 		} else {
 			consecutiveFailures = 0
-			if hadWork {
+			if claimedCount > 0 {
 				consecutiveIdleCycles = 0
+				if err == nil && claimedCount >= dispatcher.batchSize {
+					continue
+				}
 			} else {
 				delay = outboxBackoff(dispatcher.pollInterval, dispatcher.idlePollMax, consecutiveIdleCycles)
 				consecutiveIdleCycles++
@@ -328,17 +334,17 @@ func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) error {
 	return err
 }
 
-func (dispatcher *OutboxDispatcher) dispatchOnce(ctx context.Context) (bool, error) {
+func (dispatcher *OutboxDispatcher) dispatchOnce(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return 0, err
 	}
 	if !dispatcher.databaseAvailable(ctx) {
-		return false, fmt.Errorf("outbox dispatcher: %w", database.ErrUnavailable)
+		return 0, fmt.Errorf("outbox dispatcher: %w", database.ErrUnavailable)
 	}
 	now := dispatcher.now().UTC()
 	rows, err := dispatcher.store.ClaimBatch(ctx, dispatcher.workerID, dispatcher.taskTypes, now, dispatcher.lockTimeout, dispatcher.batchSize)
 	if err != nil {
-		return false, fmt.Errorf("outbox dispatcher: claim batch: %w", err)
+		return 0, fmt.Errorf("outbox dispatcher: claim batch: %w", err)
 	}
 
 	var dispatchErrors []error
@@ -351,7 +357,7 @@ func (dispatcher *OutboxDispatcher) dispatchOnce(ctx context.Context) (bool, err
 			dispatchErrors = append(dispatchErrors, err)
 		}
 	}
-	return len(rows) > 0, errors.Join(dispatchErrors...)
+	return len(rows), errors.Join(dispatchErrors...)
 }
 
 func waitForOutboxPoll(ctx context.Context, delay time.Duration) error {

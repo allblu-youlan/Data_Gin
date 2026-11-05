@@ -64,14 +64,6 @@ type xinjiaCenterConfig struct {
 	Now           func() time.Time
 }
 
-func defaultClient() *http.Client {
-	timeoutSeconds := envInt("SHANGHAI_MALL_TIMEOUT_SECONDS", config.GetInt("ShanghaiMall.TimeoutSeconds", 10))
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = 10
-	}
-	return &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second}
-}
-
 func syandataTargetConfig(target Target) syandataConfig {
 	prefix := targetEnvPrefix(target)
 	return syandataConfig{

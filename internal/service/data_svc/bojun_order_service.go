@@ -3,6 +3,7 @@ package data_svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,6 +15,8 @@ import (
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/bojun"
 	"gin-biz-web-api/pkg/config"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -29,8 +32,7 @@ type rawDataCreator interface {
 }
 
 type bojunRetailOrderWriter interface {
-	ExistsByDocNo(ctx context.Context, docNo string) (bool, error)
-	FindByDocNo(ctx context.Context, docNo string) (*model.BojunRetailOrder, error)
+	bojunOrderReader
 	CreateIfNotExists(ctx context.Context, order *model.BojunRetailOrder) (bool, error)
 	UpdateAPIBusinessFields(ctx context.Context, order *model.BojunRetailOrder) error
 }
@@ -171,11 +173,20 @@ func (s *BojunOrderService) runOrders(ctx context.Context, startTime, endTime st
 		}
 		result.FetchPages++
 
+		docNos := make([]string, 0, len(records))
+		for _, record := range records {
+			docNos = append(docNos, stringFromAny(record["docno"]))
+		}
+		pageService := *s
+		pageService.retailOrderDAO = bojunAPIPageOrderWriter{
+			bojunRetailOrderWriter: s.retailOrderDAO,
+			lookup:                 newBojunOrderPageLookup(ctx, s.retailOrderDAO, docNos),
+		}
 		for _, record := range records {
 			if err := ctx.Err(); err != nil {
 				return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
 			}
-			if err := s.processBojunOrderRecord(ctx, record, method, normalizedStart, normalizedEnd, pageInfo.Current, confirmWrite, result, pushSkipConfig); err != nil {
+			if err := pageService.processBojunOrderRecord(ctx, record, method, normalizedStart, normalizedEnd, pageInfo.Current, confirmWrite, result, pushSkipConfig); err != nil {
 				return result, s.finishBojunOrderRunIfNeeded(ctx, runID, result, err)
 			}
 		}
@@ -248,24 +259,19 @@ func (s *BojunOrderService) processBojunOrderRecord(
 		result.InvalidCompletedAtCount++
 	}
 
-	exists, err := s.retailOrderDAO.ExistsByDocNo(ctx, docNo)
-	if err != nil {
+	existing, err := s.retailOrderDAO.FindByDocNo(ctx, docNo)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		result.FailedCount++
 		sample.Status = "failed"
 		sample.Reason = "查询是否存在失败: " + err.Error()
 		addBojunOrderFailedSample(result, sample)
 		return fmt.Errorf("check bojun order %s existence: %w", docNo, err)
 	}
-	if exists {
+	if err == nil {
 		incoming, buildErr := buildBojunRetailOrder(0, record)
 		if buildErr != nil {
 			result.FailedCount++
 			return fmt.Errorf("build existing bojun order %s: %w", docNo, buildErr)
-		}
-		existing, findErr := s.retailOrderDAO.FindByDocNo(ctx, docNo)
-		if findErr != nil {
-			result.FailedCount++
-			return fmt.Errorf("load existing bojun order %s: %w", docNo, findErr)
 		}
 		preserveMissingBojunAPIFields(record, incoming, existing)
 		if !sameBojunAPIBusinessFields(existing, incoming) {

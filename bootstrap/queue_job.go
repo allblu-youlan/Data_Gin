@@ -48,6 +48,8 @@ func setupQueueJob() {
 		config.GetInt("cfg.queue_job.report_worker.run_concurrency"),
 		config.GetInt("cfg.queue_job.report_worker.export_concurrency"),
 		config.GetInt("cfg.queue_job.report_worker.cleanup_concurrency"),
+		global.MallWeatherEnabledAtStartup,
+		config.GetInt("cfg.mall_weather.worker_concurrency"),
 	)
 	servers := make([]queueJobServer, 0, len(serverSpecs))
 	for _, spec := range serverSpecs {
@@ -169,10 +171,35 @@ type queueJobServerSpec struct {
 	queues      map[string]int
 }
 
-func queueJobServerSpecs(configured map[string]int, defaultConcurrency int, reportEnabled bool, weight, runConcurrency, exportConcurrency, cleanupConcurrency int) []queueJobServerSpec {
-	specs := make([]queueJobServerSpec, 0, 4)
-	if generalQueues := nonReportWorkerQueues(configured); len(generalQueues) > 0 {
+func queueJobServerSpecs(
+	configured map[string]int,
+	defaultConcurrency int,
+	reportEnabled bool,
+	weight, runConcurrency, exportConcurrency, cleanupConcurrency int,
+	weatherEnabled bool,
+	weatherConcurrency int,
+) []queueJobServerSpec {
+	specs := make([]queueJobServerSpec, 0, 5)
+	generalQueues := nonReportWorkerQueues(configured)
+	weatherWeight := generalQueues[job.MallWeatherQueueName]
+	separateWeatherWorker := weatherEnabled && weatherWeight > 0
+	if separateWeatherWorker {
+		delete(generalQueues, job.MallWeatherQueueName)
+		if weatherConcurrency <= 0 {
+			weatherConcurrency = defaultConcurrency
+		}
+		if weatherConcurrency <= 0 {
+			weatherConcurrency = 10
+		}
+	}
+	if len(generalQueues) > 0 {
 		specs = append(specs, queueJobServerSpec{name: "default", concurrency: defaultConcurrency, queues: generalQueues})
+	}
+	if separateWeatherWorker {
+		specs = append(specs, queueJobServerSpec{
+			name: "weather", concurrency: weatherConcurrency,
+			queues: map[string]int{job.MallWeatherQueueName: weatherWeight},
+		})
 	}
 	if reportEnabled {
 		specs = append(specs,

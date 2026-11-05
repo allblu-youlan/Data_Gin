@@ -48,12 +48,12 @@ func TestMallWeatherExportProfileDuplicateErrorsAreConflicts(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if !isMallWeatherExportProfileDuplicate(test.err) {
-				t.Fatalf("isMallWeatherExportProfileDuplicate(%v) = false", test.err)
+			if !isMySQLDuplicateKeyError(test.err) {
+				t.Fatalf("isMySQLDuplicateKeyError(%v) = false", test.err)
 			}
 		})
 	}
-	if isMallWeatherExportProfileDuplicate(context.Canceled) {
+	if isMySQLDuplicateKeyError(context.Canceled) {
 		t.Fatal("context cancellation was classified as a duplicate")
 	}
 }

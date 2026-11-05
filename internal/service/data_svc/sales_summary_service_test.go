@@ -3,12 +3,15 @@ package data_svc
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/cache"
 )
 
 type fakeSalesSummaryStore struct {
@@ -17,6 +20,7 @@ type fakeSalesSummaryStore struct {
 	mallErr      error
 	weatherStart time.Time
 	weatherErr   error
+	weatherCalls int
 }
 
 func (store *fakeSalesSummaryStore) FindMall(_ context.Context, code string) (*model.Mall, error) {
@@ -28,6 +32,7 @@ func (store *fakeSalesSummaryStore) FindMall(_ context.Context, code string) (*m
 	return &model.Mall{BaseModel: model.BaseModel{ID: 3}, MallCode: code, NameCN: "上海浦东世博天地店", Timezone: "Asia/Shanghai"}, nil
 }
 func (store *fakeSalesSummaryStore) ReadDailyWeather(_ context.Context, _ uint, start time.Time) ([]model.MallWeatherDaily, error) {
+	store.weatherCalls++
 	store.weatherStart = start
 	low, high := 16.0, 26.0
 	return []model.MallWeatherDaily{{TemperatureMinC: &low, TemperatureMaxC: &high, Skycon: "LIGHT_RAIN"}}, store.weatherErr
@@ -138,5 +143,111 @@ func TestSalesSummaryEmptySourceTotalsKeepZeroRatios(t *testing.T) {
 	finishSalesSummaryMetrics(&metrics)
 	if metrics.AverageOrderValue != 0 || metrics.AverageItemPrice != 0 || metrics.ItemsPerOrder != 0 {
 		t.Fatalf("empty ratios: %+v", metrics)
+	}
+}
+
+type concurrentSalesSummaryOracle struct {
+	readCalls atomic.Int32
+}
+
+func (oracle *concurrentSalesSummaryOracle) QuerySalesSummary(
+	ctx context.Context, _ reportoracle.SalesSummaryQuery,
+) (reportoracle.SalesSummaryTotals, error) {
+	oracle.readCalls.Add(1)
+	select {
+	case <-ctx.Done():
+		return reportoracle.SalesSummaryTotals{}, ctx.Err()
+	case <-time.After(20 * time.Millisecond):
+		return reportoracle.SalesSummaryTotals{SalesAmount: 80, SalesQuantity: 2, OrderCount: 1}, nil
+	}
+}
+
+func TestSalesSummaryCoalescesConcurrentMetricLoads(t *testing.T) {
+	oracle := &concurrentSalesSummaryOracle{}
+	service := &SalesSummaryService{
+		oracle: oracle, metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	query := reportoracle.SalesSummaryQuery{
+		StoreCode: "ABCN001A003",
+		Start:     time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC),
+		End:       time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
+	}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			metrics, err := service.readMetrics(t.Context(), query)
+			if err != nil || metrics.SalesAmount != 80 || metrics.SalesQuantity != 2 || metrics.OrderCount != 1 {
+				t.Errorf("shared aggregation = %+v, error = %v", metrics, err)
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if calls := oracle.readCalls.Load(); calls != 1 {
+		t.Fatalf("concurrent aggregation queried Oracle %d times, want 1", calls)
+	}
+}
+
+func TestSalesSummaryCachesSuccessfulTotalsAfterAuthorization(t *testing.T) {
+	store := &fakeSalesSummaryStore{}
+	oracle := &fakeSalesSummaryOracle{totals: map[string]reportoracle.SalesSummaryTotals{
+		"ABCN001A003": {SalesAmount: 80, SalesQuantity: 2, OrderCount: 1},
+		"ABCN001P014": {SalesAmount: 125, SalesQuantity: 3, OrderCount: 2},
+	}}
+	scope := &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A003"}}
+	service := &SalesSummaryService{
+		store: store, oracle: oracle, mallScope: scope, now: time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	for range 2 {
+		result, err := service.Query(t.Context(), 17, "abcn001a003", "2026-10-01", "2026-10-31")
+		if err != nil || result.Metrics.SalesAmount != 80 {
+			t.Fatalf("query=%+v err=%v", result, err)
+		}
+		result.Metrics.SalesAmount = 999
+	}
+	if len(oracle.queries) != 1 || store.weatherCalls != 2 {
+		t.Fatalf("repeated summary queried Oracle %d times and weather %d times", len(oracle.queries), store.weatherCalls)
+	}
+	for _, dates := range [][2]string{{"2026-10-02", "2026-10-31"}, {"2026-10-01", "2026-10-30"}} {
+		if _, err := service.Query(t.Context(), 17, "ABCN001A003", dates[0], dates[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(oracle.queries) != 3 {
+		t.Fatal("different date range reused the wrong summary")
+	}
+	scope.allowed = []string{"ABCN001P014"}
+	result, err := service.Query(t.Context(), 17, "ABCN001P014", "2026-10-01", "2026-10-31")
+	if err != nil || result.Metrics.SalesAmount != 125 || len(oracle.queries) != 4 {
+		t.Fatalf("different mall reused the wrong summary: result=%+v error=%v", result, err)
+	}
+	scope.err = auth_svc.ErrMallScopeForbidden
+	if _, err := service.Query(t.Context(), 17, "ABCN001P014", "2026-10-01", "2026-10-31"); !errors.Is(err, ErrSalesSummaryForbidden) {
+		t.Fatalf("cached summary bypassed authorization: %v", err)
+	}
+}
+
+func TestSalesSummaryDoesNotCacheFailedAggregation(t *testing.T) {
+	oracle := &fakeSalesSummaryOracle{
+		err:    errors.New("Oracle unavailable"),
+		totals: map[string]reportoracle.SalesSummaryTotals{"ABCN001A003": {SalesAmount: 80}},
+	}
+	service := &SalesSummaryService{
+		store: &fakeSalesSummaryStore{}, oracle: oracle,
+		mallScope: &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A003"}}, now: time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	if _, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31"); !errors.Is(err, ErrSalesSummaryUnavailable) {
+		t.Fatalf("failed aggregation error = %v", err)
+	}
+	oracle.err = nil
+	result, err := service.Query(t.Context(), 17, "ABCN001A003", "2026-10-01", "2026-10-31")
+	if err != nil || result.Metrics.SalesAmount != 80 || len(oracle.queries) != 2 {
+		t.Fatalf("recovered summary=%+v calls=%d err=%v", result, len(oracle.queries), err)
 	}
 }

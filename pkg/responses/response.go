@@ -2,16 +2,17 @@
 package responses
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
-	"gin-biz-web-api/pkg/app"
 	"gin-biz-web-api/pkg/errcode"
 	"gin-biz-web-api/pkg/helper/mapx"
-	"gin-biz-web-api/pkg/logger"
 	"gin-biz-web-api/pkg/paginator"
+	"gin-biz-web-api/pkg/providerhttp"
 )
 
 type Response struct {
@@ -59,8 +60,7 @@ func (r *Response) ToResponseWithStatus(status int, data interface{}) {
 	})
 }
 
-// ToSafeErrorResponse returns a public error without serializing or logging the
-// underlying service or provider error. Callers should pass a stable message.
+// ToSafeErrorResponse returns a stable public message and records private diagnostic context.
 func (r *Response) ToSafeErrorResponse(err *errcode.Error, message string) {
 	if err == nil {
 		err = errcode.InternalServerError
@@ -68,6 +68,7 @@ func (r *Response) ToSafeErrorResponse(err *errcode.Error, message string) {
 	if message == "" {
 		message = err.Msg()
 	}
+	r.logErrorResponse(err, err, message, err.HttpStatusCode())
 	r.Ctx.AbortWithStatusJSON(err.HttpStatusCode(), ResponseData{
 		Code: err.Code(),
 		Msg:  message,
@@ -85,10 +86,9 @@ func (r *Response) ToResponseWithPagination(result interface{}, pagination pagin
 
 // ToErrorResponse 错误返回
 func (r *Response) ToErrorResponse(err error, messages ...string) {
-	var e = errcode.InternalServerError.WithError(err).WithDetails(err.Error())
-
-	if customErr, ok := err.(*errcode.Error); ok {
-		e = customErr
+	var e *errcode.Error
+	if !errors.As(err, &e) {
+		e = errcode.InternalServerError.WithError(err)
 	}
 
 	response := ResponseData{
@@ -101,14 +101,7 @@ func (r *Response) ToErrorResponse(err error, messages ...string) {
 		response.Msg = messages[0]
 	}
 
-	details := e.Details()
-	if len(details) > 0 && r.isShowDetails() {
-		logger.ErrorJSON("ToErrorResponse", "details", details)
-	}
-
-	if r.isShowDetails() && e.Err() != nil {
-		fmt.Printf("原始错误详情信息 ====> %+v \n", e.Err())
-	}
+	r.logErrorResponse(e, err, response.Msg, http.StatusOK)
 
 	// r.Ctx.JSON(err.HttpStatusCode(), response)
 	// r.Ctx.AbortWithStatusJSON(err.HttpStatusCode(), response)
@@ -130,17 +123,38 @@ func (r *Response) ToErrorValidateResponse(err *errcode.Error, errors map[string
 			response.Msg = errors[k][0]
 			break
 		}
-
-		if r.isShowDetails() {
-			logger.ErrorJSON("ToErrorResponse", "details", errors)
-		}
 	}
+	LogRequestFailure(r.Ctx, zap.WarnLevel, response.Msg,
+		zap.Int("business_code", err.Code()),
+		zap.Int("response_status", http.StatusOK),
+		zap.String("validation_errors", providerhttp.RedactText(fmt.Sprint(errors))),
+	)
 
 	// r.Ctx.AbortWithStatusJSON(err.HttpStatusCode(), response)
 	r.Ctx.AbortWithStatusJSON(http.StatusOK, response)
 }
 
-// isShowDetails 本地环境或者开发环境且开启了 debug 模式，则在返回结果中显示错误详情信息
-func (r *Response) isShowDetails() bool {
-	return app.IsDebug() && (app.IsLocal() || app.IsDev())
+func (r *Response) logErrorResponse(code *errcode.Error, err error, message string, status int) {
+	fields := []zap.Field{
+		zap.Int("business_code", code.Code()),
+		zap.Int("response_status", status),
+	}
+	if err != nil {
+		fields = append(fields, zap.String("error", providerhttp.RedactText(err.Error())))
+	}
+	if code.Err() != nil {
+		fields = append(fields, zap.String("error_cause", providerhttp.RedactText(code.Err().Error())))
+	}
+	if len(code.Details()) > 0 {
+		details := make([]string, len(code.Details()))
+		for index, detail := range code.Details() {
+			details[index] = providerhttp.RedactText(detail)
+		}
+		fields = append(fields, zap.Strings("error_details", details))
+	}
+	level := zap.WarnLevel
+	if code.HttpStatusCode() >= http.StatusInternalServerError {
+		level = zap.ErrorLevel
+	}
+	LogRequestFailure(r.Ctx, level, message, fields...)
 }

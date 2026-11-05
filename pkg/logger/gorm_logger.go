@@ -62,6 +62,18 @@ func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 
 	// 获取运行时间
 	elapsed := time.Since(begin)
+	connectivityFailure := database.IsConnectivityError(err)
+	errorLevel := zap.ErrorLevel
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		errorLevel = zap.WarnLevel
+	}
+	core := l.ZapLogger.Core()
+	logError := err != nil && core.Enabled(errorLevel)
+	logSlow := !connectivityFailure && l.SlowThreshold != 0 && elapsed > l.SlowThreshold && core.Enabled(zap.WarnLevel)
+	logDebug := core.Enabled(zap.DebugLevel)
+	if !logError && !logSlow && !logDebug {
+		return
+	}
 	// GORM 1.23 hands custom loggers an already interpolated statement. Never
 	// persist it: it may contain credentials, tokens or report parameters.
 	_, rows := fc()
@@ -72,10 +84,10 @@ func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		zap.String("took time", strx.StrMicroseconds(elapsed)),
 		zap.Int64("affected rows", rows), // 受影响的行数
 	}
-	connectivityFailure := database.IsConnectivityError(err)
+	logger := l.logger()
 
 	// gorm 错误
-	if err != nil {
+	if logError {
 		if stats, ok := database.ConnectionStats(); ok {
 			logFields = append(logFields,
 				zap.Int("db_open_connections", stats.OpenConnections),
@@ -87,21 +99,23 @@ func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		}
 		// 记录未找到的错误使用 warning 等级
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			l.logger().Warn("Database ErrRecordNotFound", logFields...)
+			logger.Warn("Database ErrRecordNotFound", logFields...)
 		} else {
 			// 其他错误使用 error 等级
 			logFields = append(logFields, zap.Error(err))
-			l.logger().Error("Database Error", logFields...)
+			logger.Error("Database Error", logFields...)
 		}
 	}
 
 	// 慢查询日志
-	if !connectivityFailure && l.SlowThreshold != 0 && elapsed > l.SlowThreshold {
-		l.logger().Warn("Database Slow Log", logFields...)
+	if logSlow {
+		logger.Warn("Database Slow Log", logFields...)
 	}
 
 	// 记录所有的 sql 请求
-	l.logger().Debug("Database Query", logFields...)
+	if logDebug {
+		logger.Debug("Database Query", logFields...)
+	}
 
 }
 

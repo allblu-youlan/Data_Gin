@@ -498,11 +498,11 @@ type oracleReportResultPageReader struct{}
 func (oracleReportResultPageReader) Read(ctx context.Context, contract reportrepo.RunResultContract, password string, columns []string, query reportquery.Query, after *reportoracle.ResultCursor, limit int) (reportoracle.ResultPage, error) {
 	queryCtx, cancel := reportOracleQueryContext(ctx, contract.Datasource)
 	defer cancel()
-	adapter, err := reportoracle.Open(queryCtx, oracleConfigFromDatasource(contract.Datasource, password))
+	adapter, release, err := acquireSelectOracle(queryCtx, contract.Datasource, password)
 	if err != nil {
 		return reportoracle.ResultPage{}, err
 	}
-	defer func() { _ = adapter.Close() }()
+	defer release()
 	if contract.Version.UsesJSONSnapshot() {
 		if len(query.Filters) != 0 || len(query.Sort) != 0 {
 			return reportoracle.ResultPage{}, fmt.Errorf("JSON cursor report result filtering is not supported; pass filters in conditions")
@@ -524,25 +524,33 @@ func (oracleReportResultPageReader) Read(ctx context.Context, contract reportrep
 		}
 		return adapter.ReadJSONSnapshotPage(queryCtx, contract.Run.RunUUID, columns, afterRowID, limit)
 	}
-	ref := reportoracle.ResultTableSnapshotRef(
-		reportoracle.ResultTableRef{Owner: contract.Version.ResultTableOwner, Name: contract.Version.ResultTableName}, columns,
-	)
-	resultColumns, err := adapter.InspectResultTable(queryCtx, ref.Table)
-	if err != nil {
-		return reportoracle.ResultPage{}, err
-	}
-	if err := reportcontract.VerifyRuntimeResultMetadata(
-		[]byte(contract.Version.CompiledSpecJSON), contract.Run.ContractHash, contract.Run.ResultSchemaHash, resultColumns,
-	); err != nil {
-		return reportoracle.ResultPage{}, err
-	}
-	snapshot, err := adapter.InspectResultSnapshotContract(queryCtx, ref)
-	if err != nil {
-		return reportoracle.ResultPage{}, err
-	}
-	plan, err := reportoracle.BuildResultQueryPlan(snapshot, columns, query)
+	plan, err := buildReportResultPagePlan(queryCtx, adapter, contract, columns, query)
 	if err != nil {
 		return reportoracle.ResultPage{}, err
 	}
 	return adapter.ReadResultPage(queryCtx, plan, after, limit)
+}
+
+type reportResultMetadataReader interface {
+	InspectResultTable(context.Context, reportoracle.ResultTableRef) ([]reportoracle.ResultColumn, error)
+}
+
+func buildReportResultPagePlan(ctx context.Context, metadata reportResultMetadataReader, contract reportrepo.RunResultContract, columns []string, query reportquery.Query) (reportoracle.ResultPagePlan, error) {
+	ref := reportoracle.ResultTableSnapshotRef(
+		reportoracle.ResultTableRef{Owner: contract.Version.ResultTableOwner, Name: contract.Version.ResultTableName}, columns,
+	)
+	resultColumns, err := metadata.InspectResultTable(ctx, ref.Table)
+	if err != nil {
+		return reportoracle.ResultPagePlan{}, err
+	}
+	if err := reportcontract.VerifyRuntimeResultMetadata(
+		[]byte(contract.Version.CompiledSpecJSON), contract.Run.ContractHash, contract.Run.ResultSchemaHash, resultColumns,
+	); err != nil {
+		return reportoracle.ResultPagePlan{}, err
+	}
+	snapshot, err := reportoracle.CompileResultSnapshotContract(ref, resultColumns)
+	if err != nil {
+		return reportoracle.ResultPagePlan{}, err
+	}
+	return reportoracle.BuildResultQueryPlan(snapshot, columns, query)
 }

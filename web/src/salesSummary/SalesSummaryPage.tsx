@@ -222,8 +222,14 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
           <div className={styles.dateControl}>
             <button type="button" className={styles.dateRange} aria-expanded={datePickerOpen} onClick={() => { setDraftRange(range); setDateError(''); setDatePickerOpen(!datePickerOpen) }}>{range.startDate} 至 {range.endDate}</button>
             {datePickerOpen && <form className={styles.datePicker} onSubmit={(event) => { event.preventDefault(); applyDateRange() }}>
-              <label>开始日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => { const value = event.currentTarget.value; setDraftRange((current) => ({ ...current, startDate: value })) }} /></label>
-              <label>结束日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => { const value = event.currentTarget.value; setDraftRange((current) => ({ ...current, endDate: value })) }} /></label>
+              <label>开始日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => {
+                const startDate = event.currentTarget.value
+                setDraftRange((current) => ({ ...current, startDate }))
+              }} /></label>
+              <label>结束日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => {
+                const endDate = event.currentTarget.value
+                setDraftRange((current) => ({ ...current, endDate }))
+              }} /></label>
               {dateError && <p role="alert">{dateError}</p>}
               <div><button type="button" onClick={() => setDatePickerOpen(false)}>取消</button><button type="submit">确定</button></div>
             </form>}

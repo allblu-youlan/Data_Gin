@@ -49,10 +49,11 @@ type bojunOrderPushTarget struct {
 }
 
 type bojunOrderPushResult struct {
-	Target  bojunOrderPushTarget
-	Success bool
-	Skipped bool
-	Error   error
+	Target          bojunOrderPushTarget
+	Success         bool
+	Skipped         bool
+	SyncStatusSaved bool // The local status corresponding to Success was persisted.
+	Error           error
 }
 
 func NewBojunOrderPushService() *BojunOrderPushService {
@@ -75,10 +76,14 @@ func (s *BojunOrderPushService) PushNewOrderWithPolicy(ctx context.Context, orde
 	}
 	if policy.ShouldSkip(position) {
 		s.writePolicySkippedLog(ctx, order, target, policy, position)
-		if err := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1); err != nil {
-			return bojunOrderPushResult{Target: target, Skipped: true, Error: err}
+		statusErr := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 1)
+		return bojunOrderPushResult{
+			Target:          target,
+			Success:         true,
+			Skipped:         true,
+			SyncStatusSaved: statusErr == nil,
+			Error:           statusErr,
 		}
-		return bojunOrderPushResult{Target: target, Success: true, Skipped: true}
 	}
 
 	traceID := uuid.NewString()
@@ -115,14 +120,16 @@ func (s *BojunOrderPushService) PushNewOrderWithPolicy(ctx context.Context, orde
 	if err := s.pipelineRunDAO.Finish(ctx, runID, status, successCount, failedCount, errorMessage); err != nil && pushErr == nil {
 		pushErr = err
 	}
-	if err := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, synced); err != nil && pushErr == nil {
-		pushErr = err
+	statusErr := s.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, synced)
+	if statusErr != nil && pushErr == nil {
+		pushErr = statusErr
 	}
 
 	return bojunOrderPushResult{
-		Target:  target,
-		Success: success,
-		Error:   pushErr,
+		Target:          target,
+		Success:         success,
+		SyncStatusSaved: statusErr == nil,
+		Error:           pushErr,
 	}
 }
 
@@ -178,7 +185,8 @@ func (s *BojunOrderPushService) pushHangzhouHenglong(
 	}
 	issuedAt := app.TimeNowInTimezone()
 
-	result, err := send.SendSalesDataWithResult(
+	result, err := send.SendSalesDataWithResultContext(
+		ctx,
 		retailOrder.Amount,
 		order.DocNo,
 		&issuedAt,

@@ -7,19 +7,63 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/requestbody"
+	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 )
 
 type fakeOpenBojunOrderReader struct {
-	query  data_dao.OpenBojunOrderQuery
-	orders []model.BojunRetailOrder
-	calls  int
-	maxID  uint
+	query      data_dao.OpenBojunOrderQuery
+	orders     []model.BojunRetailOrder
+	calls      int
+	maxID      uint
+	countCalls int
+	countErr   error
+}
+
+type concurrentOpenBojunOrderReader struct {
+	fakeOpenBojunOrderReader
+	countLoads atomic.Int32
+}
+
+func (reader *concurrentOpenBojunOrderReader) CountOpenOrders(ctx context.Context, _ data_dao.OpenBojunOrderQuery) (int64, error) {
+	reader.countLoads.Add(1)
+	select {
+	case <-time.After(20 * time.Millisecond):
+		return 42, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func TestOpenBojunOrderCountCoalescesConcurrentMisses(t *testing.T) {
+	orders := &concurrentOpenBojunOrderReader{}
+	service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, time.Now)
+	query := data_dao.OpenBojunOrderQuery{StartBillDate: 20261001, EndBillDate: 20261031}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			count, err := service.countOpenOrders(t.Context(), query)
+			if err != nil || count != 42 {
+				t.Errorf("count=%d error=%v, want 42", count, err)
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if calls := orders.countLoads.Load(); calls != 1 {
+		t.Fatalf("concurrent count queries=%d, want 1", calls)
+	}
 }
 
 func (reader *fakeOpenBojunOrderReader) MaxOpenOrderID(_ context.Context, query data_dao.OpenBojunOrderQuery) (uint, error) {
@@ -36,7 +80,8 @@ func (reader *fakeOpenBojunOrderReader) MaxOpenOrderID(_ context.Context, query 
 }
 
 func (reader *fakeOpenBojunOrderReader) CountOpenOrders(context.Context, data_dao.OpenBojunOrderQuery) (int64, error) {
-	return int64(len(reader.orders)), nil
+	reader.countCalls++
+	return int64(len(reader.orders)), reader.countErr
 }
 
 func (reader *fakeOpenBojunOrderReader) ListOpenOrders(
@@ -52,6 +97,7 @@ type fakeOpenBojunPermissionReader struct {
 	allowed    bool
 	permission string
 	err        error
+	calls      int
 }
 
 func (reader *fakeOpenBojunPermissionReader) HasPermission(
@@ -60,8 +106,176 @@ func (reader *fakeOpenBojunPermissionReader) HasPermission(
 	permission string,
 	_ time.Time,
 ) (bool, error) {
+	reader.calls++
 	reader.permission = permission
 	return reader.allowed, reader.err
+}
+
+func TestOpenBojunOrderQueryCachesCountAcrossCursorPages(t *testing.T) {
+	orders := &fakeOpenBojunOrderReader{orders: []model.BojunRetailOrder{
+		{BaseModel: model.BaseModel{ID: 9}, BillDate: 20260915},
+		{BaseModel: model.BaseModel{ID: 8}, BillDate: 20260914},
+	}}
+	permissions := &fakeOpenBojunPermissionReader{allowed: true}
+	now := time.Date(2026, 9, 16, 10, 0, 0, 123456789, time.UTC)
+	service := newOpenBojunOrderQueryService(orders, permissions, func() time.Time { return now })
+	request := requestbody.OpenBojunOrderQueryRequest{StartDate: "2026-09-01", EndDate: "2026-09-16", PageSize: 1}
+	first, err := service.Query(t.Context(), 17, request)
+	if err != nil || first.Pagination.NextCursor == "" {
+		t.Fatalf("first page=%+v err=%v", first, err)
+	}
+	request.Cursor = first.Pagination.NextCursor
+	second, err := service.Query(t.Context(), 17, request)
+	if err != nil || second.Pagination.TotalItems != 2 || second.Pagination.TotalPages != 2 || second.Pagination.Page != 2 {
+		t.Fatalf("second page=%+v err=%v", second, err)
+	}
+	if orders.countCalls != 1 || orders.calls != 2 || permissions.calls != 2 {
+		t.Fatalf("count=%d list=%d authorization=%d", orders.countCalls, orders.calls, permissions.calls)
+	}
+	request.Cursor, request.PageSize = "", 2
+	resized, err := service.Query(t.Context(), 17, request)
+	if err != nil || resized.Pagination.TotalItems != 2 || resized.Pagination.TotalPages != 1 || orders.countCalls != 1 {
+		t.Fatalf("resized page=%+v count=%d err=%v", resized, orders.countCalls, err)
+	}
+	permissions.allowed = false
+	if _, err := service.Query(t.Context(), 17, request); !errors.Is(err, ErrOpenBojunOrderForbidden) {
+		t.Fatalf("cached count bypassed authorization: %v", err)
+	}
+}
+
+func TestOpenBojunOrderQueryDoesNotCacheCountFailures(t *testing.T) {
+	orders := &fakeOpenBojunOrderReader{countErr: errors.New("database unavailable")}
+	now := time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)
+	service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, func() time.Time { return now })
+	request := requestbody.OpenBojunOrderQueryRequest{StartDate: "2026-09-01", EndDate: "2026-09-16"}
+	if _, err := service.Query(t.Context(), 17, request); !errors.Is(err, orders.countErr) {
+		t.Fatalf("failed count error=%v", err)
+	}
+	orders.countErr = nil
+	for range 2 {
+		result, err := service.Query(t.Context(), 17, request)
+		if err != nil || result.Pagination.TotalItems != 0 {
+			t.Fatalf("recovered count=%+v err=%v", result, err)
+		}
+	}
+	if orders.countCalls != 2 {
+		t.Fatalf("count calls=%d, want failed attempt plus one successful count", orders.countCalls)
+	}
+}
+
+func TestOpenBojunOrderCountCacheSeparatesAuthorizedScopes(t *testing.T) {
+	orders := &fakeOpenBojunOrderReader{maxID: 100, orders: []model.BojunRetailOrder{{}}}
+	scope := &fakeOpenBojunOrderDetailMallScope{codes: []string{"MALL-A"}}
+	now := time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)
+	service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, func() time.Time { return now })
+	service.mallScope = scope
+	request := requestbody.OpenBojunOrderQueryRequest{StartDate: "2026-09-01", EndDate: "2026-09-16"}
+	if _, err := service.Query(t.Context(), 17, request); err != nil {
+		t.Fatal(err)
+	}
+	scope.codes = []string{"MALL-B"}
+	orders.orders = append(orders.orders, model.BojunRetailOrder{})
+	for range 2 {
+		result, err := service.Query(t.Context(), 18, request)
+		if err != nil || result.Pagination.TotalItems != 2 {
+			t.Fatalf("second scope result=%+v err=%v", result, err)
+		}
+	}
+	if orders.countCalls != 2 || scope.calls != 3 {
+		t.Fatalf("count=%d scope=%d", orders.countCalls, scope.calls)
+	}
+	scope.err = auth_svc.ErrMallScopeForbidden
+	if _, err := service.Query(t.Context(), 18, request); !errors.Is(err, ErrOpenBojunOrderForbidden) {
+		t.Fatalf("cached count bypassed revoked scope: %v", err)
+	}
+}
+
+func TestOpenBojunOrderCountCacheSeparatesFiltersAndSnapshots(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*requestbody.OpenBojunOrderQueryRequest, *fakeOpenBojunOrderReader, *time.Time)
+	}{
+		{"completed start", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.StartTime = "2026-09-02 00:00:00"
+		}},
+		{"completed end", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.EndTime = "2026-09-15 00:00:00"
+		}},
+		{"bill date start", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.StartDate = "2026-09-02"
+		}},
+		{"bill date end", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.EndDate = "2026-09-15"
+		}},
+		{"mall", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.MallCodes = []string{"MALL-B"}
+		}},
+		{"order type", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.OrderTypes = []string{"RET"}
+		}},
+		{"updated mode", func(r *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, _ *time.Time) {
+			r.StartTime, r.EndTime, r.StartDate, r.EndDate = "", "", "", ""
+			r.UpdatedStartTime, r.UpdatedEndTime = "2026-09-01 00:00:00", "2026-09-16 00:00:00"
+		}},
+		{"snapshot ID", func(_ *requestbody.OpenBojunOrderQueryRequest, orders *fakeOpenBojunOrderReader, _ *time.Time) {
+			orders.maxID++
+		}},
+		{"snapshot time", func(_ *requestbody.OpenBojunOrderQueryRequest, _ *fakeOpenBojunOrderReader, now *time.Time) {
+			*now = now.Add(time.Second)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			orders := &fakeOpenBojunOrderReader{maxID: 100, orders: []model.BojunRetailOrder{{}}}
+			now := time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)
+			service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, func() time.Time { return now })
+			request := requestbody.OpenBojunOrderQueryRequest{
+				StartTime: "2026-09-01 00:00:00", EndTime: "2026-09-16 00:00:00",
+				StartDate: "2026-09-01", EndDate: "2026-09-16", MallCodes: []string{"MALL-A"}, OrderTypes: []string{"CMR"},
+			}
+			if _, err := service.Query(t.Context(), 17, request); err != nil {
+				t.Fatal(err)
+			}
+			test.change(&request, orders, &now)
+			orders.orders = append(orders.orders, model.BojunRetailOrder{})
+			result, err := service.Query(t.Context(), 17, request)
+			if err != nil || result.Pagination.TotalItems != 2 || orders.countCalls != 2 {
+				t.Fatalf("changed query result=%+v count=%d err=%v", result, orders.countCalls, err)
+			}
+		})
+	}
+}
+
+func TestOpenBojunOrderCountCacheSupportsLegacyCursors(t *testing.T) {
+	for _, version := range []int{0, 2} {
+		t.Run(fmt.Sprintf("version %d", version), func(t *testing.T) {
+			orders := &fakeOpenBojunOrderReader{}
+			service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, time.Now)
+			request := requestbody.OpenBojunOrderQueryRequest{StartDate: "2026-09-01", EndDate: "2026-09-16"}
+			query, _, pageSize, err := normalizeOpenBojunOrderQuery(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cursor := openBojunOrderCursor{Version: version, BillDate: 20260915, ID: 9, Page: 2}
+			if version == 2 {
+				cursor.QueryHash = openBojunOrderQueryHash(query, pageSize)
+			}
+			for page := 2; page <= 3; page++ {
+				cursor.ID--
+				cursor.Page = page
+				request.Cursor, err = encodeOpenBojunOrderCursor(cursor)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := service.Query(t.Context(), 17, request)
+				if err != nil || result.Pagination.Page != page {
+					t.Fatalf("legacy page=%+v err=%v", result, err)
+				}
+			}
+			if orders.countCalls != 1 {
+				t.Fatalf("legacy count calls=%d", orders.countCalls)
+			}
+		})
+	}
 }
 
 func TestOpenBojunOrderQueryServiceReturnsSanitizedCursorPage(t *testing.T) {

@@ -20,5 +20,6 @@ func setupLogger() {
 		config.GetString("cfg.log.type"),
 		config.GetString("cfg.log.level"),
 	)
+	setupErrorLog()
 
 }

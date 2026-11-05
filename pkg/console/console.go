@@ -4,6 +4,8 @@ package console
 import (
 	"fmt"
 	"os"
+
+	"go.uber.org/zap"
 )
 
 // Success 打印一条成功消息，绿色输出
@@ -29,6 +31,8 @@ func Info(format string, v ...interface{}) {
 // Exit 打印一条报错消息，并退出 os.Exit(1)
 func Exit(format string, v ...interface{}) {
 	Danger(format, v...)
+	zap.L().Error(fmt.Sprintf(format, v...), zap.String("source", "console.Exit"))
+	_ = zap.L().Sync()
 	os.Exit(1)
 }
 

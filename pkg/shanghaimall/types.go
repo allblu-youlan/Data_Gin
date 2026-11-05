@@ -38,20 +38,26 @@ type PushResult struct {
 
 func RetailOrderFromBojun(order model.BojunRetailOrder) RetailOrder {
 	saleTime := billDateToSaleTime(order.BillDate)
-	amount := order.TotalAmtActual
-	listAmount := order.TotalAmtList
-	if order.OracleRetailID != nil {
-		amount = order.PushAmount
-		listAmount = order.PushAmount
-	}
+	amount, listAmount := AmountsFromBojun(&order)
 	return RetailOrder{
 		DocNo:         order.DocNo,
 		OrderTypeCode: order.OrderTypeCode,
 		SaleTime:      saleTime,
-		Amount:        signedAmount(order.OrderTypeCode, amount),
-		ListAmount:    signedAmount(order.OrderTypeCode, listAmount),
+		Amount:        amount,
+		ListAmount:    listAmount,
 		Quantity:      order.TotalQty,
 	}
+}
+
+// AmountsFromBojun returns the signed sales and list amounts used when pushing a Bojun order.
+func AmountsFromBojun(order *model.BojunRetailOrder) (amount, listAmount float64) {
+	amount = order.TotalAmtActual
+	listAmount = order.TotalAmtList
+	if order.OracleRetailID != nil {
+		amount = order.PushAmount
+		listAmount = order.PushAmount
+	}
+	return signedAmount(order.OrderTypeCode, amount), signedAmount(order.OrderTypeCode, listAmount)
 }
 
 func (order RetailOrder) IsRefund() bool {

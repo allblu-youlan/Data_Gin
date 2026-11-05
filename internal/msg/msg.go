@@ -1,8 +1,15 @@
 package msg
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strconv"
 	"strings"
+
+	"gin-biz-web-api/pkg/logger"
+	"gin-biz-web-api/pkg/providerhttp"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/locales/en"
@@ -11,6 +18,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	en_translation "github.com/go-playground/validator/v10/translations/en"
 	zh_translation "github.com/go-playground/validator/v10/translations/zh"
+	"go.uber.org/zap"
 )
 
 type Response struct {
@@ -95,6 +103,7 @@ func SuccessResponseStr(msg string) *Response {
 }
 
 func ErrResponse(msg string, responseErr error) *ErrResponseST {
+	logResponseError(msg, responseErr)
 	err := initTranslator("zh")
 	if err != nil {
 		panic(err)
@@ -117,11 +126,40 @@ func ErrResponse(msg string, responseErr error) *ErrResponseST {
 }
 
 func ErrResponseStr(msg string) *ErrResponseST {
-
+	logResponseError(msg, nil)
 	return &ErrResponseST{
 		Code: 201,
 		Msg:  msg,
 		Data: &map[string]any{},
 		Err:  "",
 	}
+}
+
+func logResponseError(message string, err error) {
+	if logger.Logger == nil {
+		return
+	}
+	fields := []zap.Field{
+		zap.Int("business_code", 201),
+		zap.String("error_message", providerhttp.RedactText(message)),
+	}
+	if err != nil {
+		fields = append(fields, zap.String("error", providerhttp.RedactText(err.Error())))
+	}
+	if err == nil || isRequestInputError(err) {
+		logger.Warn("HTTP business response rejected", fields...)
+		return
+	}
+	logger.Error("HTTP business response failed", fields...)
+}
+
+func isRequestInputError(err error) bool {
+	var (
+		validationErrors validator.ValidationErrors
+		syntaxError      *json.SyntaxError
+		typeError        *json.UnmarshalTypeError
+		numberError      *strconv.NumError
+	)
+	return errors.Is(err, io.EOF) || errors.As(err, &validationErrors) ||
+		errors.As(err, &syntaxError) || errors.As(err, &typeError) || errors.As(err, &numberError)
 }

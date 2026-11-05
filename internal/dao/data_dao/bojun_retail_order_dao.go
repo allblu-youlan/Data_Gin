@@ -59,6 +59,29 @@ func (dao *BojunRetailOrderDAO) FindByDocNo(ctx context.Context, docNo string) (
 	return &order, err
 }
 
+func (dao *BojunRetailOrderDAO) FindByDocNos(ctx context.Context, docNos []string) ([]model.BojunRetailOrder, error) {
+	keys := make([]string, 0, len(docNos))
+	seen := make(map[string]struct{}, len(docNos))
+	for _, docNo := range docNos {
+		if _, exists := seen[docNo]; exists || docNo == "" {
+			continue
+		}
+		seen[docNo] = struct{}{}
+		keys = append(keys, docNo)
+	}
+	var orders []model.BojunRetailOrder
+	const batchSize = 500
+	for start := 0; start < len(keys); start += batchSize {
+		end := min(start+batchSize, len(keys))
+		var batch []model.BojunRetailOrder
+		if err := dao.db.WithContext(ctx).Where("docno IN ?", keys[start:end]).Find(&batch).Error; err != nil {
+			return nil, err
+		}
+		orders = append(orders, batch...)
+	}
+	return orders, nil
+}
+
 func (dao *BojunRetailOrderDAO) FindByID(ctx context.Context, id uint) (*model.BojunRetailOrder, error) {
 	var order model.BojunRetailOrder
 	err := dao.db.WithContext(ctx).First(&order, id).Error
@@ -86,16 +109,21 @@ func (dao *BojunRetailOrderDAO) ExistsByDocNo(ctx context.Context, docNo string)
 }
 
 func (dao *BojunRetailOrderDAO) CreateIfNotExists(ctx context.Context, order *model.BojunRetailOrder) (bool, error) {
-	exists, err := dao.ExistsByDocNo(ctx, order.DocNo)
-	if err != nil {
+	_, err := dao.Create(ctx, order)
+	if err == nil {
+		return true, nil
+	}
+	if !isMySQLDuplicateKeyError(err) {
 		return false, err
+	}
+	exists, lookupErr := dao.ExistsByDocNo(ctx, order.DocNo)
+	if lookupErr != nil {
+		return false, lookupErr
 	}
 	if exists {
 		return false, nil
 	}
-
-	_, err = dao.Create(ctx, order)
-	return err == nil, err
+	return false, err
 }
 
 func (dao *BojunRetailOrderDAO) CreateOrUpdateWithCreated(ctx context.Context, order *model.BojunRetailOrder) (bool, error) {
