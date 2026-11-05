@@ -11,6 +11,8 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
+
+	"gorm.io/gorm"
 )
 
 type fakeBojunOracleDatasourceStore struct {
@@ -93,17 +95,28 @@ type fakeBojunOracleRetailStore struct {
 	supplementCalls int
 	supplementNoop  bool
 	backfillUpdates int
+	findCalls       int
+	existsCalls     int
+	findErr         error
 }
 
 func (store *fakeBojunOracleRetailStore) ExistsByDocNo(_ context.Context, docNo string) (bool, error) {
+	store.existsCalls++
+	if store.findErr != nil {
+		return false, store.findErr
+	}
 	_, exists := store.orders[docNo]
 	return exists, nil
 }
 
 func (store *fakeBojunOracleRetailStore) FindByDocNo(_ context.Context, docNo string) (*model.BojunRetailOrder, error) {
+	store.findCalls++
+	if store.findErr != nil {
+		return nil, store.findErr
+	}
 	order, exists := store.orders[docNo]
 	if !exists {
-		return nil, errors.New("order not found")
+		return nil, gorm.ErrRecordNotFound
 	}
 	copyOrder := *order
 	return &copyOrder, nil
@@ -405,6 +418,9 @@ func TestBojunOracleIncrementalWritesSuccessfulPushBackToOracle(t *testing.T) {
 	if result.WatermarkAfter != 12 || store.updates[101] != 1 {
 		t.Fatalf("result=%+v local updates=%v", result, store.updates)
 	}
+	if store.findCalls != 1 || store.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	}
 }
 
 func TestBojunOracleExistingSuccessfulOrderRetriesOnlyWriteBack(t *testing.T) {
@@ -436,6 +452,9 @@ func TestBojunOracleExistingSuccessfulOrderRetriesOnlyWriteBack(t *testing.T) {
 	}
 	if store.updates[77] != 1 || result.WatermarkAfter != retailID {
 		t.Fatalf("updates=%v result=%+v", store.updates, result)
+	}
+	if store.findCalls != 1 || store.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
 	}
 }
 
@@ -577,6 +596,9 @@ func TestBojunOraclePreviewDoesNotSupplementExistingAPIOrder(t *testing.T) {
 			result,
 		)
 	}
+	if store.findCalls != 1 || store.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	}
 }
 
 func TestBojunOracleDetailBackfillReconcilesBusinessFields(t *testing.T) {
@@ -616,6 +638,9 @@ func TestBojunOracleDetailBackfillReconcilesBusinessFields(t *testing.T) {
 		result.UpdatedCount != 1 || result.RetailCount != 0 || store.backfillUpdates != 1 {
 		t.Fatalf("result=%+v updates=%d", result, store.backfillUpdates)
 	}
+	if store.findCalls != 1 || store.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	}
 }
 
 func TestBojunOracleDetailBackfillCreatesAndPushesMissingOrder(t *testing.T) {
@@ -648,6 +673,64 @@ func TestBojunOracleDetailBackfillCreatesAndPushesMissingOrder(t *testing.T) {
 	}
 	if result.TotalCount != 1 || result.WritableCount != 1 || result.RetailCount != 1 || result.ExistingCount != 0 {
 		t.Fatalf("result=%+v", result)
+	}
+	if store.findCalls != 1 || store.existsCalls != 0 {
+		t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+	}
+}
+
+func TestBojunOracleOrderLookupFailureStopsBeforeWriting(t *testing.T) {
+	lookupFailure := errors.New("order lookup failed")
+	tests := []struct {
+		name string
+		sync func(*BojunOracleOrderService) (*BojunOrderSyncResult, error)
+	}{
+		{
+			name: "incremental",
+			sync: func(service *BojunOracleOrderService) (*BojunOrderSyncResult, error) {
+				return service.SyncIncremental(t.Context())
+			},
+		},
+		{
+			name: "detail backfill",
+			sync: func(service *BojunOracleOrderService) (*BojunOrderSyncResult, error) {
+				return service.SyncByStatusTime(t.Context(), "2026-08-25T10:00", "2026-08-25T11:00")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			connection := &fakeBojunOracleConnection{rows: []reportoracle.BojunRetailRow{{
+				RetailID: 12, StoreCode: "ABCN001A001", DocNo: "SALE-12",
+				StatusTime: time.Date(2026, 8, 25, 10, 30, 0, 0, time.Local), IsToShop: "Y",
+			}}}
+			state := &fakeBojunOracleStateStore{
+				state: model.BojunOracleSyncState{
+					SourceCode: bojunOracleDatasourceCode, LastRetailID: 11, Initialized: true,
+				},
+				leaseAcquired: true,
+			}
+			service := newTestBojunOracleOrderService(connection, state)
+			store := service.retailOrderDAO.(*fakeBojunOracleRetailStore)
+			store.findErr = lookupFailure
+			pusher := &fakeBojunOraclePusher{result: bojunOrderPushResult{Success: true}}
+			service.pushService = pusher
+
+			result, err := tt.sync(service)
+			if !errors.Is(err, lookupFailure) {
+				t.Fatalf("error=%v, want the lookup failure", err)
+			}
+			if result.TotalCount != 1 || result.FailedCount != 1 || result.WritableCount != 0 || result.ExistingCount != 0 {
+				t.Fatalf("result=%+v, want one failed order lookup", result)
+			}
+			if service.rawDataDAO.(*fakeBojunRawDataCreator).created != 0 || len(store.orders) != 0 ||
+				store.backfillUpdates != 0 || pusher.calls != 0 || len(connection.writeBackIDs) != 0 || state.advancedTo != 0 {
+				t.Fatal("lookup failure wrote order data, pushed an order or advanced the watermark")
+			}
+			if store.findCalls != 1 || store.existsCalls != 0 {
+				t.Fatalf("find calls=%d existence calls=%d, want one order lookup", store.findCalls, store.existsCalls)
+			}
+		})
 	}
 }
 

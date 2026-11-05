@@ -18,6 +18,7 @@ import (
 	"gin-biz-web-api/pkg/config"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -56,7 +57,6 @@ type bojunOracleSyncStateStore interface {
 }
 
 type bojunOracleRetailOrderStore interface {
-	ExistsByDocNo(context.Context, string) (bool, error)
 	FindByDocNo(context.Context, string) (*model.BojunRetailOrder, error)
 	CreateIfNotExists(context.Context, *model.BojunRetailOrder) (bool, error)
 	SupplementOracleFieldsIfMissing(context.Context, uint, *model.BojunRetailOrder) (bool, error)
@@ -377,20 +377,15 @@ func (service *BojunOracleOrderService) processRow(
 		return fmt.Errorf("build bojun Oracle retail order %d: %w", row.RetailID, err)
 	}
 	sample := bojunOraclePreviewItem(order)
-	exists, err := service.retailOrderDAO.ExistsByDocNo(ctx, order.DocNo)
-	if err != nil {
+	existing, err := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		result.FailedCount++
 		return fmt.Errorf("check bojun Oracle order %s existence: %w", order.DocNo, err)
 	}
-	if exists {
+	if err == nil {
 		result.ExistingCount++
 		if existingMode == bojunOracleExistingOrderBackfillDetails {
-			return service.processExistingDetailBackfill(ctx, order, confirmWrite, result, sample)
-		}
-		existing, findErr := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
-		if findErr != nil {
-			result.FailedCount++
-			return fmt.Errorf("load existing bojun Oracle order %s: %w", order.DocNo, findErr)
+			return service.processExistingDetailBackfill(ctx, order, existing, confirmWrite, result, sample)
 		}
 		if !confirmWrite {
 			result.PreviewCount++
@@ -450,16 +445,12 @@ func (service *BojunOracleOrderService) processRow(
 func (service *BojunOracleOrderService) processExistingDetailBackfill(
 	ctx context.Context,
 	order *model.BojunRetailOrder,
+	existing *model.BojunRetailOrder,
 	confirmWrite bool,
 	result *BojunOrderSyncResult,
 	sample BojunOrderPreviewItem,
 ) error {
 	result.WritableCount++
-	existing, err := service.retailOrderDAO.FindByDocNo(ctx, order.DocNo)
-	if err != nil {
-		result.FailedCount++
-		return fmt.Errorf("load existing bojun Oracle order %s: %w", order.DocNo, err)
-	}
 	preserveMissingBojunOracleFields(order, existing)
 	if !confirmWrite {
 		result.PreviewCount++
