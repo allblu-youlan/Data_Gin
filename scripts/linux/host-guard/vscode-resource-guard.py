@@ -77,9 +77,10 @@ def attach(snapshot, selected):
             except OSError as error:
                 if error.errno in (errno.ESRCH, errno.ENOENT):
                     break
-                raise
+                print("WARNING: retry migration pid={} controller={} error={}".format(
+                    pid, controller, error), flush=True)
         if memberships.get("memory") != "/" + GROUP:
-            print("attached pid={} start={} exe={}".format(
+            print("migration checked pid={} start={} exe={}".format(
                 pid, row["start"], row["exe"]), flush=True)
 
 
@@ -117,7 +118,11 @@ def main():
     memsw_usage = int((ROOT / "memory" / GROUP / "memory.memsw.usage_in_bytes").read_text())
     memory_limit = config["memory_mib"] * MIB
     memsw_limit = config["memsw_mib"] * MIB
-    if usage + 256 * MIB > memory_limit or memsw_usage + 256 * MIB > memsw_limit:
+    active_memory = int((ROOT / "memory" / GROUP / "memory.limit_in_bytes").read_text())
+    active_memsw = int((ROOT / "memory" / GROUP / "memory.memsw.limit_in_bytes").read_text())
+    already_configured = active_memory == memory_limit and active_memsw == memsw_limit
+    over_budget = usage + 256 * MIB > memory_limit or memsw_usage + 256 * MIB > memsw_limit
+    if not already_configured and over_budget:
         raise RuntimeError("Memory budget needs review: resident={} MiB, resident+swap={} MiB".format(
             usage // MIB, memsw_usage // MIB))
     write_control("memory", "memory.limit_in_bytes", memory_limit)
