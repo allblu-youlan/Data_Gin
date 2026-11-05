@@ -1,41 +1,43 @@
-import type { Dispatch, SetStateAction } from 'react'
-import { AccessManagementPage } from '../AccessManagementPage'
-import { BojunBackfillPage } from '../backfillPages/BojunBackfillPage'
-import { YouzanDistributionPage } from '../backfillPages/YouzanDistributionPage'
+import { lazy, Suspense, type Dispatch, type SetStateAction } from 'react'
 import type { LegacyTask } from '../backfillPages/youzanDistributionSupport'
-import { BusinessOverviewPage } from '../businessOverviewPages/BusinessOverviewPage'
-import { SalesSummaryPage } from '../salesSummary/SalesSummaryPage'
-import { DeliveryTasksPage } from '../configurationPages/DeliveryTasksPage/DeliveryTasksPage'
-import { DestinationsPage } from '../configurationPages/DestinationsPage/DestinationsPage'
-import { MethodsPage } from '../configurationPages/MethodsPage/MethodsPage'
-import { PushPolicyPage } from '../configurationPages/PushPolicyPage/PushPolicyPage'
-import { RulesPage } from '../configurationPages/RulesPage/RulesPage'
 import type { TransformRule } from '../configurationPages/ruleContracts'
-import { SourcesPage } from '../configurationPages/SourcesPage/SourcesPage'
 import type { DestinationDefinition, SourceDefinition } from '../configurationPages/types'
-import { ProcessedRecordsPage } from '../dataPages/ProcessedRecordsPage'
-import { RawRecordsPage } from '../dataPages/RawRecordsPage'
-import { ExcelMatchPage } from '../excelPages/ExcelMatchPage'
-import { ExcelWorkflowPage } from '../excelPages/ExcelWorkflowPage'
-import { OracleMethodPage } from '../excelPages/OracleMethodPage'
-import { OracleExportPage } from '../excelPages/OracleExportPage'
-import { MallWeatherPage, StoreInfoPage } from '../MallWeatherPage'
 import type { DataStatisticsSummary, HealthSummary, MallWeatherMetricsSummary } from '../monitoring'
-import { DeliveryLogsPage } from '../monitoringPages/DeliveryLogsPage/DeliveryLogsPage'
-import { PipelineRunsPage } from '../monitoringPages/PipelineRunsPage/PipelineRunsPage'
-import { RunOverviewPage } from '../monitoringPages/RunOverviewPage/RunOverviewPage'
-import { StepRunsPage } from '../monitoringPages/StepRunsPage/StepRunsPage'
-import { OfficeMentionPage } from '../officeMention/OfficeMentionPage'
 import type { MentionSection } from '../officeMention/types'
-import { MessageManagementPage } from '../officeMessage/MessageManagementPage'
-import { PushManagementPage } from '../officeMessage/PushManagementPage'
-import { TableEmailNotificationsPage } from '../tableEmailNotifications/TableEmailNotificationsPage'
 import type { DeliveryLog, PipelineRun } from '../monitoringPages/types'
-import { ReportCenter } from '../reportCenter/ReportCenter'
 import type { ApiRequestOptions, ClientResponse, HTTPMethod } from '../api/client'
 import { FeedbackState, PageCanvas } from '../ui'
 import { reportCenterNavKey, reportCenterSection, type NavKey } from './navigation'
 import { canViewNavigationItem } from './navigationPermissions'
+
+const AccessManagementPage = lazy(() => import('../AccessManagementPage').then((module) => ({ default: module.AccessManagementPage })))
+const BojunBackfillPage = lazy(() => import('../backfillPages/BojunBackfillPage').then((module) => ({ default: module.BojunBackfillPage })))
+const YouzanDistributionPage = lazy(() => import('../backfillPages/YouzanDistributionPage').then((module) => ({ default: module.YouzanDistributionPage })))
+const BusinessOverviewPage = lazy(() => import('../businessOverviewPages/BusinessOverviewPage').then((module) => ({ default: module.BusinessOverviewPage })))
+const SalesSummaryPage = lazy(() => import('../salesSummary/SalesSummaryPage').then((module) => ({ default: module.SalesSummaryPage })))
+const DeliveryTasksPage = lazy(() => import('../configurationPages/DeliveryTasksPage/DeliveryTasksPage').then((module) => ({ default: module.DeliveryTasksPage })))
+const DestinationsPage = lazy(() => import('../configurationPages/DestinationsPage/DestinationsPage').then((module) => ({ default: module.DestinationsPage })))
+const MethodsPage = lazy(() => import('../configurationPages/MethodsPage/MethodsPage').then((module) => ({ default: module.MethodsPage })))
+const PushPolicyPage = lazy(() => import('../configurationPages/PushPolicyPage/PushPolicyPage').then((module) => ({ default: module.PushPolicyPage })))
+const RulesPage = lazy(() => import('../configurationPages/RulesPage/RulesPage').then((module) => ({ default: module.RulesPage })))
+const SourcesPage = lazy(() => import('../configurationPages/SourcesPage/SourcesPage').then((module) => ({ default: module.SourcesPage })))
+const ProcessedRecordsPage = lazy(() => import('../dataPages/ProcessedRecordsPage').then((module) => ({ default: module.ProcessedRecordsPage })))
+const RawRecordsPage = lazy(() => import('../dataPages/RawRecordsPage').then((module) => ({ default: module.RawRecordsPage })))
+const ExcelMatchPage = lazy(() => import('../excelPages/ExcelMatchPage').then((module) => ({ default: module.ExcelMatchPage })))
+const ExcelWorkflowPage = lazy(() => import('../excelPages/ExcelWorkflowPage').then((module) => ({ default: module.ExcelWorkflowPage })))
+const OracleMethodPage = lazy(() => import('../excelPages/OracleMethodPage').then((module) => ({ default: module.OracleMethodPage })))
+const OracleExportPage = lazy(() => import('../excelPages/OracleExportPage').then((module) => ({ default: module.OracleExportPage })))
+const MallWeatherPage = lazy(() => import('../MallWeatherPage').then((module) => ({ default: module.MallWeatherPage })))
+const StoreInfoPage = lazy(() => import('../MallWeatherPage').then((module) => ({ default: module.StoreInfoPage })))
+const DeliveryLogsPage = lazy(() => import('../monitoringPages/DeliveryLogsPage/DeliveryLogsPage').then((module) => ({ default: module.DeliveryLogsPage })))
+const PipelineRunsPage = lazy(() => import('../monitoringPages/PipelineRunsPage/PipelineRunsPage').then((module) => ({ default: module.PipelineRunsPage })))
+const RunOverviewPage = lazy(() => import('../monitoringPages/RunOverviewPage/RunOverviewPage').then((module) => ({ default: module.RunOverviewPage })))
+const StepRunsPage = lazy(() => import('../monitoringPages/StepRunsPage/StepRunsPage').then((module) => ({ default: module.StepRunsPage })))
+const OfficeMentionPage = lazy(() => import('../officeMention/OfficeMentionPage').then((module) => ({ default: module.OfficeMentionPage })))
+const MessageManagementPage = lazy(() => import('../officeMessage/MessageManagementPage').then((module) => ({ default: module.MessageManagementPage })))
+const PushManagementPage = lazy(() => import('../officeMessage/PushManagementPage').then((module) => ({ default: module.PushManagementPage })))
+const TableEmailNotificationsPage = lazy(() => import('../tableEmailNotifications/TableEmailNotificationsPage').then((module) => ({ default: module.TableEmailNotificationsPage })))
+const ReportCenter = lazy(() => import('../reportCenter/ReportCenter').then((module) => ({ default: module.ReportCenter })))
 
 export type WorkspaceApiClientOptions = Omit<ApiRequestOptions, 'method'> & {
   method?: HTTPMethod
@@ -88,6 +90,12 @@ type WorkspaceRouterProps = {
 }
 
 export function WorkspaceRouter(props: WorkspaceRouterProps) {
+  return <Suspense fallback={<PageCanvas><FeedbackState kind="loading" title="正在加载页面" /></PageCanvas>}>
+    <WorkspacePage {...props} />
+  </Suspense>
+}
+
+function WorkspacePage(props: WorkspaceRouterProps) {
   const {
     activeNav, actorID, client, deliveryLogs, destinations, downloadFile, legacyTasks, loading,
     monitoring, monitoringStale, navigate, onFetchSource, onLoadSteps, onRefresh,
