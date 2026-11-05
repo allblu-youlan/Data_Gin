@@ -89,7 +89,7 @@ func getXianToken(ctx context.Context, cfg xianConfig) (string, error) {
 	defer resp.Body.Close()
 
 	var payload map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := decodeAndDrainJSON(resp.Body, &payload); err != nil {
 		return "", err
 	}
 	token, _ := payload["token"].(string)
