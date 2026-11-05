@@ -802,6 +802,7 @@ func newTestMallWeatherProcessorWithGuardMetricsAndBreaker(
 		FastHourlySteps: 24, FastDailySteps: 1, FullHourlySteps: 360, FullDailySteps: 15,
 		LifeIndexDays: 15, Unit: "metric:v2", AlertEnabled: true,
 		AttemptStaleAfter: 2 * time.Minute, FailureFinalizeTimeout: time.Second, LockReleaseTimeout: time.Second,
+		CircuitOpenTimeout: time.Minute,
 	}, func() time.Time {
 		result := current
 		current = current.Add(time.Second)

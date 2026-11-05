@@ -37,13 +37,32 @@ var partialWeatherWarningCodes = map[string]struct{}{
 }
 
 type MallWeatherProcessError struct {
-	Retryable bool
-	Code      string
-	cause     error
+	Retryable  bool
+	Code       string
+	cause      error
+	retryDelay time.Duration
 }
 
 func (processError *MallWeatherProcessError) Error() string {
-	return "mall weather: processing failed"
+	message := "mall weather: processing failed"
+	if processError == nil {
+		return message
+	}
+	if processError.Code != "" {
+		message += " code=" + processError.Code
+	}
+	var providerError *caiyun.ProviderError
+	if errors.As(processError.cause, &providerError) && providerError != nil {
+		message += " (" + providerError.Error() + ")"
+	}
+	return message
+}
+
+func (processError *MallWeatherProcessError) RetryDelay() time.Duration {
+	if processError == nil || !processError.Retryable {
+		return 0
+	}
+	return processError.retryDelay
 }
 
 func (processError *MallWeatherProcessError) Unwrap() error {
@@ -116,6 +135,7 @@ type MallWeatherProcessorConfig struct {
 	AttemptStaleAfter      time.Duration
 	FailureFinalizeTimeout time.Duration
 	LockReleaseTimeout     time.Duration
+	CircuitOpenTimeout     time.Duration
 }
 
 type MallWeatherProcessor struct {
@@ -148,7 +168,8 @@ func newMallWeatherProcessor(
 		config.FastHourlySteps < 1 || config.FastHourlySteps > 360 || config.FastDailySteps < 1 || config.FastDailySteps > 15 ||
 		config.FullHourlySteps < 1 || config.FullHourlySteps > 360 || config.FullDailySteps < 1 || config.FullDailySteps > 15 ||
 		config.LifeIndexDays < 1 || config.LifeIndexDays > 15 || config.Unit != "metric:v2" ||
-		config.AttemptStaleAfter <= 0 || config.FailureFinalizeTimeout <= 0 || config.LockReleaseTimeout <= 0 {
+		config.AttemptStaleAfter <= 0 || config.FailureFinalizeTimeout <= 0 || config.LockReleaseTimeout <= 0 ||
+		config.CircuitOpenTimeout <= 0 {
 		return nil, fmt.Errorf("mall weather: invalid processor configuration")
 	}
 	return &MallWeatherProcessor{
@@ -383,7 +404,12 @@ func (processor *MallWeatherProcessor) finishFailure(ctx context.Context, execut
 	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 		return cause
 	}
-	return &MallWeatherProcessError{Retryable: retryable, Code: failure.ErrorCode, cause: cause}
+	processError := &MallWeatherProcessError{Retryable: retryable, Code: failure.ErrorCode, cause: cause}
+	if retryable && (failure.ErrorClass == "rate_limited" || failure.ErrorClass == "circuit_open") {
+		// Asynq stores retry timestamps in whole seconds, while the circuit uses milliseconds.
+		processError.retryDelay = processor.config.CircuitOpenTimeout + time.Second
+	}
+	return processError
 }
 
 func parserVersionForEndpoint(endpointKind string) string {

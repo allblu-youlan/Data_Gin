@@ -101,10 +101,11 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 	if err != nil {
 		return nil, err
 	}
+	circuitOpenTimeout := time.Duration(config.GetInt("cfg.mall_weather.circuit_open_seconds")) * time.Second
 	breaker, err := weatherdomain.NewRedisCircuitBreaker(redisInstance.Client, weatherdomain.RedisCircuitBreakerConfig{
 		Key:              projectredis.GenNamespace("circuit:mall_weather:caiyun"),
 		FailureThreshold: config.GetInt("cfg.mall_weather.circuit_failure_threshold"),
-		OpenTimeout:      time.Duration(config.GetInt("cfg.mall_weather.circuit_open_seconds")) * time.Second,
+		OpenTimeout:      circuitOpenTimeout,
 		ProbeTTL:         time.Duration(config.GetInt("cfg.mall_weather.circuit_probe_ttl_seconds")) * time.Second,
 	})
 	if err != nil {
@@ -121,6 +122,7 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 		Unit:            config.GetString("cfg.mall_weather.unit"), AlertEnabled: config.GetBool("cfg.mall_weather.alert_enabled"),
 		AttemptStaleAfter: staleAfter, FailureFinalizeTimeout: 3 * time.Second,
 		LockReleaseTimeout: time.Duration(config.GetInt("cfg.mall_weather.lock_release_timeout_seconds")) * time.Second,
+		CircuitOpenTimeout: circuitOpenTimeout,
 	}, time.Now, mallWeatherRuntimeMetrics)
 }
 
