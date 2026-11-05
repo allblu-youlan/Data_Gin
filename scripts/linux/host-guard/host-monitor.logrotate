@@ -1,0 +1,24 @@
+/mnt/host-monitor/pidstat.log /mnt/host-monitor/iostat.log {
+    daily
+    maxsize 32M
+    rotate 8
+    maxage 7
+    missingok
+    notifempty
+    nocompress
+    create 0600 root root
+    sharedscripts
+    postrotate
+        /usr/bin/systemctl try-restart host-pidstat.service host-iostat.service
+    endscript
+}
+/mnt/host-monitor/processes.log {
+    daily
+    maxsize 4M
+    rotate 8
+    maxage 7
+    missingok
+    notifempty
+    nocompress
+    create 0600 root root
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Rotate host samples and record process identities
+RequiresMountsFor=/mnt/host-monitor
+ConditionPathIsMountPoint=/mnt
+
+[Service]
+Type=oneshot
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+ExecStartPre=/bin/sh -c '{ date -Iseconds; cat /proc/sys/kernel/random/boot_id; ps -eo pid,ppid,lstart,comm; } >> /mnt/host-monitor/processes.log'
+ExecStart=/usr/sbin/logrotate -s /mnt/host-monitor/logrotate.status /etc/host-monitor.logrotate

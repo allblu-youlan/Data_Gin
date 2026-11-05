@@ -1,0 +1,9 @@
+{
+  "server_root": "/root/.vscode-server/",
+  "cpu_percent": 150,
+  "memory_mib": 2560,
+  "memsw_mib": 3072,
+  "read_device": "/dev/vda",
+  "read_mib_per_second": 20,
+  "scan_seconds": 5
+}
