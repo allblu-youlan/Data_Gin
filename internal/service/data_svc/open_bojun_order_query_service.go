@@ -273,15 +273,9 @@ func (service *OpenBojunOrderQueryService) countOpenOrders(ctx context.Context, 
 	}
 	// Cursor snapshots encode seconds, so the first page uses the same precision.
 	key := openBojunOrderQueryHash(query, 0) + "|" + snapshotID + "|" + strconv.FormatInt(query.SnapshotAt.Unix(), 10)
-	if total, exists := service.countCache.Get(key); exists {
-		return total, nil
-	}
-	total, err := service.orders.CountOpenOrders(ctx, query)
-	if err != nil {
-		return 0, err
-	}
-	service.countCache.Set(key, total)
-	return total, nil
+	return service.countCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (int64, error) {
+		return service.orders.CountOpenOrders(loadCtx, query)
+	})
 }
 
 func (service *OpenBojunOrderQueryService) authorize(ctx context.Context, actorUserID uint) error {

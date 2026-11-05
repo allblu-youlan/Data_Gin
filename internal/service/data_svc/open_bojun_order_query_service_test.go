@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,45 @@ type fakeOpenBojunOrderReader struct {
 	maxID      uint
 	countCalls int
 	countErr   error
+}
+
+type concurrentOpenBojunOrderReader struct {
+	fakeOpenBojunOrderReader
+	countLoads atomic.Int32
+}
+
+func (reader *concurrentOpenBojunOrderReader) CountOpenOrders(ctx context.Context, _ data_dao.OpenBojunOrderQuery) (int64, error) {
+	reader.countLoads.Add(1)
+	select {
+	case <-time.After(20 * time.Millisecond):
+		return 42, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func TestOpenBojunOrderCountCoalescesConcurrentMisses(t *testing.T) {
+	orders := &concurrentOpenBojunOrderReader{}
+	service := newOpenBojunOrderQueryService(orders, &fakeOpenBojunPermissionReader{allowed: true}, time.Now)
+	query := data_dao.OpenBojunOrderQuery{StartBillDate: 20261001, EndBillDate: 20261031}
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 32 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			count, err := service.countOpenOrders(t.Context(), query)
+			if err != nil || count != 42 {
+				t.Errorf("count=%d error=%v, want 42", count, err)
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if calls := orders.countLoads.Load(); calls != 1 {
+		t.Fatalf("concurrent count queries=%d, want 1", calls)
+	}
 }
 
 func (reader *fakeOpenBojunOrderReader) MaxOpenOrderID(_ context.Context, query data_dao.OpenBojunOrderQuery) (uint, error) {
