@@ -48,6 +48,9 @@ require (
 	github.com/godror/knownpb v0.3.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/common v0.62.0
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 )
