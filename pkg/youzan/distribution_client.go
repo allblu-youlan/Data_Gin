@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"gin-biz-web-api/pkg/providerhttp"
 )
 
 const maxDecryptBatchSize = 10000
@@ -56,17 +58,9 @@ func (c *DistributionClient) FetchOrderPage(ctx context.Context, accessToken str
 		endField:    endTime,
 	}
 
-	var response struct {
-		Success bool            `json:"success"`
-		Code    int             `json:"code"`
-		Message string          `json:"message"`
-		Data    json.RawMessage `json:"data"`
-	}
-	if err := c.post(ctx, c.orderURL, accessToken, payload, &response); err != nil {
-		return nil, false, err
-	}
-	if !response.Success {
-		return nil, false, fmt.Errorf("youzan distribution order API failed: code=%d message=%s", response.Code, response.Message)
+	responseData, err := c.post(ctx, c.orderURL, accessToken, payload)
+	if err != nil {
+		return nil, false, fmt.Errorf("youzan distribution order API failed: %w", err)
 	}
 
 	var data struct {
@@ -77,7 +71,9 @@ func (c *DistributionClient) FetchOrderPage(ctx context.Context, accessToken str
 			HasNext *bool `json:"has_next"`
 		} `json:"paginator"`
 	}
-	if err := json.Unmarshal(response.Data, &data); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(responseData))
+	decoder.UseNumber()
+	if err := decoder.Decode(&data); err != nil {
 		return nil, false, fmt.Errorf("decode youzan distribution order data: %w", err)
 	}
 
@@ -111,20 +107,12 @@ func (c *DistributionClient) DecryptBatch(ctx context.Context, accessToken strin
 		return nil, fmt.Errorf("youzan decrypt batch exceeds %d items", maxDecryptBatchSize)
 	}
 
-	var response struct {
-		Success bool            `json:"success"`
-		Code    int             `json:"code"`
-		Message string          `json:"message"`
-		Data    json.RawMessage `json:"data"`
-	}
-	if err := c.post(ctx, c.decryptURL, accessToken, map[string]any{"sources": sources}, &response); err != nil {
-		return nil, err
-	}
-	if !response.Success {
-		return nil, fmt.Errorf("youzan nickname decrypt API failed: code=%d message=%s", response.Code, response.Message)
+	responseData, err := c.post(ctx, c.decryptURL, accessToken, map[string]any{"sources": sources})
+	if err != nil {
+		return nil, fmt.Errorf("youzan nickname decrypt API failed: %w", err)
 	}
 
-	values, err := parseDecryptValues(response.Data, sources)
+	values, err := parseDecryptValues(responseData, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +122,10 @@ func (c *DistributionClient) DecryptBatch(ctx context.Context, accessToken strin
 	return values, nil
 }
 
-func (c *DistributionClient) post(ctx context.Context, endpoint, accessToken string, payload any, target any) error {
+func (c *DistributionClient) post(ctx context.Context, endpoint, accessToken string, payload any) (json.RawMessage, error) {
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
-		return fmt.Errorf("invalid youzan endpoint: %w", err)
+		return nil, fmt.Errorf("invalid youzan endpoint: %w", err)
 	}
 	query := requestURL.Query()
 	query.Set("access_token", accessToken)
@@ -145,26 +133,20 @@ func (c *DistributionClient) post(ctx context.Context, endpoint, accessToken str
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("encode youzan request: %w", err)
+		return nil, fmt.Errorf("encode youzan request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create youzan request: %w", err)
+		return nil, fmt.Errorf("create youzan request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send youzan request: %s", redactAccessToken(err.Error(), accessToken))
+		return nil, fmt.Errorf("send youzan request: %s", providerhttp.RedactText(err.Error(), accessToken))
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("youzan request returned HTTP %d", resp.StatusCode)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-		return fmt.Errorf("decode youzan response: %w", err)
-	}
-	return nil
+	return decodeAPIResponse(resp, accessToken)
 }
 
 func parseDecryptValues(data json.RawMessage, sources []string) ([]string, error) {
@@ -225,11 +207,4 @@ func firstString(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func redactAccessToken(message, token string) string {
-	if token == "" {
-		return message
-	}
-	return strings.ReplaceAll(message, token, "[REDACTED]")
 }
