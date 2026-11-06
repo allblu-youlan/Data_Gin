@@ -168,6 +168,7 @@ func performOpenTmallControllerRequest(service OpenTmallQueryService, path, body
 		c.Next()
 	})
 	controller := NewOpenTmallControllerWithService(service)
+	router.POST("/api/open/tmall/orders/realtime/query", controller.QueryOrdersRealtime)
 	router.POST("/api/open/tmall/sycm/query", controller.QuerySycm)
 	router.POST("/api/open/tmall/qztg/query", controller.QueryQztg)
 	router.POST("/api/open/tmall/tot/query", controller.QueryTot)

@@ -63,6 +63,8 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 		permission = model.PermissionTmallSycmRead
 	case reportoracle.TmallQztg, reportoracle.TmallQztgHourly:
 		permission = model.PermissionTmallQztgRead
+	case reportoracle.TmallOrders:
+		permission = model.PermissionTmallOrdersRead
 	case reportoracle.TmallTot:
 		permission = model.PermissionTmallTotRead
 	default:
@@ -84,6 +86,7 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	}
 	query, err := reportoracle.NormalizeTmallQuery(dataset, reportoracle.TmallQuery{
 		StartDate: request.StartDate, EndDate: request.EndDate, BatchNo: request.BatchNo, Filters: request.Filters,
+		StartTime: request.StartTime, EndTime: request.EndTime, TimeField: request.TimeField,
 		Offset: (pagination.Page - 1) * pagination.PageSize, PageSize: pagination.PageSize,
 	})
 	if err != nil {
@@ -101,6 +104,9 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	}
 	if rows == nil {
 		rows = []reportoracle.TmallRow{}
+	}
+	for _, row := range rows {
+		delete(row, "ITEM_NO")
 	}
 	return &OpenTmallQueryDTO{Items: rows, Pagination: pagination}, nil
 }

@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "天猫数据开放接口",
-    "version": "1.1.0",
-    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广两个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋比率以百分数原值存储（4.32表示4.32%）。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。所有接口成功响应data仅包含items和pagination；字段含义、Oracle类型等信息见本文档字段定义，不在响应中重复返回。小时接口BATCH_NO采用数据所属整点的业务定义。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。"
+    "version": "1.2.0",
+    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广两个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋比率以百分数原值存储（4.32表示4.32%）。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。所有接口成功响应data仅包含items和pagination；字段含义、Oracle类型等信息见本文档字段定义，不在响应中重复返回。小时接口BATCH_NO采用数据所属整点的业务定义。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。 所有天猫接口的items不返回ITEM_NO，原有ITEM_NO精确筛选继续支持。新增天猫订单商品明细实时查询，默认按created、可选modified查询半开时间区间，最多31天；仅返回指定18字段，不返回ID、ETL_PLATFORM_JSON_ID。"
   },
   "servers": [
     {
@@ -508,6 +508,81 @@
           }
         }
       }
+    },
+    "/open/tmall/orders/realtime/query": {
+      "post": {
+        "tags": [
+          "天猫"
+        ],
+        "summary": "天猫订单商品明细表-实时维度查询",
+        "operationId": "queryTmallOrdersRealtime",
+        "description": "只读查询 YL_DBS.DWD_TF_TM_ORDERS，返回指定18个字段，不返回ID、ETL_PLATFORM_JSON_ID、columns。需要独立权限tmall.orders.read。默认created，可选modified；startTime包含、endTime不含，最多31天。每页默认50、最大100，最多1000页；10秒超时，不执行COUNT。复用认证前IP限流300次/分钟及认证后用户路由限流30次/分钟。仅接收application/json请求体，拒绝URL查询参数、未知字段与多个JSON值。时间筛选的NULL值不匹配，输出其他NULL仍保留。",
+        "x-required-permission": "tmall.orders.read",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrdersQueryRequest"
+              },
+              "examples": {
+                "created": {
+                  "summary": "按创建时间查询",
+                  "value": {
+                    "startTime": "2026-11-06 00:00:00",
+                    "endTime": "2026-11-07 00:00:00",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "modified": {
+                  "summary": "按修改时间拉取增量",
+                  "value": {
+                    "startTime": "2026-11-06 13:00:00",
+                    "endTime": "2026-11-06 14:00:00",
+                    "timeField": "modified",
+                    "filters": {
+                      "STATUS": "TRADE_FINISHED"
+                    },
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；所有数值和ID保持字符串精度，NULL保留。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrdersQueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidQuery"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -680,7 +755,6 @@
           "PAY_DATE",
           "PRODUCT_NAME",
           "PRODUCT_ID",
-          "ITEM_NO",
           "PRODUCT_STATUS",
           "VISITOR_CNT",
           "PV_CNT",
@@ -749,14 +823,6 @@
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 100,
             "x-oracle-comment": "商品ID"
-          },
-          "ITEM_NO": {
-            "type": "string",
-            "nullable": true,
-            "description": "货号",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "货号"
           },
           "PRODUCT_STATUS": {
             "type": "string",
@@ -2438,7 +2504,6 @@
           "ORDER_CNT_GROUP",
           "LAUNCH_WAVE",
           "STOCK_STATUS",
-          "ITEM_NO",
           "CATEGORY",
           "CAT_NAME",
           "SERIES",
@@ -2547,14 +2612,6 @@
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
             "x-oracle-comment": "到仓状态"
-          },
-          "ITEM_NO": {
-            "type": "string",
-            "nullable": true,
-            "description": "货号",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "货号"
           },
           "CATEGORY": {
             "type": "string",
@@ -4518,6 +4575,308 @@
           },
           "data": {
             "$ref": "#/components/schemas/SycmHourlyQueryData"
+          }
+        }
+      },
+      "OrdersFilters": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "可选精确维度筛选，字段名使用大写Oracle列名，全部值传字符串。",
+        "properties": {
+          "TID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "description": "主订单编号；去除首尾空白后等值匹配。"
+          },
+          "STATUS": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "订单状态；去除首尾空白后等值匹配。"
+          },
+          "OID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "子订单编号；去除首尾空白后等值匹配。"
+          },
+          "OUTER_SKU_ID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "商家编码；去除首尾空白后等值匹配。"
+          },
+          "NUM_IID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 18,
+            "description": "商品ID；去除首尾空白后等值匹配。",
+            "pattern": "^[0-9]{1,18}$"
+          },
+          "ITEM_STATUS": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "订单明细状态；去除首尾空白后等值匹配。"
+          },
+          "IS_COMBINE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "description": "是否组合装商品拆分；去除首尾空白后等值匹配。"
+          },
+          "SKU_8": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "前八位货号；去除首尾空白后等值匹配。"
+          }
+        }
+      },
+      "OrdersRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "TID",
+          "CREATED",
+          "PAY_TIME",
+          "STATUS",
+          "OID",
+          "TITLE",
+          "PRICE",
+          "NUM",
+          "OUTER_SKU_ID",
+          "TOTAL_FEE",
+          "NUM_IID",
+          "ITEM_STATUS",
+          "IS_COMBINE",
+          "SKU_8",
+          "CREATED_DWD",
+          "MODIFIED_DWD",
+          "MODIFIED",
+          "PAYMENT"
+        ],
+        "properties": {
+          "TID": {
+            "type": "string",
+            "nullable": true,
+            "description": "主订单编号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 32
+          },
+          "CREATED": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单创建时间，YYYY-MM-DD HH:mm:ss；数据库本地时间。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7
+          },
+          "PAY_TIME": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单付款时间，YYYY-MM-DD HH:mm:ss；数据库本地时间。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7
+          },
+          "STATUS": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单状态",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 64
+          },
+          "OID": {
+            "type": "string",
+            "nullable": true,
+            "description": "子订单编号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 80
+          },
+          "TITLE": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品标题",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 512
+          },
+          "PRICE": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品价格",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22
+          },
+          "NUM": {
+            "type": "string",
+            "nullable": true,
+            "description": "购买数量",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22
+          },
+          "OUTER_SKU_ID": {
+            "type": "string",
+            "nullable": true,
+            "description": "商家编码",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200
+          },
+          "TOTAL_FEE": {
+            "type": "string",
+            "nullable": true,
+            "description": "买家应付货款",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22
+          },
+          "NUM_IID": {
+            "type": "string",
+            "nullable": true,
+            "description": "商品ID",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22
+          },
+          "ITEM_STATUS": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单明细状态",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 64
+          },
+          "IS_COMBINE": {
+            "type": "string",
+            "nullable": true,
+            "description": "是否组合装商品拆分",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 20
+          },
+          "SKU_8": {
+            "type": "string",
+            "nullable": true,
+            "description": "前八位货号",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-data-length": 200
+          },
+          "CREATED_DWD": {
+            "type": "string",
+            "nullable": true,
+            "description": "表创建时间，YYYY-MM-DD HH:mm:ss；数据库本地时间。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7
+          },
+          "MODIFIED_DWD": {
+            "type": "string",
+            "nullable": true,
+            "description": "表修改时间，YYYY-MM-DD HH:mm:ss；数据库本地时间。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7
+          },
+          "MODIFIED": {
+            "type": "string",
+            "nullable": true,
+            "description": "订单修改时间，YYYY-MM-DD HH:mm:ss；数据库本地时间。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-data-length": 7
+          },
+          "PAYMENT": {
+            "type": "string",
+            "nullable": true,
+            "description": "买家实付金额",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22
+          }
+        }
+      },
+      "OrdersQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "startTime",
+          "endTime"
+        ],
+        "properties": {
+          "startTime": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "description": "起始时间（包含），YYYY-MM-DD HH:mm:ss，使用数据库本地时间。",
+            "example": "2026-11-06 00:00:00"
+          },
+          "endTime": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+            "description": "结束时间（不含），须晚于startTime，范围最多31天。",
+            "example": "2026-11-07 00:00:00"
+          },
+          "timeField": {
+            "type": "string",
+            "enum": [
+              "created",
+              "modified"
+            ],
+            "default": "created",
+            "description": "默认订单创建时间；modified按订单修改时间筛选，可用于增量拉取。"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/OrdersFilters"
+          },
+          "page": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "页码，省略或null时为1。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "每页条数，省略或null时为50。"
+          }
+        }
+      },
+      "OrdersQueryData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/OrdersRow"
+            },
+            "description": "当前源表明细，不聚合、不缓存。按所选时间字段、内部ID升序分页；空数据返回[]。实时表分页期间可能变化，增量同步建议固定时间窗口并由调用方去重。"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "OrdersQueryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/OrdersQueryData"
           }
         }
       }

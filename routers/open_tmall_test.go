@@ -40,6 +40,7 @@ func TestOpenTmallRoutesRequireTheirOwnPermission(t *testing.T) {
 		dataset          reportoracle.TmallDataset
 	}{
 		{"sycm", model.PermissionTmallSycmRead, reportoracle.TmallSycm},
+		{"orders/realtime", "tmall.orders.read", reportoracle.TmallDataset("orders")},
 		{"qztg", model.PermissionTmallQztgRead, reportoracle.TmallQztg},
 		{"tot", model.PermissionTmallTotRead, reportoracle.TmallTot},
 		{"sycm/hourly", model.PermissionTmallSycmRead, reportoracle.TmallDataset("sycm_hourly")},

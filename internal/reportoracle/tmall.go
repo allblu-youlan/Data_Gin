@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 type TmallDataset string
 
 const (
+	TmallOrders     TmallDataset = "orders"
 	TmallSycm       TmallDataset = "sycm"
 	TmallQztg       TmallDataset = "qztg"
 	TmallTot        TmallDataset = "tot"
@@ -22,6 +24,9 @@ const (
 )
 
 type TmallQuery struct {
+	StartTime string
+	EndTime   string
+	TimeField string
 	BatchNo   string
 	StartDate string
 	EndDate   string
@@ -62,7 +67,15 @@ func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, er
 	}
 	query.StartDate, query.EndDate = strings.TrimSpace(query.StartDate), strings.TrimSpace(query.EndDate)
 	query.BatchNo = strings.TrimSpace(query.BatchNo)
-	if dataset == TmallQztgHourly || dataset == TmallSycmHourly {
+	if dataset == TmallOrders {
+		var err error
+		query, err = normalizeTmallOrdersTime(query)
+		if err != nil {
+			return TmallQuery{}, err
+		}
+	} else if query.StartTime != "" || query.EndTime != "" || query.TimeField != "" {
+		return TmallQuery{}, fmt.Errorf("time range is only supported for realtime orders")
+	} else if dataset == TmallQztgHourly || dataset == TmallSycmHourly {
 		if query.StartDate != "" || query.EndDate != "" {
 			return TmallQuery{}, fmt.Errorf("startDate and endDate are not supported for hourly tmall datasets")
 		}
@@ -95,6 +108,11 @@ func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, er
 		value = strings.TrimSpace(value)
 		if maxLength == 0 || value == "" || len(value) > maxLength {
 			return TmallQuery{}, fmt.Errorf("invalid tmall dimension filter %q", name)
+		}
+		if dataset == TmallOrders && name == "NUM_IID" {
+			if _, err := strconv.ParseUint(value, 10, 64); err != nil || len(value) > 18 {
+				return TmallQuery{}, fmt.Errorf("invalid numeric product ID")
+			}
 		}
 		filters[name] = value
 	}
@@ -159,7 +177,12 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a"
 	var arguments []any
 	orderBy := "a.ID"
-	if query.BatchNo != "" {
+	if query.TimeField != "" {
+		timeColumn := "a." + strings.ToUpper(query.TimeField)
+		statement += "\nWHERE " + timeColumn + " >= TO_DATE(:1, 'YYYY-MM-DD HH24:MI:SS') AND " + timeColumn + " < TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS')"
+		arguments = []any{query.StartTime, query.EndTime}
+		orderBy = timeColumn + ", a.ID"
+	} else if query.BatchNo != "" {
 		statement += "\nWHERE a.BATCH_NO = :1"
 		arguments = []any{query.BatchNo}
 	} else {

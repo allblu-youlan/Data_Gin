@@ -108,3 +108,53 @@ func TestOpenTmallQueryDeniesUnauthorizedAndClassifiesOutages(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenTmallQueryOmitsItemNoFromResponse(t *testing.T) {
+	for _, dataset := range []reportoracle.TmallDataset{
+		reportoracle.TmallSycm, reportoracle.TmallQztg, reportoracle.TmallTot,
+		reportoracle.TmallQztgHourly, reportoracle.TmallSycmHourly,
+	} {
+		t.Run(string(dataset), func(t *testing.T) {
+			id, itemNo := "9007199254740993", "A01"
+			request := requestbody.OpenTmallQueryRequest{StartDate: "2026-10-01", EndDate: "2026-10-01"}
+			if dataset == reportoracle.TmallQztgHourly || dataset == reportoracle.TmallSycmHourly {
+				request = requestbody.OpenTmallQueryRequest{BatchNo: "202611041300"}
+			}
+			if dataset == reportoracle.TmallSycm || dataset == reportoracle.TmallTot {
+				request.Filters = map[string]string{"ITEM_NO": itemNo}
+			}
+			originalColumns := reportoracle.TmallColumns(dataset)
+			service := newOpenTmallQueryService(
+				func(_ context.Context, _ reportoracle.TmallDataset, query reportoracle.TmallQuery) ([]reportoracle.TmallRow, error) {
+					if request.Filters != nil && query.Filters["ITEM_NO"] != itemNo {
+						t.Fatal("ITEM_NO filtering must remain supported")
+					}
+					return []reportoracle.TmallRow{
+						{"ID": &id, "ITEM_NO": &itemNo},
+						{"ID": &id, "ITEM_NO": nil},
+					}, nil
+				},
+				&tmallTestPermissions{allowed: true},
+				time.Now,
+			)
+			result, err := service.Query(t.Context(), 17, dataset, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Items) != 2 {
+				t.Fatalf("items=%+v", result.Items)
+			}
+			for _, item := range result.Items {
+				if _, exists := item["ITEM_NO"]; exists {
+					t.Error("ITEM_NO must not appear in response items, including NULL values")
+				}
+				if item["ID"] == nil || *item["ID"] != id {
+					t.Fatalf("other fields must be preserved: %+v", item)
+				}
+			}
+			if !reflect.DeepEqual(reportoracle.TmallColumns(dataset), originalColumns) {
+				t.Fatal("the internal report column catalog must remain unchanged")
+			}
+		})
+	}
+}

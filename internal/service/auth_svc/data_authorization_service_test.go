@@ -33,6 +33,8 @@ func TestNormalizeDataAuthorizationGrantEnforcesAllowlistAndExpiry(t *testing.T)
 		{name: "tmall sycm", permission: "tmall.sycm.read", permanent: true},
 		{name: "tmall qztg", permission: "tmall.qztg.read", expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "tmall tot", permission: "tmall.tot.read", permanent: true},
+		{name: "tmall orders", permission: "tmall.orders.read", permanent: true},
+		{name: "tmall orders expiring", permission: "tmall.orders.read", expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "permanent", permission: model.PermissionBojunOrderRead, permanent: true},
 		{name: "permanent conflicts with expiry", permission: model.PermissionWeatherRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), permanent: true, wantError: true},
 		{name: "non permanent requires expiry", permission: model.PermissionWeatherRead, wantError: true},
@@ -211,5 +213,8 @@ func TestPermissionDTOStates(t *testing.T) {
 	}
 	if got := permissionDTO(model.PermissionBusinessOverviewRead, nil, true, now); got.Label != "营业金额查询" || got.Status != "ACTIVE" {
 		t.Fatalf("business overview permission = %+v", got)
+	}
+	if got := permissionDTO("tmall.orders.read", nil, true, now); got.Label != "天猫订单商品明细查询" || got.Status != "ACTIVE" {
+		t.Fatalf("tmall orders permission = %+v", got)
 	}
 }

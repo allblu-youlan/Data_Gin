@@ -93,7 +93,7 @@ test('preserves independent store and stock grants including revoked and expired
 })
 
 test('preserves each tmall grant and its expiry state independently', () => {
-  const permissions = ['tmall.sycm.read', 'tmall.qztg.read', 'tmall.tot.read']
+  const permissions = ['tmall.sycm.read', 'tmall.qztg.read', 'tmall.tot.read', 'tmall.orders.read']
   for (const status of ['ACTIVE', 'EXPIRED', 'NOT_GRANTED']) {
     const parsed = parseDataAuthorizationAccounts({ data: { accounts: [{
       id: 12, account: 'tmall-partner', permissions: permissions.map((permission) => ({
@@ -101,6 +101,6 @@ test('preserves each tmall grant and its expiry state independently', () => {
       })),
     }] } })
     assert.deepEqual(parsed.accounts[0].permissions.map((grant) => grant.permission), permissions)
-    assert.deepEqual(parsed.accounts[0].permissions.map((grant) => grant.status), [status, status, status])
+    assert.deepEqual(parsed.accounts[0].permissions.map((grant) => grant.status), [status, status, status, status])
   }
 })

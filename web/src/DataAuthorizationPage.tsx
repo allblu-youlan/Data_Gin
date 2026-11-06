@@ -59,6 +59,7 @@ const permissionCatalog: Array<{ permission: DataPermissionCode; label: string; 
   { permission: 'tmall.sycm.read', label: '天猫生意参谋查询', description: '可查询天猫生意参谋商品订单数据。' },
   { permission: 'tmall.qztg.read', label: '天猫全站推广查询', description: '可查询天猫全站推广商品数据。' },
   { permission: 'tmall.tot.read', label: '天猫商品汇总查询', description: '可查询天猫商品汇总数据。' },
+  { permission: 'tmall.orders.read', label: '天猫订单商品明细查询', description: '可实时分页查询天猫订单商品明细数据。' },
 ]
 
 export function DataAuthorizationPage({ client }: { client: ApiClient }) {

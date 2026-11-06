@@ -105,3 +105,20 @@ func writeOpenTmallError(c *gin.Context, err error) {
 		responses.New(c).ToSafeErrorResponse(errcode.InternalServerError, "天猫查询服务暂时不可用")
 	}
 }
+
+// QueryOrdersRealtime 天猫订单商品明细表-实时维度查询。
+func (controller *OpenTmallController) QueryOrdersRealtime(c *gin.Context) {
+	if c.ContentType() != "application/json" || c.Request.URL.RawQuery != "" || c.Request.URL.ForceQuery {
+		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
+		return
+	}
+	var request *requestbody.OpenTmallOrdersQueryRequest
+	if err := decodeMallJSON(c, &request); err != nil || request == nil {
+		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
+		return
+	}
+	controller.executeQuery(c, reportoracle.TmallOrders, requestbody.OpenTmallQueryRequest{
+		StartTime: request.StartTime, EndTime: request.EndTime, TimeField: request.TimeField,
+		Filters: request.Filters, Page: request.Page, PageSize: request.PageSize,
+	})
+}

@@ -28,6 +28,7 @@ func registerOpenTmallRoutesWithLimiters(
 	group := api.Group("/open/tmall")
 	group.Use(preAuthLimiter, middleware.AuthOpenToken())
 	userRouteLimiter := newUserRouteLimiter("tmall", openTmallUserRouteRateLimit)
+	group.POST("/orders/realtime/query", middleware.RequirePermission(model.PermissionTmallOrdersRead), userRouteLimiter, controller.QueryOrdersRealtime)
 	group.POST("/sycm/query", middleware.RequirePermission(model.PermissionTmallSycmRead), userRouteLimiter, controller.QuerySycm)
 	group.POST("/qztg/query", middleware.RequirePermission(model.PermissionTmallQztgRead), userRouteLimiter, controller.QueryQztg)
 	group.POST("/tot/query", middleware.RequirePermission(model.PermissionTmallTotRead), userRouteLimiter, controller.QueryTot)
