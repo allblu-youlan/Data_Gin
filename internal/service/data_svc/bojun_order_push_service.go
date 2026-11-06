@@ -3,6 +3,7 @@ package data_svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/app"
 	"gin-biz-web-api/pkg/orderpush"
+	"gin-biz-web-api/pkg/providerhttp"
 	"gin-biz-web-api/pkg/shanghaimall"
 
 	"github.com/google/uuid"
@@ -37,9 +39,11 @@ type deliveryLogCreator interface {
 }
 
 type BojunOrderPushService struct {
-	retailOrderDAO bojunRetailOrderSyncUpdater
-	logDAO         deliveryLogCreator
-	pipelineRunDAO pipelineRunRecorder
+	retailOrderDAO  bojunRetailOrderSyncUpdater
+	logDAO          deliveryLogCreator
+	pipelineRunDAO  pipelineRunRecorder
+	loginCircuit    providerhttp.ProviderCircuitBreaker
+	loginCircuitErr error
 }
 
 type bojunOrderPushTarget struct {
@@ -85,6 +89,9 @@ func (s *BojunOrderPushService) PushNewOrderWithPolicy(ctx context.Context, orde
 			Error:           statusErr,
 		}
 	}
+	if err := s.allowLogin(ctx, target); err != nil {
+		return bojunOrderPushResult{Target: target, Error: err}
+	}
 
 	traceID := uuid.NewString()
 	startedAt := time.Now()
@@ -102,6 +109,9 @@ func (s *BojunOrderPushService) PushNewOrderWithPolicy(ctx context.Context, orde
 	}
 
 	success, pushErr := s.pushToTarget(ctx, traceID, runID, order, target)
+	if err := s.reportLogin(ctx, target, pushErr); err != nil {
+		pushErr = errors.Join(pushErr, err)
+	}
 	status := "success"
 	successCount := 1
 	failedCount := 0

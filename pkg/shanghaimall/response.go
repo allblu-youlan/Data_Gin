@@ -27,6 +27,25 @@ type loginResponseError struct {
 	cause       error
 }
 
+// IsRetryableLoginFailure accepts only a login failure, optionally wrapped,
+// rather than a joined failure that may also require infrastructure recovery.
+func IsRetryableLoginFailure(err error) bool {
+	for err != nil {
+		if _, joined := err.(interface{ Unwrap() []error }); joined {
+			return false
+		}
+		if responseError, ok := err.(*loginResponseError); ok {
+			return responseError != nil && responseError.Retryable
+		}
+		wrapped, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		err = wrapped.Unwrap()
+	}
+	return false
+}
+
 func (err *loginResponseError) Error() string {
 	return fmt.Sprintf("%s login failed: stage=login class=%s http_status=%d content_type=%s reason=%s",
 		err.Provider, err.Class, err.HTTPStatus, err.ContentType, err.Reason)

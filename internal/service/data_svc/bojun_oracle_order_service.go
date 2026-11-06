@@ -16,6 +16,7 @@ import (
 	"gin-biz-web-api/internal/service/config_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/config"
+	"gin-biz-web-api/pkg/shanghaimall"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -28,6 +29,13 @@ const (
 	bojunOracleDefaultMaxPages  = 20
 	bojunOracleDefaultLeaseTTL  = 2 * time.Minute
 )
+
+// bojunRetryablePushError keeps a persisted login failure pending while other
+// orders in the bounded scan window can continue.
+type bojunRetryablePushError struct{ cause error }
+
+func (err *bojunRetryablePushError) Error() string { return err.cause.Error() }
+func (err *bojunRetryablePushError) Unwrap() error { return err.cause }
 
 type bojunOracleDatasourceStore interface {
 	FindEnabledReportDatasourceByCode(context.Context, string) (*model.ReportDatasource, error)
@@ -90,6 +98,7 @@ type BojunOracleOrderService struct {
 	rawDataDAO              rawDataCreator
 	retailOrderDAO          bojunOracleRetailOrderStore
 	pushService             bojunOrderPusher
+	incrementalPushService  bojunOrderPusher
 	skipPolicy              orderPushSkipConfigGetter
 	now                     func() time.Time
 	newLeaseToken           func() string
@@ -106,13 +115,14 @@ func NewBojunOracleOrderService() *BojunOracleOrderService {
 		openOracle: func(ctx context.Context, oracleConfig reportoracle.Config) (bojunOracleConnection, error) {
 			return reportoracle.Open(ctx, oracleConfig)
 		},
-		stateStore:     data_dao.NewBojunOracleSyncStateDAO(),
-		rawDataDAO:     data_dao.NewRawDataDAO(),
-		retailOrderDAO: data_dao.NewBojunRetailOrderDAO(),
-		pushService:    NewBojunOrderPushService(),
-		skipPolicy:     config_svc.NewOrderPushSkipConfigService(),
-		now:            time.Now,
-		newLeaseToken:  uuid.NewString,
+		stateStore:             data_dao.NewBojunOracleSyncStateDAO(),
+		rawDataDAO:             data_dao.NewRawDataDAO(),
+		retailOrderDAO:         data_dao.NewBojunRetailOrderDAO(),
+		pushService:            NewBojunOrderPushService(),
+		incrementalPushService: newBojunOracleOrderPushService(),
+		skipPolicy:             config_svc.NewOrderPushSkipConfigService(),
+		now:                    time.Now,
+		newLeaseToken:          uuid.NewString,
 		batchSize: positiveBojunInt(
 			bojunEnvInt("BOJUN_ORACLE_BATCH_SIZE", config.GetInt("Bojun.OracleBatchSize", bojunOracleDefaultBatchSize)),
 			bojunOracleDefaultBatchSize,
@@ -137,6 +147,11 @@ func NewBojunOracleOrderService() *BojunOracleOrderService {
 }
 
 func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (result *BojunOrderSyncResult, resultErr error) {
+	if service.incrementalPushService != nil {
+		incremental := *service
+		incremental.pushService = service.incrementalPushService
+		service = &incremental
+	}
 	result = &BojunOrderSyncResult{PageSize: service.batchSize, MaxPages: service.maxPages}
 	connection, datasource, err := service.open(ctx)
 	if err != nil {
@@ -208,15 +223,17 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		return result, err
 	}
 	watermark := state.LastRetailID
+	scanAfter := watermark
+	var pendingErrors []error
 	for page := 1; page <= service.maxPages; page++ {
 		if err := ctx.Err(); err != nil {
-			return result, err
+			return result, errors.Join(append(pendingErrors, err)...)
 		}
 		queryCtx, cancel := reportOracleQueryContext(ctx, *datasource)
-		rows, queryErr := connection.QueryBojunRetailAfterID(queryCtx, watermark, service.batchSize)
+		rows, queryErr := connection.QueryBojunRetailAfterID(queryCtx, scanAfter, service.batchSize)
 		cancel()
 		if queryErr != nil {
-			return result, queryErr
+			return result, errors.Join(append(pendingErrors, queryErr)...)
 		}
 		result.FetchPages++
 		if len(rows) == 0 {
@@ -224,37 +241,52 @@ func (service *BojunOracleOrderService) SyncIncremental(ctx context.Context) (re
 		}
 		pageService := service.withPageOrderLookup(ctx, rows)
 		for _, row := range rows {
+			if err := ctx.Err(); err != nil {
+				return result, errors.Join(append(pendingErrors, err)...)
+			}
 			now := service.now()
 			if !now.Before(leaseRefreshedAt.Add(service.leaseTTL / 3)) {
 				if err := service.stateStore.RenewLease(
 					ctx, bojunOracleDatasourceCode, token, now, service.leaseTTL,
 				); err != nil {
-					return result, err
+					return result, errors.Join(append(pendingErrors, err)...)
 				}
 				leaseRefreshedAt = now
 			}
 			if err := pageService.processRow(
 				ctx, connection, row, page, true, bojunOracleExistingOrderSync, result, pushSkipConfig,
 			); err != nil {
-				return result, err
+				switch err.(type) {
+				case *bojunRetryablePushError, *bojunLoginDeferredError:
+					pendingErrors = append(pendingErrors, err)
+				default:
+					return result, errors.Join(append(pendingErrors, err)...)
+				}
 			}
 		}
-		nextWatermark := rows[len(rows)-1].RetailID
-		advancedAt := service.now()
-		if err := service.stateStore.Advance(
-			ctx, bojunOracleDatasourceCode, token, watermark, nextWatermark, advancedAt, service.leaseTTL,
-		); err != nil {
-			return result, err
+		scanAfter = rows[len(rows)-1].RetailID
+		// Persist only complete pages before the first pending order. Later pages
+		// may finish, but must remain reachable when the login service recovers.
+		if len(pendingErrors) == 0 {
+			advancedAt := service.now()
+			if err := service.stateStore.Advance(
+				ctx, bojunOracleDatasourceCode, token, watermark, scanAfter, advancedAt, service.leaseTTL,
+			); err != nil {
+				return result, err
+			}
+			leaseRefreshedAt = advancedAt
+			watermark = scanAfter
+			result.WatermarkAfter = watermark
 		}
-		leaseRefreshedAt = advancedAt
-		watermark = nextWatermark
-		result.WatermarkAfter = watermark
 		if len(rows) < service.batchSize {
 			break
 		}
 	}
 	result.SourceCaughtUp = result.WatermarkAfter >= sourceHead
 	result.WindowExhausted = result.SourceCaughtUp
+	if len(pendingErrors) > 0 {
+		return result, errors.Join(pendingErrors...)
+	}
 	if !result.SourceCaughtUp {
 		return result, fmt.Errorf("bojun Oracle sync stopped before reaching source head")
 	}
@@ -672,6 +704,9 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 		policy = pushSkipConfig.PolicyForTarget(target.Code)
 	}
 	pushResult := service.pushService.PushNewOrderWithPolicy(ctx, order, result.nextPushPosition(), policy)
+	if _, deferred := pushResult.Error.(*bojunLoginDeferredError); deferred {
+		return pushResult.Error
+	}
 	if pushResult.Skipped && !pushResult.Success {
 		result.SkippedCount++
 		return nil
@@ -688,11 +723,15 @@ func (service *BojunOracleOrderService) pushAndWriteBack(
 			statusErr = service.retailOrderDAO.UpdateSyncStatus(ctx, order.ID, 2)
 		}
 		writeBackErr := connection.UpdateBojunRetailPushStatus(ctx, row.RetailID, false, pushDate)
-		return errors.Join(
+		failure := errors.Join(
 			fmt.Errorf("push bojun Oracle retail order %s: %w", order.DocNo, pushErr),
 			statusErr,
 			writeBackErr,
 		)
+		if shanghaimall.IsRetryableLoginFailure(pushErr) && statusErr == nil && writeBackErr == nil {
+			return &bojunRetryablePushError{cause: failure}
+		}
+		return failure
 	}
 	if err := connection.UpdateBojunRetailPushStatus(ctx, row.RetailID, true, pushDate); err != nil {
 		result.FailedCount++

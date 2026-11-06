@@ -16,6 +16,11 @@ var defaultClientCache struct {
 	client    *http.Client
 }
 
+// RequestTimeout is the timeout used by each mall HTTP request.
+func RequestTimeout() time.Duration {
+	return defaultClient().Timeout
+}
+
 func defaultClient() *http.Client {
 	timeoutSeconds := envInt("SHANGHAI_MALL_TIMEOUT_SECONDS", config.GetInt("ShanghaiMall.TimeoutSeconds", 10))
 	if timeoutSeconds <= 0 {

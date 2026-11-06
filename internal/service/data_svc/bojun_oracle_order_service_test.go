@@ -160,6 +160,7 @@ func (store *fakeBojunOracleRetailStore) CreateIfNotExists(_ context.Context, or
 		store.nextID = 101
 	}
 	order.ID = store.nextID
+	store.nextID++
 	copyOrder := *order
 	store.orders[order.DocNo] = &copyOrder
 	return true, nil

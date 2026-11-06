@@ -42,7 +42,7 @@ func TestBojunOracleKerryLoginFailurePreservesStatusAndWatermark(t *testing.T) {
 	statusTime := time.Date(2026, 11, 6, 16, 43, 28, 0, time.Local)
 	connection := &fakeBojunOracleConnection{maxID: 12, rows: []reportoracle.BojunRetailRow{
 		{RetailID: 11, DocNo: failedDocNo, StoreCode: "ABCN001A004", StatusTime: statusTime, PaidAmount: 88, PushAmount: 88, IsToShop: "Y"},
-		{RetailID: 12, DocNo: "KERRY-NEXT-12", StoreCode: "ABCN001A004", StatusTime: statusTime, PaidAmount: 99, PushAmount: 99, IsToShop: "Y"},
+		{RetailID: 12, DocNo: "KERRY-NEXT-12", StoreCode: "ABCN001A004", StatusTime: statusTime, PaidAmount: 99, PushAmount: 99, IsToShop: "N"},
 	}}
 	state := &fakeBojunOracleStateStore{
 		state:         model.BojunOracleSyncState{SourceCode: bojunOracleDatasourceCode, LastRetailID: 10, Initialized: true},
@@ -66,7 +66,7 @@ func TestBojunOracleKerryLoginFailurePreservesStatusAndWatermark(t *testing.T) {
 	if loginCalls.Load() != 1 || salesCalls.Load() != 0 {
 		t.Errorf("HTTP calls login=%d sales=%d, want 1 and 0", loginCalls.Load(), salesCalls.Load())
 	}
-	if result.FailedCount != 1 || result.WatermarkAfter != 10 || state.advancedTo != 0 || store.orders["KERRY-NEXT-12"] != nil {
+	if result.FailedCount != 1 || result.TotalCount != 2 || result.WatermarkAfter != 10 || state.advancedTo != 0 || store.orders["KERRY-NEXT-12"] == nil {
 		t.Errorf("failed login advanced past the order: result=%+v watermark=%d", result, state.advancedTo)
 	}
 	order := store.orders[failedDocNo]
