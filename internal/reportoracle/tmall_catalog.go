@@ -3,6 +3,26 @@ package reportoracle
 // Fixed projections and comments verified from Oracle YL_DBS metadata.
 // Only dimension columns are accepted as exact-match filters.
 var tmallTables = map[TmallDataset]tmallTable{
+	TmallOrders: {name: "YL_DBS.DWD_TF_TM_ORDERS", columns: []TmallColumn{
+		{Name: "TID", Comment: "主订单编号", DataType: "VARCHAR2", Length: 32, Nullable: true, Filterable: true},
+		{Name: "CREATED", Comment: "订单创建时间", DataType: "DATE", Length: 7, Nullable: true, Filterable: false},
+		{Name: "PAY_TIME", Comment: "订单付款时间", DataType: "DATE", Length: 7, Nullable: true, Filterable: false},
+		{Name: "STATUS", Comment: "订单状态", DataType: "VARCHAR2", Length: 64, Nullable: true, Filterable: true},
+		{Name: "OID", Comment: "子订单编号", DataType: "VARCHAR2", Length: 80, Nullable: true, Filterable: true},
+		{Name: "TITLE", Comment: "商品标题", DataType: "VARCHAR2", Length: 512, Nullable: true, Filterable: false},
+		{Name: "PRICE", Comment: "商品价格", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: false},
+		{Name: "NUM", Comment: "购买数量", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: false},
+		{Name: "OUTER_SKU_ID", Comment: "商家编码", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
+		{Name: "TOTAL_FEE", Comment: "买家应付货款", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: false},
+		{Name: "NUM_IID", Comment: "商品ID", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: true},
+		{Name: "ITEM_STATUS", Comment: "订单明细状态", DataType: "VARCHAR2", Length: 64, Nullable: true, Filterable: true},
+		{Name: "IS_COMBINE", Comment: "是否组合装商品拆分", DataType: "VARCHAR2", Length: 20, Nullable: true, Filterable: true},
+		{Name: "SKU_8", Comment: "前八位货号", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: true},
+		{Name: "CREATED_DWD", Comment: "表创建时间", DataType: "DATE", Length: 7, Nullable: true, Filterable: false},
+		{Name: "MODIFIED_DWD", Comment: "表修改时间", DataType: "DATE", Length: 7, Nullable: true, Filterable: false},
+		{Name: "MODIFIED", Comment: "订单修改时间", DataType: "DATE", Length: 7, Nullable: true, Filterable: false},
+		{Name: "PAYMENT", Comment: "买家实付金额", DataType: "NUMBER", Length: 22, Nullable: true, Filterable: false},
+	}},
 	TmallSycm: {name: "YL_DBS.ODS_TM_SYCM_PRODUCTORDER", columns: []TmallColumn{
 		{Name: "ID", Comment: "主键ID", DataType: "NUMBER", Length: 22, Nullable: false, Filterable: false},
 		{Name: "STAT_DATE", Comment: "统计日期", DataType: "VARCHAR2", Length: 200, Nullable: true, Filterable: false},
