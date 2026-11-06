@@ -139,7 +139,7 @@ func TestOutboxDispatcherDispatchOncePublishesTask(t *testing.T) {
 		t.Fatalf("published task = %q %s", call.taskType, call.payload)
 	}
 	if call.options.TaskID != "weather:full:123:2026071710" || call.options.Queue != MallWeatherQueueName ||
-		call.options.MaxRetry != 2 || call.options.Timeout != 5*time.Minute {
+		call.options.MaxRetry != 3 || call.options.Timeout != 5*time.Minute {
 		t.Fatalf("publish options = %+v", call.options)
 	}
 	if len(store.published) != 1 || store.published[0].id != 1 || !store.published[0].publishedAt.Equal(now) {
@@ -147,6 +147,21 @@ func TestOutboxDispatcherDispatchOncePublishesTask(t *testing.T) {
 	}
 	if len(store.failed) != 0 {
 		t.Fatalf("failed rows = %+v", store.failed)
+	}
+}
+
+func TestWeatherFetchTasksReserveRetrySlotForCircuitDeferral(t *testing.T) {
+	for _, definition := range MallWeatherOutboxTaskDefinitions(2, 5*time.Minute) {
+		t.Run(definition.TaskType, func(t *testing.T) {
+			wantMaxRetry := 2
+			switch definition.TaskType {
+			case TypeMallWeatherFast, TypeMallWeatherFull, TypeMallWeatherLifeIndex, TypeMallWeatherRepair, TypeMallWeatherManual:
+				wantMaxRetry = 3
+			}
+			if definition.MaxRetry != wantMaxRetry {
+				t.Fatalf("MaxRetry = %d, want %d", definition.MaxRetry, wantMaxRetry)
+			}
+		})
 	}
 }
 

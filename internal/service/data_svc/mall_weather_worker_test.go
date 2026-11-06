@@ -712,6 +712,7 @@ func newFakeMallWeatherTaskStore(disposition data_dao.FetchAttemptDisposition) *
 		},
 		Run: model.MallWeatherFetchRun{
 			BaseModel: model.BaseModel{ID: 17}, MallID: 7, AttemptCount: 1, Status: "running",
+			WeatherTimestamps: model.WeatherTimestamps{CreatedAt: time.Date(2026, 7, 22, 3, 0, 0, 0, time.UTC)},
 		},
 		Attempt: model.MallWeatherFetchAttempt{
 			BaseModel: model.BaseModel{ID: 23}, FetchRunID: 17, AttemptNo: 1, Status: "running",

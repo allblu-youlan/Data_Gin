@@ -69,11 +69,26 @@ func logTaskError(ctx context.Context, task *asynq.Task, err error) {
 		logger.Error("Asynq task failed", fields...)
 		return
 	}
+	if IsTaskDeferred(err) {
+		fields = append(fields, zap.Float64("retry_delay_seconds", retryDelay(retryCount, err, task).Seconds()))
+		logger.Info("Asynq task deferred", fields...)
+		return
+	}
 	logger.Warn("Asynq task will retry", fields...)
 }
 
 func isTaskFailure(err error) bool {
-	return err != nil && !errors.Is(err, database.ErrUnavailable)
+	return err != nil && !errors.Is(err, database.ErrUnavailable) && !IsTaskDeferred(err)
+}
+
+// IsTaskDeferred identifies bounded waits that must not consume a failure retry.
+// The task handler owns the wait deadline and must return a terminal error when it expires.
+func IsTaskDeferred(err error) bool {
+	if err == nil || errors.Is(err, asynq.SkipRetry) {
+		return false
+	}
+	var deferred interface{ TaskDeferred() bool }
+	return errors.As(err, &deferred) && deferred.TaskDeferred()
 }
 
 type retryDelayHint interface {

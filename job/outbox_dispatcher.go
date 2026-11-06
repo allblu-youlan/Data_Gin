@@ -175,11 +175,15 @@ func MallWeatherOutboxTaskDefinitions(maxRetry int, fetchTimeout time.Duration) 
 		currentTaskType := taskType
 		queue, _ := ExpectedMallWeatherQueue(currentTaskType)
 		timeout := time.Duration(0)
+		taskMaxRetry := maxRetry
 		if IsMallWeatherFetchTaskType(currentTaskType) {
 			timeout = fetchTimeout
+			// Asynq archives at MaxRetry before consulting IsFailure. Keep one
+			// slot for circuit deferrals; the handler enforces the failure budget.
+			taskMaxRetry++
 		}
 		definitions = append(definitions, OutboxTaskDefinition{
-			TaskType: currentTaskType, Queue: queue, MaxRetry: maxRetry, Timeout: timeout,
+			TaskType: currentTaskType, Queue: queue, MaxRetry: taskMaxRetry, Timeout: timeout,
 			Build: func(payload []byte) (*asynq.Task, error) { return NewMallWeatherTask(currentTaskType, payload) },
 		})
 	}

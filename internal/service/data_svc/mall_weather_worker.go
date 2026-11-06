@@ -26,6 +26,7 @@ const (
 	weatherFetchStatusPartialSuccess = "partial_success"
 	weatherParserVersionV26          = "caiyun-v26-v1"
 	weatherParserVersionLifeV3       = "caiyun-v3-lifeindex-v1"
+	mallWeatherCircuitWaitLimit      = 10 * time.Minute
 )
 
 var ErrMallWeatherAttemptSuperseded = errors.New("mall weather: fetch attempt superseded")
@@ -64,6 +65,10 @@ func (processError *MallWeatherProcessError) RetryDelay() time.Duration {
 		return 0
 	}
 	return processError.retryDelay
+}
+
+func (processError *MallWeatherProcessError) TaskDeferred() bool {
+	return processError != nil && processError.Retryable && processError.Code == "CIRCUIT_OPEN"
 }
 
 func (processError *MallWeatherProcessError) Unwrap() error {
@@ -239,11 +244,25 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 	}
 	if !allowed {
 		recordMallWeatherProviderCircuitOpen(processor.metrics, true)
-		return processor.finishFailure(ctx, execution, mallWeatherFailure{
+		finishedAt := processor.now().UTC()
+		remaining := execution.Run.CreatedAt.Add(mallWeatherCircuitWaitLimit).Sub(finishedAt)
+		deferred := !execution.Run.CreatedAt.IsZero() && remaining > 0
+		failure := mallWeatherFailure{
 			AttemptStatus: "provider_skipped", ErrorClass: "circuit_open", ErrorCode: "CIRCUIT_OPEN",
-			ErrorMessageSafe: "weather provider circuit is open", FinishedAt: processor.now().UTC(),
+			ErrorMessageSafe: "weather provider circuit is open", FinishedAt: finishedAt,
 			RetryAfter: retryAfter,
-		}, fmt.Errorf("weather provider circuit is open"), true)
+		}
+		if !deferred {
+			failure.ErrorCode = "CIRCUIT_WAIT_EXPIRED"
+			failure.ErrorMessageSafe = "weather provider circuit wait exceeded the task lifetime"
+		}
+		err := processor.finishFailure(ctx, execution, failure, fmt.Errorf("weather provider circuit is open"), deferred)
+		var processError *MallWeatherProcessError
+		if errors.As(err, &processError) && processError.TaskDeferred() {
+			// Keep the deadline fixed across attempts, including the queue rounding allowance.
+			processError.retryDelay = min(processError.retryDelay, remaining)
+		}
+		return err
 	}
 	recordMallWeatherProviderCircuitOpen(processor.metrics, false)
 	response, providerErr := processor.fetch(ctx, start, &execution.Mall)

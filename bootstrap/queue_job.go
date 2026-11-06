@@ -122,7 +122,7 @@ func setupQueueJob() {
 		if err != nil {
 			console.Exit("Mall Weather Worker Init Failed %v", err)
 		}
-		weatherHandler := newMallWeatherHandler(weatherProcessor, repairEnabled)
+		weatherHandler := newMallWeatherHandler(weatherProcessor, repairEnabled, config.GetInt("cfg.mall_weather.max_attempts"))
 		for _, taskType := range job.MallWeatherFetchTaskTypes() {
 			mux.HandleFunc(taskType, weatherHandler)
 		}
@@ -505,7 +505,7 @@ func newMallGeocodeHandler(processor mallGeocodeProcessor) asynq.HandlerFunc {
 	}
 }
 
-func newMallWeatherHandler(processor mallWeatherProcessor, repairEnabled bool) asynq.HandlerFunc {
+func newMallWeatherHandler(processor mallWeatherProcessor, repairEnabled bool, maxAttempts int) asynq.HandlerFunc {
 	return func(ctx context.Context, task *asynq.Task) error {
 		if processor == nil {
 			return fmt.Errorf("mall weather handler: processor is not configured")
@@ -525,12 +525,23 @@ func newMallWeatherHandler(processor mallWeatherProcessor, repairEnabled bool) a
 			var processError *data_svc.MallWeatherProcessError
 			if errors.As(err, &processError) && processError != nil && !processError.Retryable {
 				data_svc.RecordMallWeatherDeadLetterTask(task.Type(), data_svc.MallWeatherDeadLetterReasonPermanent)
-				return fmt.Errorf("%w: %v", asynq.SkipRetry, err)
+				return fmt.Errorf("%w: %w", asynq.SkipRetry, err)
 			}
-			return err
+			retryCount, _ := asynq.GetRetryCount(ctx)
+			return mallWeatherRetryResult(err, retryCount, maxAttempts)
 		}
 		return nil
 	}
+}
+
+func mallWeatherRetryResult(err error, retryCount, maxAttempts int) error {
+	if err == nil || errors.Is(err, database.ErrUnavailable) || jobPkg.IsTaskDeferred(err) {
+		return err
+	}
+	if retryCount >= max(maxAttempts, 1)-1 {
+		return fmt.Errorf("%w: %w", asynq.SkipRetry, err)
+	}
+	return err
 }
 
 func newMallWeatherScheduleHandler(planner mallWeatherSchedulePlanner) asynq.HandlerFunc {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"gin-biz-web-api/pkg/logger"
 
@@ -13,6 +14,28 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestDeferredTaskLoggingPreservesCooldown(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	previous := logger.Logger
+	logger.Logger = zap.New(core)
+	t.Cleanup(func() { logger.Logger = previous })
+	task := asynq.NewTask("mall:weather:fast", nil)
+	err := fmt.Errorf("weather: %w", deferredTaskError{deferred: true})
+	logTaskError(context.Background(), task, err)
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Level != zap.InfoLevel || entries[0].Message != "Asynq task deferred" {
+		t.Fatalf("cooldown logs = %+v, want one info deferral", entries)
+	}
+	if got := entries[0].ContextMap()["retry_delay_seconds"]; got != (61 * time.Second).Seconds() {
+		t.Fatalf("retry_delay_seconds = %v, want 61", got)
+	}
+	logTaskError(context.Background(), task, errors.Join(err, asynq.SkipRetry))
+	entries = logs.All()
+	if len(entries) != 2 || entries[1].Level != zap.ErrorLevel || entries[1].Message != "Asynq task failed" {
+		t.Fatalf("terminal cooldown logs = %+v, want failure", entries)
+	}
+}
 
 func TestTaskErrorLoggingPreservesCauseWithoutTaskPayload(t *testing.T) {
 	core, logs := observer.New(zap.ErrorLevel)
