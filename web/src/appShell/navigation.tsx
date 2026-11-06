@@ -29,6 +29,7 @@ export type NavKey =
   | 'business_overview'
   | 'sales_summary'
   | 'overview'
+  | 'etl_monitor'
   | 'runs'
   | 'delivery_logs'
   | 'step_runs'
@@ -83,6 +84,7 @@ export const navGroups: NavGroup[] = [
     label: '运行监控',
     items: [
       { key: 'overview', label: '运行总览', description: '运行与推送健康度', icon: <Activity aria-hidden="true" /> },
+      { key: 'etl_monitor', label: 'ETL 监控', description: '采集服务健康与运行指标', icon: <Activity aria-hidden="true" /> },
       { key: 'runs', label: '流水线运行', description: '按状态与 Trace 查询', icon: <ListChecks aria-hidden="true" /> },
       { key: 'delivery_logs', label: '推送日志', description: '按门店与业务键查询', icon: <Send aria-hidden="true" /> },
       { key: 'step_runs', label: '步骤运行', description: '选择运行查看步骤', icon: <BookOpen aria-hidden="true" /> },
@@ -169,7 +171,7 @@ const navItems = navGroups.flatMap((group) => group.items)
 const navKeys = navItems.map((item) => item.key)
 const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
-  'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'sales_summary', 'store_info',
+  'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'etl_monitor', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'sales_summary', 'store_info',
   'mall_weather', 'passenger_flow', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
   'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
   'office_messages', 'office_push', 'table_email_notifications',

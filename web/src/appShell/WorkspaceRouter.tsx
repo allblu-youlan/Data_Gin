@@ -33,6 +33,7 @@ const StoreInfoPage = lazy(() => import('../MallWeatherPage').then((module) => (
 const DeliveryLogsPage = lazy(() => import('../monitoringPages/DeliveryLogsPage/DeliveryLogsPage').then((module) => ({ default: module.DeliveryLogsPage })))
 const PipelineRunsPage = lazy(() => import('../monitoringPages/PipelineRunsPage/PipelineRunsPage').then((module) => ({ default: module.PipelineRunsPage })))
 const RunOverviewPage = lazy(() => import('../monitoringPages/RunOverviewPage/RunOverviewPage').then((module) => ({ default: module.RunOverviewPage })))
+const ETLMonitorPage = lazy(() => import('../monitoringPages/ETLMonitorPage/ETLMonitorPage').then((module) => ({ default: module.ETLMonitorPage })))
 const StepRunsPage = lazy(() => import('../monitoringPages/StepRunsPage/StepRunsPage').then((module) => ({ default: module.StepRunsPage })))
 const OfficeMentionPage = lazy(() => import('../officeMention/OfficeMentionPage').then((module) => ({ default: module.OfficeMentionPage })))
 const MessageManagementPage = lazy(() => import('../officeMessage/MessageManagementPage').then((module) => ({ default: module.MessageManagementPage })))
@@ -120,6 +121,7 @@ function WorkspacePage(props: WorkspaceRouterProps) {
     onNavigate={(target) => navigate(target === 'business-overview' ? 'business_overview' : target === 'store-info' ? 'store_info' : 'report_query')}
   />
   if (activeNav === 'overview') return <RunOverviewPage runs={runs} deliveryLogs={deliveryLogs} monitoring={monitoring} stale={monitoringStale} overviewTotals={overviewTotals} onLoadSteps={onLoadSteps} />
+  if (activeNav === 'etl_monitor') return <ETLMonitorPage client={client} refreshVersion={refreshVersion} />
   if (activeNav === 'runs') return <PipelineRunsPage client={client} pipelines={pipelines} onLoadSteps={onLoadSteps} onPipelineRunCompleted={() => void onRefresh()} refreshVersion={refreshVersion} />
   if (activeNav === 'delivery_logs') return <DeliveryLogsPage client={client} onRetryLog={onRetryDeliveryLog} />
   if (activeNav === 'step_runs') return <StepRunsPage client={client} focusRunID={stepRunFocusID} />

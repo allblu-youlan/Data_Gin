@@ -37,6 +37,8 @@ func RunServer() {
 	router := gin.New()
 	// 初始化路由绑定
 	setupRouter(router)
+	stopETLMonitor := setupETLMonitor(router)
+	defer stopETLMonitor()
 	// 运行服务器
 	srv := initServer(router)
 

@@ -21,6 +21,7 @@ interface ConsoleHeaderProps {
 const titles: Partial<Record<NavKey, { title: string; subtitle: string }>> = {
   business_overview: { title: '营业概况', subtitle: '查看销售日结、收款构成与门店对账记录。' },
   overview: { title: '运行总览', subtitle: '只看当前运行与交付健康度，快速定位失败。' },
+  etl_monitor: { title: 'ETL 监控', subtitle: '查看采集服务存活、就绪、吞吐与运行时指标。' },
   runs: { title: '流水线运行', subtitle: '按状态、运行类型和 Trace ID 查询执行记录。' },
   delivery_logs: { title: '推送日志', subtitle: '按成功状态、门店和业务键查询外部交付结果。' },
   step_runs: { title: '步骤运行', subtitle: '选择一次流水线运行并查看每个步骤的输入输出。' },
