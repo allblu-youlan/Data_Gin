@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "天猫数据开放接口",
-    "version": "1.1.0",
-    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广两个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋比率以百分数原值存储（4.32表示4.32%）。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。columns 通常保留原数据库列备注，无备注时为空字符串；小时接口 BATCH_NO 的备注采用数据所属整点的业务定义，SQL原备注另见字段的 x-oracle-comment。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。"
+    "version": "1.1.1",
+    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广两个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋比率以百分数原值存储（4.32表示4.32%）。返回字段保留 Oracle 原列名；所有字段值以字符串或 null 返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 保留为 null。Oracle DATE 列按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。columns 通常保留原数据库列备注，无备注时为空字符串；小时接口 BATCH_NO 的备注采用数据所属整点的业务定义，SQL原备注另见字段的 x-oracle-comment。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。 所有天猫接口的 items 和 columns 均不返回 ITEM_NO；原有 ITEM_NO 精确筛选能力保持可用。"
   },
   "servers": [
     {
@@ -603,7 +603,6 @@
           "STAT_DATE",
           "PRODUCT_NAME",
           "PRODUCT_ID",
-          "ITEM_NO",
           "PRODUCT_STATUS",
           "VISITOR_CNT",
           "PV_CNT",
@@ -671,14 +670,6 @@
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 100,
             "x-oracle-comment": "商品ID"
-          },
-          "ITEM_NO": {
-            "type": "string",
-            "nullable": true,
-            "description": "货号",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "货号"
           },
           "PRODUCT_STATUS": {
             "type": "string",
@@ -999,8 +990,8 @@
           },
           "columns": {
             "type": "array",
-            "minItems": 36,
-            "maxItems": 36,
+            "minItems": 35,
+            "maxItems": 35,
             "items": {
               "$ref": "#/components/schemas/Column"
             },
@@ -1035,14 +1026,6 @@
                 "comment": "商品ID",
                 "dataType": "VARCHAR2",
                 "length": 100,
-                "nullable": true,
-                "filterable": true
-              },
-              {
-                "name": "ITEM_NO",
-                "comment": "货号",
-                "dataType": "VARCHAR2",
-                "length": 200,
                 "nullable": true,
                 "filterable": true
               },
@@ -3373,7 +3356,6 @@
           "ORDER_CNT_GROUP",
           "LAUNCH_WAVE",
           "STOCK_STATUS",
-          "ITEM_NO",
           "CATEGORY",
           "CAT_NAME",
           "SERIES",
@@ -3479,14 +3461,6 @@
             "x-oracle-data-type": "VARCHAR2",
             "x-oracle-data-length": 200,
             "x-oracle-comment": "到仓状态"
-          },
-          "ITEM_NO": {
-            "type": "string",
-            "nullable": true,
-            "description": "货号",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 200,
-            "x-oracle-comment": "货号"
           },
           "CATEGORY": {
             "type": "string",
@@ -3687,8 +3661,8 @@
           },
           "columns": {
             "type": "array",
-            "minItems": 30,
-            "maxItems": 30,
+            "minItems": 29,
+            "maxItems": 29,
             "items": {
               "$ref": "#/components/schemas/Column"
             },
@@ -3769,14 +3743,6 @@
               {
                 "name": "STOCK_STATUS",
                 "comment": "到仓状态",
-                "dataType": "VARCHAR2",
-                "length": 200,
-                "nullable": true,
-                "filterable": true
-              },
-              {
-                "name": "ITEM_NO",
-                "comment": "货号",
                 "dataType": "VARCHAR2",
                 "length": 200,
                 "nullable": true,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
@@ -103,5 +104,11 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	if rows == nil {
 		rows = []reportoracle.TmallRow{}
 	}
-	return &OpenTmallQueryDTO{Items: rows, Columns: reportoracle.TmallColumns(dataset), Pagination: pagination}, nil
+	for _, row := range rows {
+		delete(row, "ITEM_NO")
+	}
+	columns := slices.DeleteFunc(reportoracle.TmallColumns(dataset), func(column reportoracle.TmallColumn) bool {
+		return column.Name == "ITEM_NO"
+	})
+	return &OpenTmallQueryDTO{Items: rows, Columns: columns, Pagination: pagination}, nil
 }
