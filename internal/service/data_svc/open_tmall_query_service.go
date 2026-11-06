@@ -60,9 +60,9 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	}
 	permission := ""
 	switch dataset {
-	case reportoracle.TmallSycm:
+	case reportoracle.TmallSycm, reportoracle.TmallSycmHourly:
 		permission = model.PermissionTmallSycmRead
-	case reportoracle.TmallQztg:
+	case reportoracle.TmallQztg, reportoracle.TmallQztgHourly:
 		permission = model.PermissionTmallQztgRead
 	case reportoracle.TmallTot:
 		permission = model.PermissionTmallTotRead
@@ -84,7 +84,7 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 		return nil, fmt.Errorf("%w: %w", ErrOpenTmallInvalidQuery, err)
 	}
 	query, err := reportoracle.NormalizeTmallQuery(dataset, reportoracle.TmallQuery{
-		StartDate: request.StartDate, EndDate: request.EndDate, Filters: request.Filters,
+		StartDate: request.StartDate, EndDate: request.EndDate, BatchNo: request.BatchNo, Filters: request.Filters,
 		Offset: (pagination.Page - 1) * pagination.PageSize, PageSize: pagination.PageSize,
 	})
 	if err != nil {

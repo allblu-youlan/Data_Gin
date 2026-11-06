@@ -46,6 +46,31 @@ func (controller *OpenTmallController) QueryTot(c *gin.Context) {
 	controller.query(c, reportoracle.TmallTot)
 }
 
+// QueryQztgHourly 天猫全站推广数据-小时维度查询。
+func (controller *OpenTmallController) QueryQztgHourly(c *gin.Context) {
+	controller.queryHourly(c, reportoracle.TmallQztgHourly)
+}
+
+// QuerySycmHourly 天猫生意参谋商品ID数据-小时维度查询。
+func (controller *OpenTmallController) QuerySycmHourly(c *gin.Context) {
+	controller.queryHourly(c, reportoracle.TmallSycmHourly)
+}
+
+func (controller *OpenTmallController) queryHourly(c *gin.Context, dataset reportoracle.TmallDataset) {
+	if c.ContentType() != "application/json" || c.Request.URL.RawQuery != "" || c.Request.URL.ForceQuery {
+		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
+		return
+	}
+	var request *requestbody.OpenTmallHourlyQueryRequest
+	if err := decodeMallJSON(c, &request); err != nil || request == nil {
+		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
+		return
+	}
+	controller.executeQuery(c, dataset, requestbody.OpenTmallQueryRequest{
+		BatchNo: request.BatchNo, Filters: request.Filters, Page: request.Page, PageSize: request.PageSize,
+	})
+}
+
 func (controller *OpenTmallController) query(c *gin.Context, dataset reportoracle.TmallDataset) {
 	if c.Request.URL.RawQuery != "" || c.Request.URL.ForceQuery {
 		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
@@ -56,7 +81,11 @@ func (controller *OpenTmallController) query(c *gin.Context, dataset reportoracl
 		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
 		return
 	}
-	result, err := controller.service.Query(c.Request.Context(), auth.CurrentUserID(c), dataset, *request)
+	controller.executeQuery(c, dataset, *request)
+}
+
+func (controller *OpenTmallController) executeQuery(c *gin.Context, dataset reportoracle.TmallDataset, request requestbody.OpenTmallQueryRequest) {
+	result, err := controller.service.Query(c.Request.Context(), auth.CurrentUserID(c), dataset, request)
 	if err != nil {
 		writeOpenTmallError(c, err)
 		return
