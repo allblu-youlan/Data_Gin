@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
@@ -30,9 +29,8 @@ type OpenTmallQueryService struct {
 }
 
 type OpenTmallQueryDTO struct {
-	Items      []reportoracle.TmallRow    `json:"items"`
-	Columns    []reportoracle.TmallColumn `json:"columns"`
-	Pagination OpenBojunQueryPagination   `json:"pagination"`
+	Items      []reportoracle.TmallRow  `json:"items"`
+	Pagination OpenBojunQueryPagination `json:"pagination"`
 }
 
 func NewOpenTmallQueryService() *OpenTmallQueryService {
@@ -65,6 +63,8 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 		permission = model.PermissionTmallSycmRead
 	case reportoracle.TmallQztg, reportoracle.TmallQztgHourly:
 		permission = model.PermissionTmallQztgRead
+	case reportoracle.TmallOrders:
+		permission = model.PermissionTmallOrdersRead
 	case reportoracle.TmallTot:
 		permission = model.PermissionTmallTotRead
 	default:
@@ -86,6 +86,7 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	}
 	query, err := reportoracle.NormalizeTmallQuery(dataset, reportoracle.TmallQuery{
 		StartDate: request.StartDate, EndDate: request.EndDate, BatchNo: request.BatchNo, Filters: request.Filters,
+		StartTime: request.StartTime, EndTime: request.EndTime, TimeField: request.TimeField,
 		Offset: (pagination.Page - 1) * pagination.PageSize, PageSize: pagination.PageSize,
 	})
 	if err != nil {
@@ -107,8 +108,5 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	for _, row := range rows {
 		delete(row, "ITEM_NO")
 	}
-	columns := slices.DeleteFunc(reportoracle.TmallColumns(dataset), func(column reportoracle.TmallColumn) bool {
-		return column.Name == "ITEM_NO"
-	})
-	return &OpenTmallQueryDTO{Items: rows, Columns: columns, Pagination: pagination}, nil
+	return &OpenTmallQueryDTO{Items: rows, Pagination: pagination}, nil
 }

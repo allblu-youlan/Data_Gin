@@ -39,7 +39,7 @@ func TestOpenTmallHourlyQueryAuthorizesAndPreservesBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if calls != 1 || permissions.permission != test.permission || len(result.Items) != 1 || len(result.Columns) != test.columns || result.Pagination != (OpenBojunQueryPagination{Page: 2, PageSize: 1, HasMore: true}) {
+			if calls != 1 || permissions.permission != test.permission || len(result.Items) != 1 || result.Pagination != (OpenBojunQueryPagination{Page: 2, PageSize: 1, HasMore: true}) {
 				t.Fatalf("permission=%s calls=%d result=%+v", permissions.permission, calls, result)
 			}
 		})

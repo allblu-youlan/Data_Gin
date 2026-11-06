@@ -36,7 +36,6 @@ func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, d
 	}
 	return &data_svc.OpenTmallQueryDTO{
 		Items:      []reportoracle.TmallRow{},
-		Columns:    []reportoracle.TmallColumn{},
 		Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50},
 	}, nil
 }
@@ -65,14 +64,13 @@ func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 				Code int `json:"code"`
 				Data struct {
 					Items      []json.RawMessage                 `json:"items"`
-					Columns    []json.RawMessage                 `json:"columns"`
 					Pagination data_svc.OpenBojunQueryPagination `json:"pagination"`
 				} `json:"data"`
 			}
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatal(err)
 			}
-			if response.Code != 0 || response.Data.Items == nil || response.Data.Columns == nil ||
+			if response.Code != 0 || response.Data.Items == nil || strings.Contains(recorder.Body.String(), `"columns"`) ||
 				response.Data.Pagination != (data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}) {
 				t.Fatalf("unexpected response envelope: %s", recorder.Body.String())
 			}
@@ -142,6 +140,7 @@ func performOpenTmallControllerRequest(service OpenTmallQueryService, path, body
 		c.Next()
 	})
 	controller := NewOpenTmallControllerWithService(service)
+	router.POST("/api/open/tmall/orders/realtime/query", controller.QueryOrdersRealtime)
 	router.POST("/api/open/tmall/sycm/query", controller.QuerySycm)
 	router.POST("/api/open/tmall/qztg/query", controller.QueryQztg)
 	router.POST("/api/open/tmall/tot/query", controller.QueryTot)

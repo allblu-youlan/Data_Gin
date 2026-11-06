@@ -34,7 +34,7 @@ func TestOpenTmallHourlyControllerMapsBatchAndPagination(t *testing.T) {
 			if response.Code != http.StatusOK || service.calls != 1 || service.actor != 17 || service.dataset != test.dataset || !reflect.DeepEqual(service.request, want) {
 				t.Fatalf("status=%d service=%+v body=%s", response.Code, service, response.Body.String())
 			}
-			if !strings.Contains(response.Body.String(), `"items":[]`) || !strings.Contains(response.Body.String(), `"columns":[]`) {
+			if !strings.Contains(response.Body.String(), `"items":[]`) || strings.Contains(response.Body.String(), `"columns"`) {
 				t.Fatalf("unexpected response: %s", response.Body.String())
 			}
 		})
