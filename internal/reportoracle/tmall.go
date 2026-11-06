@@ -14,12 +14,15 @@ import (
 type TmallDataset string
 
 const (
-	TmallSycm TmallDataset = "sycm"
-	TmallQztg TmallDataset = "qztg"
-	TmallTot  TmallDataset = "tot"
+	TmallSycm       TmallDataset = "sycm"
+	TmallQztg       TmallDataset = "qztg"
+	TmallTot        TmallDataset = "tot"
+	TmallQztgHourly TmallDataset = "qztg_hourly"
+	TmallSycmHourly TmallDataset = "sycm_hourly"
 )
 
 type TmallQuery struct {
+	BatchNo   string
 	StartDate string
 	EndDate   string
 	Filters   map[string]string
@@ -50,7 +53,7 @@ func TmallColumns(dataset TmallDataset) []TmallColumn {
 	return append([]TmallColumn(nil), tmallTables[dataset].columns...)
 }
 
-// NormalizeTmallQuery validates the fixed dataset, bounded date range and
+// NormalizeTmallQuery validates the fixed dataset, date range or hourly batch and
 // documented dimensions before a pool is acquired or a query is executed.
 func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, error) {
 	table, ok := tmallTables[dataset]
@@ -58,10 +61,24 @@ func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, er
 		return TmallQuery{}, fmt.Errorf("unknown tmall dataset")
 	}
 	query.StartDate, query.EndDate = strings.TrimSpace(query.StartDate), strings.TrimSpace(query.EndDate)
-	start, startErr := time.Parse("2006-01-02", query.StartDate)
-	end, endErr := time.Parse("2006-01-02", query.EndDate)
-	if startErr != nil || endErr != nil || start.Year() < 1 || end.Year() < 1 || end.Before(start) || end.Sub(start) > 30*24*time.Hour {
-		return TmallQuery{}, fmt.Errorf("startDate and endDate must define at most 31 days in YYYY-MM-DD format")
+	query.BatchNo = strings.TrimSpace(query.BatchNo)
+	if dataset == TmallQztgHourly || dataset == TmallSycmHourly {
+		if query.StartDate != "" || query.EndDate != "" {
+			return TmallQuery{}, fmt.Errorf("startDate and endDate are not supported for hourly tmall datasets")
+		}
+		batch, err := time.Parse("200601021504", query.BatchNo)
+		if err != nil || batch.Year() < 1 || batch.Minute() != 0 || batch.Format("200601021504") != query.BatchNo {
+			return TmallQuery{}, fmt.Errorf("batchNo must identify the data hour in yyyyMMddHHmm format with minutes 00")
+		}
+	} else {
+		if query.BatchNo != "" {
+			return TmallQuery{}, fmt.Errorf("batchNo is only supported for hourly tmall datasets")
+		}
+		start, startErr := time.Parse("2006-01-02", query.StartDate)
+		end, endErr := time.Parse("2006-01-02", query.EndDate)
+		if startErr != nil || endErr != nil || start.Year() < 1 || end.Year() < 1 || end.Before(start) || end.Sub(start) > 30*24*time.Hour {
+			return TmallQuery{}, fmt.Errorf("startDate and endDate must define at most 31 days in YYYY-MM-DD format")
+		}
 	}
 	if query.PageSize < 1 || query.PageSize > 100 || query.Offset < 0 || query.Offset > 999*query.PageSize {
 		return TmallQuery{}, fmt.Errorf("invalid tmall pagination")
@@ -139,10 +156,19 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 		}
 		projection = append(projection, expression)
 	}
-	start, _ := time.Parse("2006-01-02", query.StartDate)
-	end, _ := time.Parse("2006-01-02", query.EndDate)
-	arguments := []any{start.Format(table.payDateLayout), end.AddDate(0, 0, 1).Format(table.payDateLayout)}
-	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a\nWHERE a.PAY_DATE >= :1 AND a.PAY_DATE < :2"
+	statement := "SELECT " + strings.Join(projection, ", ") + "\nFROM " + table.name + " a"
+	var arguments []any
+	orderBy := "a.ID"
+	if query.BatchNo != "" {
+		statement += "\nWHERE a.BATCH_NO = :1"
+		arguments = []any{query.BatchNo}
+	} else {
+		start, _ := time.Parse("2006-01-02", query.StartDate)
+		end, _ := time.Parse("2006-01-02", query.EndDate)
+		statement += "\nWHERE a.PAY_DATE >= :1 AND a.PAY_DATE < :2"
+		arguments = []any{start.Format(table.payDateLayout), end.AddDate(0, 0, 1).Format(table.payDateLayout)}
+		orderBy = "a.PAY_DATE, a.ID"
+	}
 	names := make([]string, 0, len(query.Filters))
 	for name := range query.Filters {
 		names = append(names, name)
@@ -152,7 +178,7 @@ func buildTmallQuery(table tmallTable, query TmallQuery) (string, []any) {
 		arguments = append(arguments, query.Filters[name])
 		statement += fmt.Sprintf("\n  AND a.%s = :%d", name, len(arguments))
 	}
-	statement += fmt.Sprintf("\nORDER BY a.PAY_DATE, a.ID\nOFFSET :%d ROWS FETCH NEXT :%d ROWS ONLY", len(arguments)+1, len(arguments)+2)
+	statement += fmt.Sprintf("\nORDER BY %s\nOFFSET :%d ROWS FETCH NEXT :%d ROWS ONLY", orderBy, len(arguments)+1, len(arguments)+2)
 	arguments = append(arguments, query.Offset, query.PageSize+1)
 	return statement, arguments
 }

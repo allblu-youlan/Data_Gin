@@ -42,6 +42,8 @@ func TestOpenTmallRoutesRequireTheirOwnPermission(t *testing.T) {
 		{"sycm", model.PermissionTmallSycmRead, reportoracle.TmallSycm},
 		{"qztg", model.PermissionTmallQztgRead, reportoracle.TmallQztg},
 		{"tot", model.PermissionTmallTotRead, reportoracle.TmallTot},
+		{"sycm/hourly", model.PermissionTmallSycmRead, reportoracle.TmallDataset("sycm_hourly")},
+		{"qztg/hourly", model.PermissionTmallQztgRead, reportoracle.TmallDataset("qztg_hourly")},
 	} {
 		t.Run(route.path, func(t *testing.T) {
 			for _, test := range []struct {
