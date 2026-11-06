@@ -23,7 +23,7 @@ func pushXian(ctx context.Context, cfg xianConfig, order RetailOrder) (*PushResu
 	}
 	token, err := getXianToken(ctx, cfg)
 	if err != nil {
-		return nil, err
+		return loginFailureResult(TargetQiantan, err), err
 	}
 
 	payStyle, _ := json.Marshal(map[string]float64{"-1": order.Amount})
@@ -84,12 +84,12 @@ func getXianToken(ctx context.Context, cfg xianConfig) (string, error) {
 	}
 	resp, err := cfg.Client.Do(req)
 	if err != nil {
-		return "", err
+		return "", loginTransportError("qiantan xian", err)
 	}
 	defer resp.Body.Close()
 
 	var payload map[string]interface{}
-	if err := decodeAndDrainJSON(resp.Body, &payload); err != nil {
+	if err := decodeLoginResponse("qiantan xian", resp, &payload); err != nil {
 		return "", err
 	}
 	token, _ := payload["token"].(string)

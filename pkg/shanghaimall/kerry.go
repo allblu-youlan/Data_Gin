@@ -31,7 +31,7 @@ func pushKerry(ctx context.Context, cfg kerryConfig, order RetailOrder) (*PushRe
 	}
 	apiKey, err := getKerryAPIKey(ctx, cfg)
 	if err != nil {
-		return nil, err
+		return loginFailureResult(TargetJialiCheng, err), err
 	}
 
 	qty := order.normalizedQuantity()
@@ -106,12 +106,12 @@ func getKerryAPIKey(ctx context.Context, cfg kerryConfig) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := cfg.Client.Do(req)
 	if err != nil {
-		return "", err
+		return "", loginTransportError("kerry", err)
 	}
 	defer resp.Body.Close()
 
 	var payload map[string]interface{}
-	if err := decodeAndDrainJSON(resp.Body, &payload); err != nil {
+	if err := decodeLoginResponse("kerry", resp, &payload); err != nil {
 		return "", err
 	}
 	content, _ := payload["content"].(map[string]interface{})
