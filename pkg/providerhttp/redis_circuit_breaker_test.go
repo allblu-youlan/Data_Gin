@@ -1,4 +1,4 @@
-package weather
+package providerhttp
 
 import (
 	"context"
