@@ -18,6 +18,7 @@ const (
 	PermissionTmallSycmRead       = "tmall.sycm.read"
 	PermissionTmallQztgRead       = "tmall.qztg.read"
 	PermissionTmallTotRead        = "tmall.tot.read"
+	PermissionTmallOrdersRead     = "tmall.orders.read"
 )
 
 var mallWeatherAdminPermissions = [...]string{
@@ -36,6 +37,7 @@ var mallWeatherAdminPermissions = [...]string{
 	PermissionTmallSycmRead,
 	PermissionTmallQztgRead,
 	PermissionTmallTotRead,
+	PermissionTmallOrdersRead,
 }
 
 var grantableDataPermissions = [...]string{
@@ -47,6 +49,7 @@ var grantableDataPermissions = [...]string{
 	PermissionTmallSycmRead,
 	PermissionTmallQztgRead,
 	PermissionTmallTotRead,
+	PermissionTmallOrdersRead,
 }
 
 // GrantableDataPermissions returns the fixed permissions an administrator may

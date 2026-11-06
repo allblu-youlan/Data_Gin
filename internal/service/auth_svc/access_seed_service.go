@@ -40,6 +40,7 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionTmallSycmRead, "查询天猫生意参谋", "天猫", "通过开放接口查询天猫生意参谋商品订单数据", "MEDIUM", true, 330},
 	{model.PermissionTmallQztgRead, "查询天猫全站推广", "天猫", "通过开放接口查询天猫全站推广商品数据", "MEDIUM", true, 340},
 	{model.PermissionTmallTotRead, "查询天猫商品汇总", "天猫", "通过开放接口查询天猫商品汇总数据", "MEDIUM", true, 350},
+	{model.PermissionTmallOrdersRead, "天猫订单商品明细查询", "天猫", "通过开放接口实时查询天猫订单商品明细数据", "MEDIUM", true, 360},
 	{model.PermissionSourceRead, "查看数据源", "数据处理", "查看数据源和拉取记录", "LOW", false, 400},
 	{model.PermissionSourceManage, "管理数据源", "数据处理", "维护并执行数据源", "HIGH", false, 410},
 	{model.PermissionPipelineRead, "查看流水线", "数据处理", "查看流水线、方法和运行记录", "LOW", false, 420},

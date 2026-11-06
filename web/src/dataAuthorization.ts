@@ -1,4 +1,4 @@
-export type DataPermissionCode = 'weather.read' | 'bojun.order.read' | 'bojun.store.read' | 'bojun.stock.read' | 'business_overview.read' | 'tmall.sycm.read' | 'tmall.qztg.read' | 'tmall.tot.read'
+export type DataPermissionCode = 'weather.read' | 'bojun.order.read' | 'bojun.store.read' | 'bojun.stock.read' | 'business_overview.read' | 'tmall.sycm.read' | 'tmall.qztg.read' | 'tmall.tot.read' | 'tmall.orders.read'
 export type DataPermissionStatus = 'ACTIVE' | 'EXPIRED' | 'NOT_GRANTED'
 
 export type DataAuthorizationPermission = {
@@ -93,7 +93,7 @@ function nullableString(value: unknown) {
 
 function parsePermission(value: unknown): DataAuthorizationPermission | null {
   const item = record(value)
-  if (!item || (item.permission !== 'weather.read' && item.permission !== 'bojun.order.read' && item.permission !== 'bojun.store.read' && item.permission !== 'bojun.stock.read' && item.permission !== 'business_overview.read' && item.permission !== 'tmall.sycm.read' && item.permission !== 'tmall.qztg.read' && item.permission !== 'tmall.tot.read')) return null
+  if (!item || (item.permission !== 'weather.read' && item.permission !== 'bojun.order.read' && item.permission !== 'bojun.store.read' && item.permission !== 'bojun.stock.read' && item.permission !== 'business_overview.read' && item.permission !== 'tmall.sycm.read' && item.permission !== 'tmall.qztg.read' && item.permission !== 'tmall.tot.read' && item.permission !== 'tmall.orders.read')) return null
   if (item.status !== 'ACTIVE' && item.status !== 'EXPIRED' && item.status !== 'NOT_GRANTED') return null
   return {
     permission: item.permission,
