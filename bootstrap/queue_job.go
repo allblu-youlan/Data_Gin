@@ -702,14 +702,8 @@ func handleYouzanDistributionOrderSync(ctx context.Context, task *asynq.Task) er
 	)
 	result, err := data_svc.NewYouzanDistributionOrderService().SyncRange(ctx, timeFilter, startTime, endTime)
 	if err != nil {
-		logger.Error(
-			"有赞分销订单拉取失败",
-			zap.String("time_filter", string(timeFilter)),
-			zap.String("start_time", startTime),
-			zap.String("end_time", endTime),
-			zap.Error(err),
-		)
-		return err
+		return fmt.Errorf("sync youzan distribution orders time_filter=%s start_time=%s end_time=%s: %w",
+			timeFilter, startTime, endTime, err)
 	}
 	logger.Info(
 		"有赞分销订单拉取完成",

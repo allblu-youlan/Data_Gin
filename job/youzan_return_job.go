@@ -190,7 +190,7 @@ func SyncYouzanRefundToSales(ctx context.Context, nodeKdtID int64) error {
 }
 
 func SyncYouzanReturnOrders(ctx context.Context, nodeKdtID int64) error {
-	token, err := Trigger.GetYouzanAccessToken()
+	token, err := Trigger.GetYouzanAccessTokenContext(ctx)
 	if err != nil {
 		return fmt.Errorf("获取access_token失败: %w", err)
 	}

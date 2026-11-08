@@ -84,7 +84,7 @@ func SyncYouzanSalesData(ctx context.Context, nodeKdtID int64) error {
 		return nil
 	}
 
-	token, err := Trigger.GetYouzanAccessToken()
+	token, err := Trigger.GetYouzanAccessTokenContext(ctx)
 	if err != nil {
 		return fmt.Errorf("获取access_token失败: %w", err)
 	}

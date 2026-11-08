@@ -63,7 +63,7 @@ func TestYouzanDistributionOrderServiceSyncsEveryPageAndDecryptsNickname(t *test
 		{distributionOrderFixture("D200", "encrypted-2")},
 	}}
 	writer := &fakeYouzanDistributionWriter{}
-	service := newYouzanDistributionOrderService(client, writer, func() (string, error) { return "token", nil })
+	service := newYouzanDistributionOrderService(client, writer, func(context.Context) (string, error) { return "token", nil })
 
 	result, err := service.SyncRange(context.Background(), youzan.OrderTimeFilterCreated, "2026-07-05 00:00:00", "2026-07-05 23:59:59")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestYouzanDistributionOrderServicePreviewDecryptsAndDoesNotWrite(t *testing
 		distributionOrderFixture("D200", "encrypted-2"),
 	}}}
 	writer := &fakeYouzanDistributionWriter{existing: map[string]bool{"D200": true}}
-	service := newYouzanDistributionOrderService(client, writer, func() (string, error) { return "token", nil })
+	service := newYouzanDistributionOrderService(client, writer, func(context.Context) (string, error) { return "token", nil })
 
 	result, err := service.PreviewRange(context.Background(), youzan.OrderTimeFilterSuccess, "2026-07-05 00:00:00", "2026-07-05 23:59:59")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestYouzanDistributionOrderServiceSplitsDecryptRequestsAtTenThousand(t *tes
 		orders[i] = distributionOrderFixture(fmt.Sprintf("D%d", i), fmt.Sprintf("$encrypted-%d$", i))
 	}
 	client := &fakeYouzanDistributionClient{pages: [][]map[string]any{orders}}
-	service := newYouzanDistributionOrderService(client, &fakeYouzanDistributionWriter{}, func() (string, error) { return "token", nil })
+	service := newYouzanDistributionOrderService(client, &fakeYouzanDistributionWriter{}, func(context.Context) (string, error) { return "token", nil })
 
 	if _, err := service.SyncRange(context.Background(), youzan.OrderTimeFilterCreated, "2026-07-05 00:00:00", "2026-07-05 23:59:59"); err != nil {
 		t.Fatalf("SyncRange() error = %v", err)

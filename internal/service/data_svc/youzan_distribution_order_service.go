@@ -37,7 +37,7 @@ type youzanDistributionWriter interface {
 type YouzanDistributionOrderService struct {
 	client         youzanDistributionClient
 	writer         youzanDistributionWriter
-	getAccessToken func() (string, error)
+	getAccessToken func(context.Context) (string, error)
 }
 
 type YouzanDistributionSyncResult struct {
@@ -74,11 +74,11 @@ func NewYouzanDistributionOrderService() *YouzanDistributionOrderService {
 	return newYouzanDistributionOrderService(
 		client,
 		data_dao.NewYouzanDistributionOrderDAO(),
-		trigger.GetYouzanAccessToken,
+		trigger.GetYouzanAccessTokenContext,
 	)
 }
 
-func newYouzanDistributionOrderService(client youzanDistributionClient, writer youzanDistributionWriter, getAccessToken func() (string, error)) *YouzanDistributionOrderService {
+func newYouzanDistributionOrderService(client youzanDistributionClient, writer youzanDistributionWriter, getAccessToken func(context.Context) (string, error)) *YouzanDistributionOrderService {
 	return &YouzanDistributionOrderService{client: client, writer: writer, getAccessToken: getAccessToken}
 }
 
@@ -102,7 +102,7 @@ func (s *YouzanDistributionOrderService) runRange(ctx context.Context, timeFilte
 		return result, err
 	}
 
-	accessToken, err := s.getAccessToken()
+	accessToken, err := s.getAccessToken(ctx)
 	if err != nil {
 		return result, fmt.Errorf("get youzan access token: %w", err)
 	}

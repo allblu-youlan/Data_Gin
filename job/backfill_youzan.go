@@ -21,7 +21,7 @@ type BackfillResult struct {
 func BackfillYouzanOrders(ctx context.Context, startTime, endTime string) (int, error) {
 	log.Printf("开始补拉有赞订单: %s ~ %s", startTime, endTime)
 
-	token, err := Trigger.GetYouzanAccessToken()
+	token, err := Trigger.GetYouzanAccessTokenContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("获取access_token失败: %w", err)
 	}
@@ -57,7 +57,7 @@ func BackfillYouzanOrders(ctx context.Context, startTime, endTime string) (int, 
 func BackfillYouzanRefundOrders(ctx context.Context, startTimeUnix, endTimeUnix int64) (int, error) {
 	log.Printf("开始补拉有赞退款订单: unix[%d ~ %d]", startTimeUnix, endTimeUnix)
 
-	token, err := Trigger.GetYouzanAccessToken()
+	token, err := Trigger.GetYouzanAccessTokenContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("获取access_token失败: %w", err)
 	}

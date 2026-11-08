@@ -83,7 +83,7 @@ func HandleYouzanSyncTask(ctx context.Context, t *asynq.Task) error {
 }
 
 func SyncYouzanOrders(ctx context.Context, startTime, endTime string) error {
-	token, err := Trigger.GetYouzanAccessToken()
+	token, err := Trigger.GetYouzanAccessTokenContext(ctx)
 	if err != nil {
 		return fmt.Errorf("获取access_token失败: %w", err)
 	}

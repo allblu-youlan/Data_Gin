@@ -1,6 +1,7 @@
 package data_svc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,7 +39,7 @@ func TestYouzanDistributionOrderServicePreservesNumericIDsFromHTTP(t *testing.T)
 			defer server.Close()
 			client := youzan.NewDistributionClient(server.URL+"/orders", server.URL+"/decrypt", server.Client())
 			writer := &fakeYouzanDistributionWriter{}
-			service := newYouzanDistributionOrderService(client, writer, func() (string, error) { return "test-token", nil })
+			service := newYouzanDistributionOrderService(client, writer, func(context.Context) (string, error) { return "test-token", nil })
 
 			result, err := service.SyncRange(t.Context(), youzan.OrderTimeFilterCreated,
 				"2026-11-05 00:00:00", "2026-11-05 23:59:59")
@@ -79,7 +80,7 @@ func TestYouzanDistributionOrderServicePropagatesGatewayRateLimit(t *testing.T) 
 	defer server.Close()
 	client := youzan.NewDistributionClient(server.URL+"/orders", server.URL+"/decrypt", server.Client())
 	writer := &fakeYouzanDistributionWriter{}
-	service := newYouzanDistributionOrderService(client, writer, func() (string, error) { return "test-token", nil })
+	service := newYouzanDistributionOrderService(client, writer, func(context.Context) (string, error) { return "test-token", nil })
 
 	result, err := service.SyncRange(t.Context(), youzan.OrderTimeFilterCreated,
 		"2026-11-05 00:00:00", "2026-11-05 23:59:59")
