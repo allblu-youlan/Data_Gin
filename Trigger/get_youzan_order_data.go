@@ -2,6 +2,7 @@ package Trigger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/pkg/config"
+	"gin-biz-web-api/pkg/youzan"
 )
 
 type YouzanTokenResponse struct {
@@ -28,9 +30,9 @@ type YouzanOrderResponse struct {
 	Data    struct {
 		FullOrderInfoList []struct {
 			FullOrderInfo struct {
-				OrderInfo   map[string]interface{} `json:"order_info"`
-				PayInfo     map[string]interface{} `json:"pay_info"`
-				SourceInfo  map[string]interface{} `json:"source_info"`
+				OrderInfo  map[string]interface{} `json:"order_info"`
+				PayInfo    map[string]interface{} `json:"pay_info"`
+				SourceInfo map[string]interface{} `json:"source_info"`
 			} `json:"full_order_info"`
 		} `json:"full_order_info_list"`
 		Paginator struct {
@@ -69,56 +71,20 @@ type youzanOrderClient struct {
 	ordersURL  string
 }
 
+var youzanAccessTokenClient, youzanAccessTokenClientErr = youzan.NewTokenClient(nil)
+
 func GetYouzanAccessToken() (string, error) {
-	url := config.GetString("cfg.youzan.token_url")
-	headers := map[string]string{
-		"Content-Type": "application/json",
-	}
+	return GetYouzanAccessTokenContext(context.Background())
+}
 
-	data := map[string]interface{}{
-		"authorize_type": "silent",
-		"client_id":      config.GetString("cfg.youzan.client_id"),
-		"client_secret":  config.GetString("cfg.youzan.client_secret"),
-		"grant_id":       config.GetString("cfg.youzan.grant_id"),
-		"refresh":        false,
+func GetYouzanAccessTokenContext(ctx context.Context) (string, error) {
+	if youzanAccessTokenClientErr != nil {
+		return "", youzanAccessTokenClientErr
 	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return "", fmt.Errorf("序列化请求数据失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("发送请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	var result YouzanTokenResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("解析响应失败: %w", err)
-	}
-
-	if !result.Success || result.Code != 200 {
-		return "", fmt.Errorf("获取access_token失败: %s", result.Message)
-	}
-
-	return result.Data.AccessToken, nil
+	return youzanAccessTokenClient.AccessToken(ctx, youzan.TokenConfig{
+		URL: config.GetString("cfg.youzan.token_url"), ClientID: config.GetString("cfg.youzan.client_id"),
+		ClientSecret: config.GetString("cfg.youzan.client_secret"), GrantID: config.GetString("cfg.youzan.grant_id"),
+	})
 }
 
 func GetYouzanOrders(accessToken string, startTime, endTime string) ([]map[string]interface{}, error) {
