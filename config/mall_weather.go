@@ -32,7 +32,8 @@ func init() {
 			"alert_missing_grace_seconds":     config.Get("MallWeather.AlertMissingGraceSeconds", 1800),
 			"fetch_timeout_seconds":           config.Get("MallWeather.FetchTimeoutSeconds", 10),
 			"max_attempts":                    config.Get("MallWeather.MaxAttempts", 3),
-			"worker_concurrency":              config.Get("MallWeather.WorkerConcurrency", 20),
+			"worker_concurrency":              config.GetInt("MALL_WEATHER_WORKER_CONCURRENCY", config.GetInt("MallWeather.WorkerConcurrency", 1)),
+			"schedule_spread_seconds":         mallWeatherScheduleSpreadSeconds(),
 			"task_timeout_seconds":            config.Get("MallWeather.TaskTimeoutSeconds", 300),
 			"lock_ttl_seconds":                config.Get("MallWeather.LockTTLSeconds", 600),
 			"lock_release_timeout_seconds":    config.Get("MallWeather.LockReleaseTimeoutSeconds", 3),
@@ -51,6 +52,14 @@ func init() {
 			"forecast_version_retention_days": config.Get("MallWeather.ForecastVersionRetentionDays", 30),
 		}
 	})
+}
+
+func mallWeatherScheduleSpreadSeconds() int {
+	fallback := 300
+	if instance := config.Instance(); instance != nil && instance.IsSet("MallWeather.ScheduleSpreadSeconds") {
+		fallback = instance.GetInt("MallWeather.ScheduleSpreadSeconds")
+	}
+	return config.GetInt("MALL_WEATHER_SCHEDULE_SPREAD_SECONDS", fallback)
 }
 
 func mallWeatherEnabled() bool {

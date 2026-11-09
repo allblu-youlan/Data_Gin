@@ -186,10 +186,7 @@ func queueJobServerSpecs(
 	if separateWeatherWorker {
 		delete(generalQueues, job.MallWeatherQueueName)
 		if weatherConcurrency <= 0 {
-			weatherConcurrency = defaultConcurrency
-		}
-		if weatherConcurrency <= 0 {
-			weatherConcurrency = 10
+			weatherConcurrency = 1
 		}
 	}
 	if len(generalQueues) > 0 {

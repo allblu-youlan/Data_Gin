@@ -2,6 +2,8 @@ package data_svc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -19,6 +21,7 @@ import (
 const (
 	mallWeatherSchedulePageSize = 200
 	defaultScheduleDBTimeout    = 8 * time.Second
+	defaultScheduleSpread       = 5 * time.Minute
 )
 
 type mallWeatherScheduleStore interface {
@@ -53,6 +56,7 @@ type MallWeatherSchedulePlanner struct {
 
 	repairMaxRounds int
 	repairSpread    time.Duration
+	scheduleSpread  time.Duration
 	databaseTimeout time.Duration
 	repairEnabled   bool
 }
@@ -71,8 +75,12 @@ func NewMallWeatherSchedulePlanner() (*MallWeatherSchedulePlanner, error) {
 	}
 	planner.repairMaxRounds = config.GetInt("cfg.mall_weather.repair_max_rounds")
 	planner.repairSpread = time.Duration(config.GetInt("cfg.mall_weather.repair_spread_seconds")) * time.Second
+	planner.scheduleSpread = time.Duration(config.GetInt("cfg.mall_weather.schedule_spread_seconds")) * time.Second
 	planner.databaseTimeout = time.Duration(config.GetInt("cfg.mall_weather.schedule_db_timeout_seconds")) * time.Second
 	planner.repairEnabled = config.GetBool("cfg.mall_weather.repair_enabled")
+	if planner.scheduleSpread < 0 || planner.scheduleSpread > time.Hour {
+		return nil, fmt.Errorf("mall weather scheduler: invalid schedule spread configuration")
+	}
 	if planner.repairMaxRounds < 1 || planner.repairMaxRounds > 10 || planner.repairSpread < 0 || planner.repairSpread > time.Hour ||
 		planner.databaseTimeout < time.Second || planner.databaseTimeout > time.Minute {
 		return nil, fmt.Errorf("mall weather scheduler: invalid repair configuration")
@@ -87,6 +95,7 @@ func newMallWeatherSchedulePlanner(store mallWeatherScheduleStore, now func() ti
 	return &MallWeatherSchedulePlanner{
 		store: store, now: now, location: location,
 		repairMaxRounds: 3, repairSpread: 15 * time.Minute, databaseTimeout: defaultScheduleDBTimeout, repairEnabled: true,
+		scheduleSpread: defaultScheduleSpread,
 	}, nil
 }
 
@@ -245,6 +254,17 @@ func deterministicRepairDelay(candidateRunID uint, spread time.Duration) time.Du
 	return time.Duration(uint64(candidateRunID)%seconds) * time.Second
 }
 
+func deterministicScheduleDelay(mallID uint, spread time.Duration) time.Duration {
+	if mallID == 0 || spread < time.Second {
+		return 0
+	}
+	// Hash the mall identity so consecutive IDs span the whole window while
+	// each mall keeps the same offset across profiles, task kinds and retries.
+	digest := sha256.Sum256([]byte(strconv.FormatUint(uint64(mallID), 10)))
+	seconds := binary.BigEndian.Uint64(digest[:8]) % uint64(spread/time.Second)
+	return time.Duration(seconds) * time.Second
+}
+
 func (planner *MallWeatherSchedulePlanner) outboxForMall(taskType string, mallID uint, scheduledAt time.Time) (model.AsyncJobOutbox, error) {
 	if mallID == 0 || scheduledAt.IsZero() {
 		return model.AsyncJobOutbox{}, fmt.Errorf("mall weather scheduler: invalid task identity")
@@ -265,8 +285,12 @@ func (planner *MallWeatherSchedulePlanner) outboxForMall(taskType string, mallID
 	if err != nil {
 		return model.AsyncJobOutbox{}, fmt.Errorf("mall weather scheduler: encode task payload: %w", err)
 	}
+	availableAt := scheduledAt.UTC()
+	if taskType == job.TypeMallWeatherFast || taskType == job.TypeMallWeatherFull {
+		availableAt = availableAt.Add(deterministicScheduleDelay(mallID, planner.scheduleSpread))
+	}
 	return model.AsyncJobOutbox{
 		TaskKey: "mall:weather:" + window, TaskType: taskType, PayloadJSON: model.JSONText(payloadJSON),
-		QueueName: job.MallWeatherQueueName, AvailableAt: scheduledAt.UTC(),
+		QueueName: job.MallWeatherQueueName, AvailableAt: availableAt,
 	}, nil
 }

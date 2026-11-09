@@ -88,7 +88,8 @@ MallWeather:
   AlertMissingGraceSeconds: ${MALL_WEATHER_ALERT_MISSING_GRACE_SECONDS:-1800}
   FetchTimeoutSeconds: 10
   MaxAttempts: 3
-  WorkerConcurrency: 20
+  WorkerConcurrency: ${MALL_WEATHER_WORKER_CONCURRENCY:-1}
+  ScheduleSpreadSeconds: ${MALL_WEATHER_SCHEDULE_SPREAD_SECONDS:-300}
   ScheduleDBTimeoutSeconds: ${MALL_WEATHER_SCHEDULE_DB_TIMEOUT_SECONDS:-8}
   RawRetentionDays: 30
   ForecastVersionRetentionDays: 30

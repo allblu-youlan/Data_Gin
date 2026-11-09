@@ -68,9 +68,9 @@ func TestQueueJobServerSpecsWeatherOnlyUsesConfiguredConcurrency(t *testing.T) {
 		wantConcurrency    int
 	}{
 		{name: "configured", weatherConcurrency: 13, defaultConcurrency: 7, wantConcurrency: 13},
-		{name: "zero falls back to general", defaultConcurrency: 7, wantConcurrency: 7},
-		{name: "negative falls back to general", weatherConcurrency: -1, defaultConcurrency: 7, wantConcurrency: 7},
-		{name: "invalid general falls back to default", weatherConcurrency: -1, defaultConcurrency: 0, wantConcurrency: 10},
+		{name: "zero defaults to sequential", defaultConcurrency: 7, wantConcurrency: 1},
+		{name: "negative defaults to sequential", weatherConcurrency: -1, defaultConcurrency: 7, wantConcurrency: 1},
+		{name: "invalid general still defaults to sequential", weatherConcurrency: -1, defaultConcurrency: 0, wantConcurrency: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
