@@ -44,9 +44,9 @@ export function RegionStayPage({ client, canManage = false }: { client: Workspac
   }, [client])
 
   const load = useCallback(async (selected: RegionFilter) => {
-    const validation = passengerFilterError(selected)
-    if (validation) { setError(validation); return }
     queryController.current?.abort()
+    const validation = passengerFilterError(selected)
+    if (validation) { setSnapshot(null); setLoading(false); setError(validation); return }
     const controller = new AbortController(); queryController.current = controller
     setLoading(true); setSnapshot(null); setError(''); setDownloadMessage(''); setDownloadError('')
     try {
@@ -99,6 +99,11 @@ export function RegionStayPage({ client, canManage = false }: { client: Workspac
     finally { if (!controller.signal.aborted) setExporting(false) }
   }
   function submit(event: FormEvent) { event.preventDefault(); void load(filter) }
+  function selectMall(mallId: string) {
+    const next = { ...filter, mallId, regionName: '' }
+    setFilter(next); setRegionOptions([]); setSelectedKey('')
+    void load(next)
+  }
   function preset(days: number) {
     const next = { ...filter, ...passengerPreset(days), mallId: filter.mallId }
     setFilter(next); void load(next)
@@ -110,10 +115,10 @@ export function RegionStayPage({ client, canManage = false }: { client: Workspac
     } />
     <form onSubmit={submit}>
       <FilterToolbar summary="上海时间 · 按日统计 · 最多 31 天" actions={<><Button type="submit" variant="primary" disabled={loading}>查询</Button><Button disabled={loading} aria-label="刷新区域数据" onClick={() => void load(filter)}><RefreshCw aria-hidden="true" /></Button></>}>
-        <label>门店<select value={filter.mallId} onChange={event => { setFilter({ ...filter, mallId: event.target.value, regionName: '' }); setRegionOptions([]) }}><option value="">全部授权门店</option>{malls.map(mall => <option key={mall.mallId} value={mall.mallId}>{mall.mallName}{!mall.shopId ? '（未绑定）' : ''}</option>)}</select></label>
+        <label>门店<select value={filter.mallId} onChange={event => selectMall(event.target.value)}><option value="">全部授权门店</option>{malls.map(mall => <option key={mall.mallId} value={mall.mallId}>{mall.mallName}{!mall.shopId ? '（未绑定）' : ''}</option>)}</select></label>
         <label>开始日期<input type="date" required value={filter.startDate} onChange={event => setFilter({ ...filter, startDate: event.target.value })} /></label>
         <label>结束日期<input type="date" required value={filter.endDate} onChange={event => setFilter({ ...filter, endDate: event.target.value })} /></label>
-        <label>区域<select value={filter.regionName} onChange={event => setFilter({ ...filter, regionName: event.target.value })}><option value="">全部区域</option>{[...new Set([...regionOptions, ...(filter.regionName ? [filter.regionName] : [])])].map(name => <option key={name} value={name}>{name}</option>)}</select></label>
+        <label>区域<select value={filter.regionName} disabled={loading} onChange={event => setFilter({ ...filter, regionName: event.target.value })}><option value="">全部区域</option>{[...new Set([...regionOptions, ...(filter.regionName ? [filter.regionName] : [])])].map(name => <option key={name} value={name}>{name}</option>)}</select></label>
         <div className={styles.presets}><Button onClick={() => preset(1)}>今天</Button><Button onClick={() => preset(7)}>近 7 天</Button><Button onClick={() => preset(30)}>近 30 天</Button></div>
       </FilterToolbar>
     </form>
