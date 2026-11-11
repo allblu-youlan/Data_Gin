@@ -248,7 +248,7 @@ func (s *AccountAuthService) Profile(ctx context.Context, userID uint) (*Console
 		return nil, normalizeCredentialLookupError(err)
 	}
 	roles := append([]ConsoleRoleDTO(nil), profile.Roles...)
-	permissions := append([]string(nil), profile.Permissions...)
+	permissions := model.ExpandOpenAPIPermissions(profile.Permissions)
 	mallIDs := append([]uint(nil), profile.MallIDs...)
 	if roles == nil {
 		roles = []ConsoleRoleDTO{}

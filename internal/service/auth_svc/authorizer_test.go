@@ -24,6 +24,7 @@ type fakeAuthorizationRepository struct {
 	roleCalls          int
 	consoleCodes       []string
 	openCodes          []string
+	openCalls          int
 	now                time.Time
 }
 
@@ -48,15 +49,21 @@ func (f *fakeAuthorizationRepository) ConsoleHasReportCategoryAction(_ context.C
 	}
 	return f.categoryActions[action], nil
 }
-func (f *fakeAuthorizationRepository) OpenAPIHasPermission(_ context.Context, _ uint, code string, now time.Time) (bool, error) {
-	f.openCodes, f.now = append(f.openCodes, code), now
-	if err := f.permissionErrors[code]; err != nil {
-		return false, err
+func (f *fakeAuthorizationRepository) OpenAPIHasAnyPermission(_ context.Context, _ uint, codes []string, now time.Time) (bool, error) {
+	f.openCalls++
+	f.openCodes, f.now = append(f.openCodes, codes...), now
+	if f.err != nil {
+		return false, f.err
 	}
-	if f.openPermissions != nil {
-		return f.openPermissions[code], nil
+	for _, code := range codes {
+		if err := f.permissionErrors[code]; err != nil {
+			return false, err
+		}
+		if f.openPermissions[code] {
+			return true, nil
+		}
 	}
-	return f.openAPI, f.err
+	return f.openAPI, nil
 }
 
 func TestAuthorizerUsesReportCategoryGrantsAsRuntimeCapability(t *testing.T) {
@@ -218,5 +225,8 @@ func TestAuthorizerAppliesReadImplicationsToOpenAPI(t *testing.T) {
 	want := []string{model.PermissionDeliveryRead, model.PermissionDeliveryManage}
 	if !reflect.DeepEqual(repository.openCodes, want) {
 		t.Fatalf("permission checks = %v, want %v", repository.openCodes, want)
+	}
+	if repository.openCalls != 1 {
+		t.Fatalf("permission queries = %d, want 1", repository.openCalls)
 	}
 }

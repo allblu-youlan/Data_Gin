@@ -65,7 +65,7 @@ func TestMallWeatherPermissionDAOHasPermissionUsesBoundedExistenceQuery(t *testi
 	for _, fragment := range []string{
 		"SELECT 1 AS permission_exists",
 		"FROM `mall_weather_user_permissions`",
-		"user_id = ? AND permission = ?",
+		"user_id = ? AND permission IN (?,?)",
 		"expires_at IS NULL OR expires_at > ?",
 		"LIMIT 1",
 	} {
@@ -79,11 +79,11 @@ func TestMallWeatherPermissionDAOHasPermissionUsesBoundedExistenceQuery(t *testi
 	if statementContext != ctx {
 		t.Fatal("permission lookup did not preserve request context")
 	}
-	if len(statementVars) != 3 || statementVars[0] != uint(7) || statementVars[1] != "weather.read" {
+	if len(statementVars) != 4 || statementVars[0] != uint(7) || statementVars[1] != "weather.read" || statementVars[2] != model.PermissionWeatherAPIRead {
 		t.Fatalf("statement vars = %v", statementVars)
 	}
-	if expiry, ok := statementVars[2].(time.Time); !ok || expiry.Location() != time.UTC {
-		t.Fatalf("expiry variable is not UTC: %#v", statementVars[2])
+	if expiry, ok := statementVars[3].(time.Time); !ok || expiry.Location() != time.UTC {
+		t.Fatalf("expiry variable is not UTC: %#v", statementVars[3])
 	}
 }
 

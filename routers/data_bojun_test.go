@@ -62,25 +62,32 @@ func (state *bojunRouteTestState) QueryContext(_ context.Context, query string, 
 		}
 		return rows, nil
 	case strings.Contains(query, "mall_weather_user_permissions"):
-		if !strings.Contains(query, "user_id = ? AND permission = ? AND (expires_at IS NULL OR expires_at > ?)") ||
-			len(args) != 3 || fmt.Sprint(args[0].Value) != "17" {
+		if !strings.Contains(query, "user_id = ? AND permission IN (?,?) AND (expires_at IS NULL OR expires_at > ?)") ||
+			len(args) != 4 || fmt.Sprint(args[0].Value) != "17" {
 			state.t.Fatalf("unexpected permission query: %s %#v", query, args)
 		}
 		permission, ok := args[1].Value.(string)
 		if !ok {
 			state.t.Fatalf("permission is not a string: %#v", args[1])
 		}
-		now, ok := args[2].Value.(time.Time)
+		parent, ok := args[2].Value.(string)
+		if !ok || parent != model.OpenAPIPermissionParent(permission) {
+			state.t.Fatalf("unexpected permission parent: %#v", args[2])
+		}
+		now, ok := args[3].Value.(time.Time)
 		if !ok || now.IsZero() {
-			state.t.Fatalf("permission expiry check is missing: %#v", args[2])
+			state.t.Fatalf("permission expiry check is missing: %#v", args[3])
 		}
 		state.events = append(state.events, "permission:"+permission)
 		if state.permissionErr != nil {
 			return nil, state.permissionErr
 		}
 		rows := &bojunRouteTestRows{columns: []string{"1"}}
-		if expiresAt, granted := state.grants[permission]; granted && (expiresAt == nil || expiresAt.After(now)) {
-			rows.values = []driver.Value{int64(1)}
+		for _, candidate := range []string{permission, parent} {
+			if expiresAt, granted := state.grants[candidate]; granted && (expiresAt == nil || expiresAt.After(now)) {
+				rows.values = []driver.Value{int64(1)}
+				break
+			}
 		}
 		return rows, nil
 	default:

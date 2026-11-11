@@ -40,23 +40,16 @@ var mallWeatherAdminPermissions = [...]string{
 	PermissionTmallOrdersRead,
 }
 
-var grantableDataPermissions = [...]string{
-	PermissionWeatherRead,
-	PermissionBojunOrderRead,
-	PermissionBojunStoreRead,
-	PermissionBojunStockRead,
-	PermissionBusinessOverviewRead,
-	PermissionTmallSycmRead,
-	PermissionTmallQztgRead,
-	PermissionTmallTotRead,
-	PermissionTmallOrdersRead,
-}
-
-// GrantableDataPermissions returns the fixed permissions an administrator may
-// delegate to an open API account.
+// GrantableDataPermissions returns the module and individual API permissions
+// an administrator may delegate to an open API account.
 func GrantableDataPermissions() []string {
-	permissions := make([]string, len(grantableDataPermissions))
-	copy(permissions, grantableDataPermissions[:])
+	permissions := make([]string, 0)
+	for _, group := range openAPIPermissionGroups {
+		permissions = append(permissions, group.Code)
+		for _, child := range group.Children {
+			permissions = append(permissions, child.Code)
+		}
+	}
 	return permissions
 }
 

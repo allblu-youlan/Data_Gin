@@ -1,5 +1,6 @@
 import { parseShanghaiDateTime, toShanghaiDateTimeInput } from './dateTime.js'
-export type DataPermissionCode = 'weather.read' | 'bojun.order.read' | 'bojun.store.read' | 'bojun.stock.read' | 'business_overview.read' | 'tmall.sycm.read' | 'tmall.qztg.read' | 'tmall.tot.read' | 'tmall.orders.read'
+
+export type DataPermissionCode = string
 export type DataPermissionStatus = 'ACTIVE' | 'EXPIRED' | 'NOT_GRANTED'
 
 export type DataAuthorizationPermission = {
@@ -9,6 +10,12 @@ export type DataAuthorizationPermission = {
   status: DataPermissionStatus
   permanent: boolean
   expiresAt: string | null
+  directGranted: boolean
+  directPermanent: boolean
+  directExpiresAt: string | null
+  parentCode?: string
+  level?: number
+  inheritedFrom?: string
 }
 
 export type DataAuthorizationGrantPayload =
@@ -94,8 +101,11 @@ function nullableString(value: unknown) {
 
 function parsePermission(value: unknown): DataAuthorizationPermission | null {
   const item = record(value)
-  if (!item || (item.permission !== 'weather.read' && item.permission !== 'bojun.order.read' && item.permission !== 'bojun.store.read' && item.permission !== 'bojun.stock.read' && item.permission !== 'business_overview.read' && item.permission !== 'tmall.sycm.read' && item.permission !== 'tmall.qztg.read' && item.permission !== 'tmall.tot.read' && item.permission !== 'tmall.orders.read')) return null
+  if (!item || typeof item.permission !== 'string' || !item.permission.trim()) return null
   if (item.status !== 'ACTIVE' && item.status !== 'EXPIRED' && item.status !== 'NOT_GRANTED') return null
+  const directGranted = typeof item.directGranted === 'boolean'
+    ? item.directGranted
+    : !item.inheritedFrom && item.status !== 'NOT_GRANTED'
   return {
     permission: item.permission,
     label: stringValue(item.label, item.permission),
@@ -103,7 +113,33 @@ function parsePermission(value: unknown): DataAuthorizationPermission | null {
     status: item.status,
     permanent: item.permanent === true,
     expiresAt: nullableString(item.expiresAt),
+    directGranted,
+    directPermanent: directGranted && (typeof item.directPermanent === 'boolean' ? item.directPermanent : item.permanent === true),
+    directExpiresAt: directGranted ? nullableString('directExpiresAt' in item ? item.directExpiresAt : item.expiresAt) : null,
+    ...(typeof item.parentCode === 'string' ? { parentCode: item.parentCode } : {}),
+    ...(typeof item.level === 'number' ? { level: item.level } : {}),
+    ...(typeof item.inheritedFrom === 'string' ? { inheritedFrom: item.inheritedFrom } : {}),
   }
+}
+
+export type DataPermissionDefinition = { code: string; name: string; description: string }
+export type DataPermissionGroup = DataPermissionDefinition & { children: DataPermissionDefinition[] }
+
+export function parseDataPermissionGroups(payload: unknown): DataPermissionGroup[] {
+  const data = envelopeData(payload)
+  if (!Array.isArray(data?.groups)) return []
+  const definition = (value: unknown): DataPermissionDefinition | null => {
+    const item = record(value)
+    if (!item || typeof item.code !== 'string' || !item.code.trim() || typeof item.name !== 'string') return null
+    return { code: item.code, name: item.name, description: stringValue(item.description) }
+  }
+  return data.groups.flatMap(value => {
+    const item = record(value)
+    const group = definition(value)
+    if (!group || !Array.isArray(item?.children)) return []
+    const children = item.children.map(definition).filter((child): child is DataPermissionDefinition => child !== null)
+    return [{ ...group, children }]
+  })
 }
 
 export function parseDataAuthorizationAccount(value: unknown): DataAuthorizationAccount | null {

@@ -17,6 +17,7 @@ func registerDataAuthorizationRoutes(api *gin.RouterGroup) {
 		middleware.RequirePermission(model.PermissionSystemAccountManage),
 		middleware.LimitOpenAPIUserRoute("data-authorization-admin", "60-M"),
 	)
+	group.GET("/permissions", controller.PermissionCatalog)
 	group.POST("/accounts/query", controller.QueryAccounts)
 	group.POST("/accounts/create", controller.CreateAccount)
 	group.POST("/accounts/:id/permissions/grant", controller.Grant)
