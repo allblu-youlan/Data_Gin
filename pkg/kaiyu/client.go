@@ -20,22 +20,25 @@ import (
 )
 
 type Config struct {
-	BaseURL      string
-	SecurityID   string
-	SecurityCode string
-	AppID        string
-	Version      string
-	Timeout      time.Duration
-	HTTPClient   *http.Client
+	BaseURL        string
+	SecurityID     string
+	SecurityCode   string
+	AppID          string
+	Version        string
+	Timeout        time.Duration
+	HTTPClient     *http.Client
+	RequestLimiter RequestLimiter
 }
 
 type Client struct {
-	baseURL      string
-	securityID   string
-	securityCode string
-	appID        string
-	version      string
-	httpClient   *http.Client
+	baseURL        string
+	securityID     string
+	securityCode   string
+	appID          string
+	version        string
+	httpClient     *http.Client
+	localLimiter   RequestLimiter
+	requestLimiter RequestLimiter
 }
 
 type Shop struct {
@@ -90,7 +93,8 @@ func NewClient(cfg Config) (*Client, error) {
 	return &Client{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"), securityID: cfg.SecurityID,
 		securityCode: cfg.SecurityCode, appID: cfg.AppID, version: cfg.Version,
-		httpClient: cfg.HTTPClient,
+		httpClient: cfg.HTTPClient, localLimiter: sharedRequestLimiter(cfg.SecurityID),
+		requestLimiter: cfg.RequestLimiter,
 	}, nil
 }
 
@@ -114,6 +118,17 @@ func (c *Client) HourlyPassengers(ctx context.Context, shopID string, day time.T
 }
 
 func (c *Client) request(ctx context.Context, method, path string, payload any, result any) error {
+	if ctx == nil {
+		return fmt.Errorf("kaiyu: request context is required")
+	}
+	if err := c.localLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("kaiyu: wait for request budget: %w", err)
+	}
+	if c.requestLimiter != nil {
+		if err := c.requestLimiter.Wait(ctx); err != nil {
+			return c.safeError("kaiyu: wait for shared request budget", err, "")
+		}
+	}
 	query := url.Values{
 		"securityId": {c.securityID}, "appId": {c.appID}, "version": {c.version},
 		"timestamp": {strconv.FormatInt(time.Now().Unix(), 10)},
