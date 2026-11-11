@@ -46,6 +46,24 @@ export function filterApiGroups(groups: ApiGroup[], query: string): ApiGroup[] {
   ) })).filter(child => child.operations.length > 0) })).filter(group => group.children.length > 0)
 }
 
+export function filterApiFields(fields: ApiField[], query: string): ApiField[] {
+  const term = query.trim().toLocaleLowerCase()
+  if (!term) return fields
+
+  function filterChildren(items: ApiField[], parentPath: string): ApiField[] {
+    return items.flatMap(field => {
+      const segment = `${field.name}${/\[\]|\barray\b/i.test(field.type) ? '[]' : ''}`
+      const path = parentPath ? `${parentPath}.${segment}` : segment
+      if (`${field.name} ${field.type} ${field.description} ${path}`.toLocaleLowerCase().includes(term)) return [field]
+
+      const children = filterChildren(field.children ?? [], path)
+      return children.length ? [{ ...field, children }] : []
+    })
+  }
+
+  return filterChildren(fields, '')
+}
+
 export function buildCurl(operation: ApiOperation, baseURL: string): string {
   const quote = (text: string) => `'${text.split("'").join( "'\"'\"'")}'`
   const path = operation.path.replace(/:([A-Za-z][A-Za-z0-9_]*)|\{([^}]+)\}/g, (placeholder, colonName: string | undefined, braceName: string | undefined) => {
