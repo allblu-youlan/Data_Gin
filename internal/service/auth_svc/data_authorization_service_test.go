@@ -26,6 +26,10 @@ func TestNormalizeDataAuthorizationGrantEnforcesAllowlistAndExpiry(t *testing.T)
 		wantExpiry bool
 		wantError  bool
 	}{
+		{name: "tmall module", permission: model.PermissionTmallRead, permanent: true},
+		{name: "bojun module", permission: model.PermissionBojunRead, permanent: true},
+		{name: "weather module", permission: model.PermissionWeatherAPIRead, permanent: true},
+		{name: "business module", permission: model.PermissionBusinessOverviewAPIRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "weather", permission: model.PermissionWeatherRead, expiresAt: now.Add(30 * 24 * time.Hour).Format(time.RFC3339), wantExpiry: true},
 		{name: "bojun store", permission: model.PermissionBojunStoreRead, permanent: true},
 		{name: "bojun stock", permission: model.PermissionBojunStockRead, expiresAt: now.Add(time.Hour).Format(time.RFC3339), wantExpiry: true},
@@ -208,13 +212,49 @@ func TestPermissionDTOStates(t *testing.T) {
 		t.Fatalf("expired permission = %+v", got)
 	}
 	permissions := permissionDTOs(map[string]*time.Time{model.PermissionBojunOrderRead: nil}, now)
-	if len(permissions) != len(model.GrantableDataPermissions()) || permissions[1].Status != "ACTIVE" || !permissions[1].Permanent {
+	if len(permissions) != len(model.GrantableDataPermissions()) {
 		t.Fatalf("permissionDTOs(permanent) = %+v", permissions)
+	}
+	for _, permission := range permissions {
+		if permission.Permission == model.PermissionBojunOrderRead && (permission.Status != "ACTIVE" || !permission.Permanent) {
+			t.Fatalf("permanent Bojun grant = %+v", permission)
+		}
 	}
 	if got := permissionDTO(model.PermissionBusinessOverviewRead, nil, true, now); got.Label != "营业金额查询" || got.Status != "ACTIVE" {
 		t.Fatalf("business overview permission = %+v", got)
 	}
 	if got := permissionDTO("tmall.orders.read", nil, true, now); got.Label != "天猫订单商品明细查询" || got.Status != "ACTIVE" {
 		t.Fatalf("tmall orders permission = %+v", got)
+	}
+}
+
+func TestLoadDataAuthorizationPermissionRetainsParentAfterChildRevocation(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      &sql.DB{},
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatalf("gorm.Open() error = %v", err)
+	}
+	now := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+	expiresAt := now.Add(time.Hour)
+	if err := db.Callback().Query().After("gorm:query").Register("test:remaining_parent_grant", func(tx *gorm.DB) {
+		statement := tx.Statement
+		if !strings.Contains(statement.SQL.String(), "user_id = ? AND permission IN (?,?)") ||
+			len(statement.Vars) != 3 || statement.Vars[0] != uint(17) ||
+			statement.Vars[1] != model.PermissionTmallOrdersRead || statement.Vars[2] != model.PermissionTmallRead {
+			t.Fatalf("permission lookup is not scoped to the account and child/parent: %s %#v", statement.SQL.String(), statement.Vars)
+		}
+		grants := statement.Dest.(*[]model.MallWeatherUserPermission)
+		*grants = []model.MallWeatherUserPermission{{UserID: 17, Permission: model.PermissionTmallRead, ExpiresAt: &expiresAt}}
+	}); err != nil {
+		t.Fatalf("register parent grant callback: %v", err)
+	}
+	dto, err := loadDataAuthorizationPermission(context.Background(), db, 17, model.PermissionTmallOrdersRead, now)
+	if err != nil {
+		t.Fatalf("loadDataAuthorizationPermission() error = %v", err)
+	}
+	if dto.Status != "ACTIVE" || dto.InheritedFrom != model.PermissionTmallRead || dto.Permanent || dto.ExpiresAt == nil || !dto.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("revoked child must retain its active parent grant: %+v", dto)
 	}
 }

@@ -82,6 +82,10 @@ func (s *AccessRoleService) PermissionCatalog(ctx context.Context, actorID uint)
 	if err := s.db.WithContext(ctx).Order("sort ASC, code ASC").Find(&items).Error; err != nil {
 		return nil, err
 	}
+	for i := range items {
+		items[i].ParentCode = model.OpenAPIPermissionParent(items[i].Code)
+		items[i].Level = model.OpenAPIPermissionLevel(items[i].Code)
+	}
 	return items, nil
 }
 

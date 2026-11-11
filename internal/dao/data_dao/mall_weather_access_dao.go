@@ -86,7 +86,7 @@ func (dao *MallWeatherPermissionDAO) HasPermission(ctx context.Context, userID u
 	result := dao.db.WithContext(ctx).
 		Model(&model.MallWeatherUserPermission{}).
 		Select("1 AS permission_exists").
-		Where("user_id = ? AND permission = ?", userID, permission).
+		Where("user_id = ? AND permission IN ?", userID, model.OpenAPIPermissionCandidates(permission)).
 		Where("expires_at IS NULL OR expires_at > ?", now.UTC()).
 		Limit(1).
 		Find(&match)

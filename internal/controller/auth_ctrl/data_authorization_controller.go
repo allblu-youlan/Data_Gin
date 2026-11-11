@@ -13,6 +13,7 @@ import (
 
 	"gin-biz-web-api/internal/requests/auth_request"
 	"gin-biz-web-api/internal/service/auth_svc"
+	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/auth"
 	"gin-biz-web-api/pkg/errcode"
 	"gin-biz-web-api/pkg/responses"
@@ -42,6 +43,10 @@ func NewDataAuthorizationControllerWithService(service DataAuthorizationService)
 		panic("data authorization controller: nil service")
 	}
 	return &DataAuthorizationController{service: service}
+}
+
+func (controller *DataAuthorizationController) PermissionCatalog(c *gin.Context) {
+	writeDataAuthorizationResult(c, gin.H{"groups": model.OpenAPIPermissionGroups()}, nil, http.StatusOK)
 }
 
 func (controller *DataAuthorizationController) QueryAccounts(c *gin.Context) {

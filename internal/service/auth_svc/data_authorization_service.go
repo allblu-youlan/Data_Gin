@@ -46,12 +46,15 @@ var (
 )
 
 type DataAuthorizationPermissionDTO struct {
-	Permission string     `json:"permission"`
-	Label      string     `json:"label"`
-	Scope      string     `json:"scope"`
-	Status     string     `json:"status"`
-	Permanent  bool       `json:"permanent"`
-	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	ParentCode    string     `json:"parentCode,omitempty"`
+	Level         int        `json:"level"`
+	InheritedFrom string     `json:"inheritedFrom,omitempty"`
+	Permission    string     `json:"permission"`
+	Label         string     `json:"label"`
+	Scope         string     `json:"scope"`
+	Status        string     `json:"status"`
+	Permanent     bool       `json:"permanent"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
 }
 
 type DataAuthorizationAccountDTO struct {
@@ -297,7 +300,11 @@ func (service *DataAuthorizationService) Grant(ctx context.Context, actorUserID,
 		if err != nil {
 			return err
 		}
-		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, expiresAt, true, service.now()), Action: action, Changed: true}
+		effectivePermission, err := loadDataAuthorizationPermission(ctx, tx, targetUserID, permission, service.now())
+		if err != nil {
+			return err
+		}
+		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: effectivePermission, Action: action, Changed: true}
 		return completeDataAuthorization(ctx, tx, record.ID, audit.ID, result)
 	})
 	return result, err
@@ -353,7 +360,11 @@ func (service *DataAuthorizationService) Revoke(ctx context.Context, actorUserID
 		if err != nil {
 			return err
 		}
-		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: permissionDTO(permission, nil, false, service.now()), Action: model.DataAuthorizationActionRevoke, Changed: changed}
+		effectivePermission, err := loadDataAuthorizationPermission(ctx, tx, targetUserID, permission, service.now())
+		if err != nil {
+			return err
+		}
+		result = &DataAuthorizationMutationResult{TargetUserID: targetUserID, Permission: effectivePermission, Action: model.DataAuthorizationActionRevoke, Changed: changed}
 		return completeDataAuthorization(ctx, tx, record.ID, audit.ID, result)
 	})
 	return result, err
@@ -600,12 +611,41 @@ func accountDTO(user model.User, credential model.OpenAPICredential, permissions
 }
 
 func permissionDTOs(values map[string]*time.Time, now time.Time) []DataAuthorizationPermissionDTO {
-	result := make([]DataAuthorizationPermissionDTO, 0, 2)
-	for _, p := range model.GrantableDataPermissions() {
-		expiresAt, granted := values[p]
-		result = append(result, permissionDTO(p, expiresAt, granted, now))
+	permissions := model.GrantableDataPermissions()
+	result := make([]DataAuthorizationPermissionDTO, 0, len(permissions))
+	for _, permission := range permissions {
+		result = append(result, effectivePermissionDTO(permission, values, now))
 	}
 	return result
+}
+
+func effectivePermissionDTO(permission string, values map[string]*time.Time, now time.Time) DataAuthorizationPermissionDTO {
+	expiresAt, granted := values[permission]
+	dto := permissionDTO(permission, expiresAt, granted, now)
+	parent := model.OpenAPIPermissionParent(permission)
+	if parentExpiry, exists := values[parent]; parent != "" && exists && (parentExpiry == nil || parentExpiry.After(now.UTC())) {
+		// Display the grant that keeps access valid longest. Revocation of a
+		// parent does not remove a separately granted child permission.
+		if dto.Status != "ACTIVE" || (expiresAt != nil && (parentExpiry == nil || parentExpiry.After(*expiresAt))) {
+			dto = permissionDTO(permission, parentExpiry, true, now)
+			dto.InheritedFrom = parent
+		}
+	}
+	return dto
+}
+
+func loadDataAuthorizationPermission(ctx context.Context, db *gorm.DB, userID uint, permission string, now time.Time) (DataAuthorizationPermissionDTO, error) {
+	var grants []model.MallWeatherUserPermission
+	if err := db.WithContext(ctx).
+		Where("user_id = ? AND permission IN ?", userID, model.OpenAPIPermissionCandidates(permission)).
+		Find(&grants).Error; err != nil {
+		return DataAuthorizationPermissionDTO{}, err
+	}
+	values := make(map[string]*time.Time, len(grants))
+	for _, grant := range grants {
+		values[grant.Permission] = grant.ExpiresAt
+	}
+	return effectivePermissionDTO(permission, values, now), nil
 }
 func permissionDTOsFromGrants(grants []normalizedDataGrant, now time.Time) []DataAuthorizationPermissionDTO {
 	values := map[string]*time.Time{}
@@ -615,25 +655,7 @@ func permissionDTOsFromGrants(grants []normalizedDataGrant, now time.Time) []Dat
 	return permissionDTOs(values, now)
 }
 func permissionDTO(permission string, expiresAt *time.Time, granted bool, now time.Time) DataAuthorizationPermissionDTO {
-	label := "天气数据查询"
-	switch permission {
-	case model.PermissionBojunOrderRead:
-		label = "Bojun 订单查询"
-	case model.PermissionBojunStoreRead:
-		label = "伯俊店仓查询"
-	case model.PermissionBojunStockRead:
-		label = "伯俊实时库存查询"
-	case model.PermissionBusinessOverviewRead:
-		label = "营业金额查询"
-	case model.PermissionTmallSycmRead:
-		label = "天猫生意参谋查询"
-	case model.PermissionTmallQztgRead:
-		label = "天猫全站推广查询"
-	case model.PermissionTmallTotRead:
-		label = "天猫商品汇总查询"
-	case model.PermissionTmallOrdersRead:
-		label = "天猫订单商品明细查询"
-	}
+	label := model.OpenAPIPermissionName(permission)
 	status := "NOT_GRANTED"
 	if granted {
 		status = "ACTIVE"
@@ -642,6 +664,7 @@ func permissionDTO(permission string, expiresAt *time.Time, granted bool, now ti
 		}
 	}
 	return DataAuthorizationPermissionDTO{
+		ParentCode: model.OpenAPIPermissionParent(permission), Level: model.OpenAPIPermissionLevel(permission),
 		Permission: permission, Label: label, Scope: "全模块数据", Status: status,
 		Permanent: granted && expiresAt == nil, ExpiresAt: expiresAt,
 	}

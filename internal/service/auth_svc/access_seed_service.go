@@ -75,7 +75,10 @@ var roleSeeds = []model.Role{
 func PermissionCatalog() []model.Permission {
 	permissions := make([]model.Permission, 0, len(accessPermissionSeeds))
 	for _, seed := range accessPermissionSeeds {
-		permissions = append(permissions, model.Permission{Code: seed.Code, Name: seed.Name, Module: seed.Module, Description: seed.Description, RiskLevel: seed.RiskLevel, APIGrantable: seed.APIGrantable, Sort: seed.Sort})
+		permissions = append(permissions, model.Permission{Code: seed.Code, Name: seed.Name, Module: seed.Module, Description: seed.Description, RiskLevel: seed.RiskLevel, APIGrantable: seed.APIGrantable, Sort: seed.Sort, ParentCode: model.OpenAPIPermissionParent(seed.Code), Level: model.OpenAPIPermissionLevel(seed.Code)})
+	}
+	for i, group := range model.OpenAPIPermissionGroups() {
+		permissions = append(permissions, model.Permission{Code: group.Code, Name: group.Name, Module: group.Name, Description: group.Description, RiskLevel: "MEDIUM", APIGrantable: true, Sort: 91 + i, Level: 1})
 	}
 	return permissions
 }
@@ -163,7 +166,7 @@ func assignSuperAdminRole(tx *gorm.DB, roleID uint) error {
 
 func PermissionCodes() []string {
 	codes := make([]string, 0, len(accessPermissionSeeds))
-	for _, permission := range accessPermissionSeeds {
+	for _, permission := range PermissionCatalog() {
 		codes = append(codes, permission.Code)
 	}
 	sort.Strings(codes)

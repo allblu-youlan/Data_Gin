@@ -59,6 +59,8 @@ type Permission struct {
 	Description  string    `gorm:"column:description;size:500;not null" json:"description"`
 	RiskLevel    string    `gorm:"column:risk_level;size:16;not null;default:'LOW'" json:"riskLevel"`
 	APIGrantable bool      `gorm:"column:api_grantable;not null;default:false" json:"apiGrantable"`
+	ParentCode   string    `gorm:"-" json:"parentCode,omitempty"`
+	Level        int       `gorm:"-" json:"level,omitempty"`
 	Sort         int       `gorm:"column:sort;not null;default:0" json:"sort"`
 	CreatedAt    time.Time `gorm:"column:created_at;type:datetime(3);not null;autoCreateTime" json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"column:updated_at;type:datetime(3);not null;autoUpdateTime" json:"updatedAt"`

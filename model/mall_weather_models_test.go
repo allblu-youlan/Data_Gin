@@ -129,11 +129,11 @@ func TestDataAuthorizationSecretsAreNotSerialized(t *testing.T) {
 
 func TestGrantableDataPermissionsReturnsDefensiveAllowlist(t *testing.T) {
 	permissions := GrantableDataPermissions()
-	if !reflect.DeepEqual(permissions, []string{PermissionWeatherRead, PermissionBojunOrderRead, PermissionBojunStoreRead, PermissionBojunStockRead, PermissionBusinessOverviewRead, "tmall.sycm.read", "tmall.qztg.read", "tmall.tot.read", "tmall.orders.read"}) {
+	if !reflect.DeepEqual(permissions, []string{PermissionTmallRead, PermissionTmallSycmRead, PermissionTmallQztgRead, PermissionTmallTotRead, PermissionTmallOrdersRead, PermissionBojunRead, PermissionBojunOrderRead, PermissionBojunStoreRead, PermissionBojunStockRead, PermissionWeatherAPIRead, PermissionWeatherRead, PermissionBusinessOverviewAPIRead, PermissionBusinessOverviewRead}) {
 		t.Fatalf("permissions = %v", permissions)
 	}
 	permissions[0] = "mall.write"
-	if GrantableDataPermissions()[0] != PermissionWeatherRead {
+	if GrantableDataPermissions()[0] != PermissionTmallRead {
 		t.Fatal("GrantableDataPermissions() returned shared storage")
 	}
 }

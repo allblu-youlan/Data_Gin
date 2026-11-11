@@ -17,7 +17,7 @@ type authorizationRepository interface {
 	ActiveConsoleRoles(ctx context.Context, userID uint) ([]authorizationRole, error)
 	ConsoleRoleHasPermission(ctx context.Context, userID uint, code string) (bool, error)
 	ConsoleHasReportCategoryAction(ctx context.Context, userID uint, action string) (bool, error)
-	OpenAPIHasPermission(ctx context.Context, userID uint, code string, now time.Time) (bool, error)
+	OpenAPIHasAnyPermission(ctx context.Context, userID uint, codes []string, now time.Time) (bool, error)
 }
 
 type authorizationRole struct {
@@ -80,16 +80,11 @@ func (a *Authorizer) HasPermission(ctx context.Context, user model.User, code st
 		}
 		return false, nil
 	case model.AccountTypeOpenAPI:
-		for _, candidate := range permissionCandidates(code) {
-			allowed, err := a.repository.OpenAPIHasPermission(ctx, user.ID, candidate, a.now().UTC())
-			if err != nil {
-				return false, fmt.Errorf("authorizer: check open api permission: %w", err)
-			}
-			if allowed {
-				return true, nil
-			}
+		allowed, err := a.repository.OpenAPIHasAnyPermission(ctx, user.ID, permissionCandidates(code), a.now().UTC())
+		if err != nil {
+			return false, fmt.Errorf("authorizer: check open api permission: %w", err)
 		}
-		return false, nil
+		return allowed, nil
 	default:
 		return false, nil
 	}
@@ -104,7 +99,7 @@ func permissionCandidates(code string) []string {
 	case model.PermissionDeliveryRead:
 		return []string{model.PermissionDeliveryRead, model.PermissionDeliveryManage}
 	default:
-		return []string{code}
+		return model.OpenAPIPermissionCandidates(code)
 	}
 }
 
@@ -175,7 +170,7 @@ func (r *gormAuthorizationRepository) ConsoleHasReportCategoryAction(ctx context
 	return false, nil
 }
 
-func (r *gormAuthorizationRepository) OpenAPIHasPermission(ctx context.Context, userID uint, code string, now time.Time) (bool, error) {
+func (r *gormAuthorizationRepository) OpenAPIHasAnyPermission(ctx context.Context, userID uint, codes []string, now time.Time) (bool, error) {
 	db, err := r.database(ctx)
 	if err != nil {
 		return false, err
@@ -183,7 +178,7 @@ func (r *gormAuthorizationRepository) OpenAPIHasPermission(ctx context.Context, 
 	var marker int
 	err = db.Table("mall_weather_user_permissions").
 		Select("1").
-		Where("user_id = ? AND permission = ? AND (expires_at IS NULL OR expires_at > ?)", userID, code, now.UTC()).
+		Where("user_id = ? AND permission IN ? AND (expires_at IS NULL OR expires_at > ?)", userID, codes, now.UTC()).
 		Limit(1).Scan(&marker).Error
 	return marker == 1, err
 }

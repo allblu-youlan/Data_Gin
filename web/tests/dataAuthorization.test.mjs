@@ -9,6 +9,7 @@ import {
   parseCreatedAuthorization,
   parseDataAuthorizationAccounts,
   parseDataAuthorizationAudits,
+  parseDataPermissionGroups,
 } from '../.test-dist/dataAuthorization.js'
 
 test('parses safe account envelope and rejects malformed rows', () => {
@@ -16,7 +17,7 @@ test('parses safe account envelope and rejects malformed rows', () => {
     accounts: [
       { id: 7, account: 'partner', email: 'owner@example.com', nickname: '合作方', credentialStatus: 'ACTIVE', tokenPrefix: 'dg_open_abcd', issuedAt: '2026-07-28T08:00:00Z', createdAt: '2026-07-28T08:00:00Z', permissions: [{ permission: 'weather.read', label: '天气数据查询', scope: '全模块数据', status: 'ACTIVE', permanent: false, expiresAt: '2026-08-28T08:00:00Z' }, { permission: 'business_overview.read', label: '营业金额查询', scope: '全模块数据', status: 'ACTIVE', permanent: true }] },
       { id: 0, account: 'invalid' },
-      { id: 8, account: 'bad-permission', permissions: [{ permission: 'mall.write', status: 'ACTIVE' }] },
+      { id: 8, account: 'bad-permission', permissions: [{ permission: '', status: 'ACTIVE' }] },
     ],
     pagination: { pageSize: 20, nextBeforeId: 7, hasMore: true },
   } })
@@ -26,6 +27,15 @@ test('parses safe account envelope and rejects malformed rows', () => {
   assert.equal(parsed.accounts[0].permissions[1].permanent, true)
   assert.deepEqual(parsed.accounts[1].permissions, [])
   assert.equal(parsed.pagination.nextBeforeId, 7)
+})
+
+test('accepts backend permission groups and inherited child grants without a frontend allowlist', () => {
+  const groups = [{ code: 'future.read', name: '新平台', description: '全部查询', children: [{ code: 'future.orders.read', name: '订单', description: '查询订单' }] }]
+  assert.deepEqual(parseDataPermissionGroups({ data: { groups } }), groups)
+  const parsed = parseDataAuthorizationAccounts({ data: { accounts: [{ id: 1, account: 'partner', permissions: [{ permission: 'future.orders.read', status: 'ACTIVE', inheritedFrom: 'future.read', parentCode: 'future.read', level: 2 }] }] } })
+  assert.equal(parsed.accounts[0].permissions[0].inheritedFrom, 'future.read')
+  assert.equal(parsed.accounts[0].permissions[0].permission, 'future.orders.read')
+  assert.deepEqual(buildDataAuthorizationGrant('future.read', '', true), { permission: 'future.read', permanent: true })
 })
 
 test('parses one-time token only from the expected envelope', () => {
