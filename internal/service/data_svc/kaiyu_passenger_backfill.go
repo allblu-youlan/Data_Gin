@@ -10,10 +10,8 @@ import (
 	"sync"
 	"time"
 
-	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
-	"gin-biz-web-api/pkg/kaiyu"
 	"gin-biz-web-api/pkg/providerhttp"
 
 	"go.uber.org/zap"
@@ -201,11 +199,7 @@ func (service *KaiyuPassengerQueryService) Backfill(ctx context.Context, actor u
 }
 
 func newKaiyuBackfillClient() (kaiyuPassengerClient, error) {
-	cfg, err := appConfig.LoadKaiyuConfig()
-	if err != nil {
-		return nil, err
-	}
-	return kaiyu.NewClient(cfg.Client)
+	return NewKaiyuRuntimeClient()
 }
 
 func fillKaiyuMissingDays(ctx context.Context, groups []kaiyuMissingDay, missing int, cursor string, limit int, client kaiyuPassengerClient, writer kaiyuPassengerWriter) (*KaiyuPassengerBackfillResult, error) {
