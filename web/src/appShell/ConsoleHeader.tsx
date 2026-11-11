@@ -79,6 +79,7 @@ export function ConsoleHeader({
       onOpenNavigation={onOpenNavigation}
       actions={(
         <div className={styles.session}>
+          <a href="?view=api-docs" target="_blank" rel="noreferrer">接口文档</a>
           {activeNav !== 'store_info' ? (
             <span className={styles.date}>
               <CalendarDays aria-hidden="true" />

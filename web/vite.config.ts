@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       hmr: true,
       proxy: {
-        '/api': {
+        '^/api(?:/|$)': {
           target: apiTarget,
           changeOrigin: true,
           secure: false,

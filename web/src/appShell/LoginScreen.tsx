@@ -134,6 +134,7 @@ export function LoginScreen({ onLogin, checking }: { onLogin: (token: string) =>
           {error ? <div className={styles.error} role="alert" aria-live="polite">{error}</div> : null}
           <button className={styles.primary} type="submit" disabled={submitting || checking}>{submitting || checking ? '正在处理…' : mode === 'reset' ? '重置密码' : '登录'}</button>
         </form>
+        <a href="?view=api-docs">查看 allblu开放接口文档</a>
       </section>
     </main>
   )

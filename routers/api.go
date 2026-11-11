@@ -29,9 +29,9 @@ func RegisterAPIRoutes(r *gin.Engine) {
 	var api *gin.RouterGroup
 	api = r.Group("/api")
 	registerHealthRoutes(r, api)
+	registerAPIDocsRoutes(r, api)
 
-	// Health routes are registered before this guard so liveness and readiness
-	// remain observable while database-backed business routes fail fast.
+	// Health and documentation stay available without the business database.
 	api.Use(middleware.RequireDatabaseAvailability())
 
 	// 全局限流中间件
