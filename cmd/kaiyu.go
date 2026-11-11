@@ -9,11 +9,9 @@ import (
 	"time"
 
 	"gin-biz-web-api/bootstrap"
-	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/database"
-	"gin-biz-web-api/pkg/kaiyu"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
@@ -30,11 +28,8 @@ func newKaiyuCommand() *cobra.Command {
 		},
 	}
 	command.AddCommand(&cobra.Command{Use: "shops", Short: "查询监控平台全部店铺，供 Web 手动绑定 shopid", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		cfg, err := appConfig.LoadKaiyuConfig()
-		if err != nil {
-			return err
-		}
-		client, err := kaiyu.NewClient(cfg.Client)
+		bootstrap.InitializeProviderCLI()
+		client, err := data_svc.NewKaiyuRuntimeClient()
 		if err != nil {
 			return err
 		}
@@ -82,7 +77,7 @@ func newKaiyuCommand() *cobra.Command {
 			}
 			hour = parsed
 		}
-		bootstrap.InitializeMigration()
+		bootstrap.InitializeProviderDatabaseCLI()
 		ctx, cancel := context.WithTimeout(cmd.Context(), 20*time.Minute)
 		defer cancel()
 		result, err := data_svc.RunKaiyuPassengerSync(ctx, hour)
@@ -91,7 +86,7 @@ func newKaiyuCommand() *cobra.Command {
 	}}
 	syncCmd.Flags().StringVar(&hourText, "hour", "", "北京时间小时，例如 2026-10-28 09:00")
 	command.AddCommand(syncCmd)
-	command.AddCommand(newKaiyuGapCommand(false), newKaiyuGapCommand(true))
+	command.AddCommand(newKaiyuGapCommand(false), newKaiyuGapCommand(true), newKaiyuRegionCommand())
 	return command
 }
 
@@ -117,7 +112,11 @@ func newKaiyuGapCommand(backfill bool) *cobra.Command {
 			}
 			end = end.AddDate(0, 0, 1)
 		}
-		bootstrap.InitializeMigration()
+		if backfill {
+			bootstrap.InitializeProviderDatabaseCLI()
+		} else {
+			bootstrap.InitializeMigration()
+		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), 20*time.Minute)
 		defer cancel()
 		missing, result, err := data_svc.RunKaiyuPassengerGapCheck(ctx, start, end, backfill)

@@ -14,7 +14,7 @@ const AccessManagementPage = lazy(() => import('../AccessManagementPage').then((
 const BojunBackfillPage = lazy(() => import('../backfillPages/BojunBackfillPage').then((module) => ({ default: module.BojunBackfillPage })))
 const YouzanDistributionPage = lazy(() => import('../backfillPages/YouzanDistributionPage').then((module) => ({ default: module.YouzanDistributionPage })))
 const BusinessOverviewPage = lazy(() => import('../businessOverviewPages/BusinessOverviewPage').then((module) => ({ default: module.BusinessOverviewPage })))
-const PassengerFlowPage = lazy(() => import('../passengerFlow/PassengerFlowPage').then((module) => ({ default: module.PassengerFlowPage })))
+const PassengerFlowPage = lazy(() => import('../passengerFlow/PassengerMonitorPage').then((module) => ({ default: module.PassengerMonitorPage })))
 const SalesSummaryPage = lazy(() => import('../salesSummary/SalesSummaryPage').then((module) => ({ default: module.SalesSummaryPage })))
 const DeliveryTasksPage = lazy(() => import('../configurationPages/DeliveryTasksPage/DeliveryTasksPage').then((module) => ({ default: module.DeliveryTasksPage })))
 const DestinationsPage = lazy(() => import('../configurationPages/DestinationsPage/DestinationsPage').then((module) => ({ default: module.DestinationsPage })))

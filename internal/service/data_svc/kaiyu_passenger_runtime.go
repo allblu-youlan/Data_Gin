@@ -8,7 +8,6 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
-	"gin-biz-web-api/pkg/kaiyu"
 	"strings"
 	"time"
 )
@@ -90,11 +89,7 @@ func RunKaiyuPassengerGapCheck(ctx context.Context, start, end time.Time, backfi
 }
 
 func RunKaiyuPassengerSync(ctx context.Context, hour time.Time) (result KaiyuSyncResult, resultErr error) {
-	cfg, err := appConfig.LoadKaiyuConfig()
-	if err != nil {
-		return result, err
-	}
-	client, err := kaiyu.NewClient(cfg.Client)
+	client, err := NewKaiyuRuntimeClient()
 	if err != nil {
 		return result, err
 	}

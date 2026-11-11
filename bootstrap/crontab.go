@@ -76,6 +76,9 @@ func addScheduleTask(ctx context.Context, locker weather.TaskLocker) {
 		entryID, err := global.Crontab.AddJob(appConfig.KaiyuHourlyCron,
 			newDistributedCronJob(ctx, "kaiyu_passenger", locker, databaseBackedCronJob(crontabTask.KaiyuPassengerCrontab{})))
 		ifError(err, int(entryID), "KaiyuPassengerCrontab")
+		regionID, regionErr := global.Crontab.AddJob("0 10 * * * *",
+			newDistributedCronJob(ctx, "kaiyu_region_stay", locker, databaseBackedCronJob(crontabTask.KaiyuRegionCrontab{})))
+		ifError(regionErr, int(regionID), "KaiyuRegionCrontab")
 	}
 
 }
