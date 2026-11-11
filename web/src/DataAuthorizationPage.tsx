@@ -24,8 +24,8 @@ import { DataTable, Dialog, FeedbackState, FilterToolbar, MasterDetail, Section,
 import styles from './DataAuthorizationPage.module.css'
 
 type ApiResult = { ok: boolean; status: number; data: unknown }
-type ApiClient = (path: string, options?: {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+type ApiClient = (path: string, options: {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   headers?: Record<string, string>
   showResult?: boolean
@@ -155,7 +155,7 @@ export function DataAuthorizationPage({ client }: { client: ApiClient }) {
   useEffect(() => {
     const controller = new AbortController()
     setCatalogError('')
-    client('/v1/data-authorizations/permissions', { showResult: false, silentLoading: true, signal: controller.signal })
+    client('/v1/data-authorizations/permissions', { method: 'GET', showResult: false, silentLoading: true, signal: controller.signal })
       .then(response => {
         if (controller.signal.aborted) return
         const groups = response.ok ? parseDataPermissionGroups(response.data) : []
