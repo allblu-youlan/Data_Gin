@@ -56,6 +56,49 @@ func TestKaiyuRegionSyncQueryRetainsSuccessAndNullableErrors(t *testing.T) {
 	}
 }
 
+func TestKaiyuRegionSyncQueryReadsOracleNullLastSuccess(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value driver.Value
+	}{
+		{name: "nil", value: nil},
+		{name: "empty string", value: ""},
+		{name: "empty bytes", value: []byte{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := &bojunQueryTestRows{columns: make([]string, 9), values: [][]driver.Value{
+				{"shop1", "2026-11-11", int64(7), "门店一", "success", int64(1), "2026-11-11 10:20:00", "2026-11-11 10:20:00", nil},
+				{"shop2", "2026-11-11", int64(9), "门店二", "empty", int64(0), "2026-11-11 10:20:00", tc.value, nil},
+			}}
+			adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+				return rows, nil
+			})
+			start := time.Date(2026, 11, 11, 0, 0, 0, 0, kaiyuRegionLocation)
+			items, err := adapter.QueryKaiyuRegionSyncDays(t.Context(), start, start.AddDate(0, 0, 1), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 2 || items[0].LastSuccessAt == nil || items[0].LastSuccessAt.Format(time.RFC3339) != "2026-11-11T10:20:00+08:00" || items[1].LastSuccessAt != nil || items[1].State != "empty" || !rows.closed {
+				t.Fatalf("items=%+v closed=%v", items, rows.closed)
+			}
+		})
+	}
+}
+
+func TestKaiyuRegionSyncQueryRejectsMalformedLastSuccess(t *testing.T) {
+	rows := &bojunQueryTestRows{columns: make([]string, 9), values: [][]driver.Value{
+		{"shop1", "2026-11-11", int64(7), "门店一", "success", int64(1), "2026-11-11 10:20:00", "invalid timestamp", nil},
+	}}
+	adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+		return rows, nil
+	})
+	start := time.Date(2026, 11, 11, 0, 0, 0, 0, kaiyuRegionLocation)
+	items, err := adapter.QueryKaiyuRegionSyncDays(t.Context(), start, start.AddDate(0, 0, 1), nil)
+	if err == nil || !strings.Contains(err.Error(), "parse Kaiyu region last success") || items != nil || !rows.closed {
+		t.Fatalf("items=%+v err=%v closed=%v", items, err, rows.closed)
+	}
+}
+
 func TestKaiyuRegionQueryRejectsOversizedResultsWithoutTruncating(t *testing.T) {
 	row := []driver.Value{"shop1", "2026-11-11", int64(7), "门店一", "童装", int64(100), int64(10), float64(.1), float64(3.38), "2026-11-11 09:20:00"}
 	values := make([][]driver.Value, KaiyuRegionMaxRows+1)

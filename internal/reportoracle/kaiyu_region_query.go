@@ -90,7 +90,8 @@ FROM YLZ_USER.KAIYU_REGION_SYNC_DAY` + where + " ORDER BY STAT_DATE,MALL_ID,SHOP
 		if err != nil {
 			return nil, fmt.Errorf("parse Kaiyu region sync time: %w", err)
 		}
-		if lastSuccess.Valid {
+		// Oracle drivers can return TO_CHAR(NULL) as an empty, non-nil string.
+		if lastSuccess.Valid && lastSuccess.String != "" {
 			parsed, err := time.ParseInLocation(time.DateTime, lastSuccess.String, kaiyuRegionLocation)
 			if err != nil {
 				return nil, fmt.Errorf("parse Kaiyu region last success: %w", err)
