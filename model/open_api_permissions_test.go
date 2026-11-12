@@ -7,7 +7,7 @@ import (
 
 func TestOpenAPIPermissionGroupsAreIsolatedAndReadOnly(t *testing.T) {
 	groups := OpenAPIPermissionGroups()
-	if len(groups) != 5 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
+	if len(groups) != 6 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
 		t.Fatalf("permission groups = %+v", groups)
 	}
 	for _, code := range []string{PermissionWeatherRefresh, PermissionWeatherConfigManage, PermissionMallWrite, PermissionSystemAccountManage} {
@@ -18,6 +18,23 @@ func TestOpenAPIPermissionGroupsAreIsolatedAndReadOnly(t *testing.T) {
 	groups[0].Children[0].Code = "changed"
 	if OpenAPIPermissionGroups()[0].Children[0].Code != PermissionTmallSycmRead {
 		t.Fatal("caller changed shared permission catalog")
+	}
+}
+
+func TestFeishuAttendancePermissionHierarchy(t *testing.T) {
+	parent := "feishu_attendance.read"
+	children := []string{"feishu_attendance.daily.read", "feishu_attendance.punch.read", "feishu_attendance.item.read"}
+	for _, child := range children {
+		if got := OpenAPIPermissionCandidates(child); !reflect.DeepEqual(got, []string{child, parent}) {
+			t.Errorf("candidates(%s) = %v", child, got)
+		}
+		if OpenAPIPermissionLevel(child) != 2 || OpenAPIPermissionName(child) == "" {
+			t.Errorf("missing named child permission %s", child)
+		}
+	}
+	want := append([]string{parent}, children...)
+	if got := ExpandOpenAPIPermissions([]string{parent}); !reflect.DeepEqual(got, want) {
+		t.Errorf("expanded permissions = %v, want %v", got, want)
 	}
 }
 

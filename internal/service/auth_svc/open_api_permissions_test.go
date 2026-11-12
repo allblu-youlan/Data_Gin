@@ -30,6 +30,12 @@ func TestParentGrantsCoverOnlyTheirDeclaredChildren(t *testing.T) {
 		{"monitoring areas", model.PermissionMonitoringAPIRead, model.PermissionMonitoringAreaRead, true},
 		{"monitoring child isolation", model.PermissionMonitoringHourlyRead, model.PermissionMonitoringAreaRead, false},
 		{"monitoring cannot manage malls", model.PermissionMonitoringAPIRead, model.PermissionMallWrite, false},
+		{"attendance daily", "feishu_attendance.read", "feishu_attendance.daily.read", true},
+		{"attendance punch", "feishu_attendance.read", "feishu_attendance.punch.read", true},
+		{"attendance item", "feishu_attendance.read", "feishu_attendance.item.read", true},
+		{"attendance child isolation", "feishu_attendance.daily.read", "feishu_attendance.punch.read", false},
+		{"attendance child cannot grant parent", "feishu_attendance.daily.read", "feishu_attendance.read", false},
+		{"attendance cannot manage malls", "feishu_attendance.read", model.PermissionMallWrite, false},
 		{"legacy child", model.PermissionTmallOrdersRead, model.PermissionTmallOrdersRead, true},
 		{"child cannot grant parent", model.PermissionTmallOrdersRead, model.PermissionTmallRead, false},
 		{"child cannot grant sibling", model.PermissionTmallOrdersRead, model.PermissionTmallSycmRead, false},
@@ -51,6 +57,21 @@ func TestParentGrantsCoverOnlyTheirDeclaredChildren(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestFeishuAttendancePermissionsAreGrantable(t *testing.T) {
+	for _, code := range []string{"feishu_attendance.read", "feishu_attendance.daily.read", "feishu_attendance.punch.read", "feishu_attendance.item.read"} {
+		found := false
+		for _, permission := range PermissionCatalog() {
+			if permission.Code == code {
+				found = permission.APIGrantable
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing grantable attendance permission %s", code)
+		}
 	}
 }
 

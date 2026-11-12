@@ -2,6 +2,7 @@ package apidoc
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 	if err := json.Unmarshal(catalogJSON, &source); err != nil {
 		t.Fatal(err)
 	}
-	if source.Title != "allblu开放接口文档" || len(source.Operations) != 36 {
+	if source.Title != "allblu开放接口文档" || len(source.Operations) != 39 {
 		t.Fatalf("unexpected reference: %s, %d operations", source.Title, len(source.Operations))
 	}
 	seen := map[string]bool{}
@@ -41,6 +42,88 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 					if field.Type != "string" || !strings.Contains(field.Description, "单位/格式与使用说明") {
 						t.Errorf("lost source type or units: %s", field.Name)
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestFeishuAttendanceContracts(t *testing.T) {
+	common := "ID USER_ID USER_NAME EMPLOYEE_NO DEPARTMENT_NAME WORK_DATE MODIFIED_TIME"
+	extras := map[string]string{
+		"daily": "ATTENDANCE_GROUP_NAME SHIFT_NAME TIME_ZONE RESIGN_DATE REQUIRED_MINUTES ACTUAL_MINUTES OVERTIME_MINUTES LEAVE_MINUTES",
+		"punch": "SOURCE_ROW_NO PUNCH_INDEX PUNCH_TYPE TIME_CODE RESULT_CODE PUNCH_TIME_TEXT RESULT_TEXT FEATURE_DATE GROUP_NAME GROUP_TYPE DAY_TYPE SOURCE_PUNCH_NO PUNCH_TITLE FEATURE_PUNCH_TIME_TEXT SHIFT_TIME_TEXT PUNCH_SHIFT_TIME_TEXT PUNCH_STATUS PUNCH_SUB_STATUS STATUS_MESSAGE PUNCH_LOCATION_NAME REMARK",
+		"item":  "SOURCE_ROW_NO ITEM_SEQ METRIC_CODE METRIC_TITLE VALUE_TEXT DURATION_DAY DURATION_HALF_DAY DURATION_HOUR DURATION_HALF_HOUR DURATION_MINUTE",
+	}
+	registered := map[string]bool{}
+	for kind := range extras {
+		registered["POST /api/open/feishu/attendance/"+kind+"/query"] = true
+	}
+	document, err := Build(registered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document.Groups) != 1 || document.Groups[0].Code != "feishu_attendance.read" || len(document.Groups[0].Children) != 3 {
+		t.Fatalf("missing attendance documentation group: %+v", document.Groups)
+	}
+	for _, category := range document.Groups[0].Children {
+		if len(category.Operations) != 1 {
+			t.Fatalf("expected one operation per attendance permission: %+v", category)
+		}
+		op := category.Operations[0]
+		kind := strings.TrimSuffix(strings.TrimPrefix(op.Permission, "feishu_attendance."), ".read")
+		t.Run(kind, func(t *testing.T) {
+			if op.Method != "POST" || op.Path != "/api/open/feishu/attendance/"+kind+"/query" || !strings.Contains(op.Authentication, "token") {
+				t.Fatalf("incorrect route or authentication: %+v", op)
+			}
+			for _, name := range []string{"startDate", "endDate", "filters"} {
+				field := findField(op.RequestFields, name)
+				if field == nil || !field.Required || field.Location != "body" {
+					t.Errorf("missing required body field: %s", name)
+				}
+			}
+			filters := findField(op.RequestFields, "filters")
+			if filters == nil || len(filters.Children) != 2 {
+				t.Fatal("expected exactly the name and department filters")
+			}
+			for _, name := range []string{"USER_NAME", "DEPARTMENT_NAME"} {
+				field := findField(filters.Children, name)
+				if field == nil || !field.Required || field.Type != "string" {
+					t.Errorf("missing required exact filter %s", name)
+				}
+			}
+			items := findField(op.ResponseFields, "data", "items")
+			if items == nil {
+				t.Fatal("missing items")
+			}
+			var names []string
+			for _, field := range items.Children {
+				names = append(names, field.Name)
+				if field.Type != "string" || !field.Nullable || field.Description == "" {
+					t.Errorf("source values must retain string/null and description: %+v", field)
+				}
+			}
+			if want := strings.Fields(common + " " + extras[kind]); !reflect.DeepEqual(names, want) {
+				t.Errorf("source field contract = %v, want %v", names, want)
+			}
+			pagination := findField(op.ResponseFields, "data", "pagination")
+			if pagination == nil || len(pagination.Children) != 3 || findField(pagination.Children, "hasMore") == nil || findField(op.ResponseFields, "data", "total") != nil {
+				t.Error("expected page/pageSize/hasMore pagination without total")
+			}
+			errors := map[int]string{}
+			for _, entry := range op.Errors {
+				errors[entry.Status] = entry.Code
+			}
+			if want := (map[int]string{401: "100401", 403: "100403", 422: "100422", 429: "100429", 500: "100500", 503: "100503"}); !reflect.DeepEqual(errors, want) {
+				t.Errorf("errors = %v", errors)
+			}
+			var notes strings.Builder
+			for _, note := range op.Notes {
+				notes.WriteString(note.Title + note.Body)
+			}
+			for _, term := range []string{"31", "300", "30", "手机号", "USER_ID", "部门全称", "数据范围授权", "MODIFIED_TIME", "02:00", "非实时", "URL", "未知字段"} {
+				if !strings.Contains(notes.String(), term) {
+					t.Errorf("missing contract explanation: %s", term)
 				}
 			}
 		})
