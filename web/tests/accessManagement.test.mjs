@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import * as accessManagement from '../.test-dist/accessManagement.js'
 
 import {
   accountRoleIDs,
@@ -15,6 +16,27 @@ import {
   parseCreatedAccessRole,
   updateRoleSelection,
 } from '../.test-dist/accessManagement.js'
+
+test('describes monitoring role hierarchy and saved inheritance from the dynamic catalog', () => {
+  const parent = { code: 'monitoring.api.read', name: '监控数据', module: 'monitoring', description: '全部监控查询', riskLevel: 'LOW', level: 1 }
+  const children = ['hourly', 'daily', 'area'].map(kind => ({
+    code: `monitoring.${kind}.read`, name: kind, module: 'monitoring', description: '监控查询', riskLevel: 'LOW', level: 2, parentCode: parent.code,
+  }))
+  const catalog = [parent, ...children]
+  assert.equal(accessManagement.accessPermissionHierarchyLabel(parent, catalog), '一级权限 · 自动覆盖下属全部二级接口')
+  for (const child of children) {
+    assert.equal(accessManagement.accessPermissionHierarchyLabel(child, catalog, [parent.code]), '二级权限 · 所属监控数据 · 当前由一级权限覆盖')
+    assert.equal(accessManagement.accessPermissionHierarchyLabel(child, catalog, [child.code]), '二级权限 · 所属监控数据')
+  }
+  assert.equal(accessManagement.accessPermissionHierarchyLabel(children[0], catalog, [parent.code, children[0].code]), '二级权限 · 所属监控数据 · 当前由一级权限覆盖，同时独立授权')
+  assert.equal(accessManagement.accessPermissionHierarchyLabel({ ...children[0], parentCode: undefined, level: undefined }, catalog, [parent.code]), '')
+})
+
+test('keeps role permission hierarchy dynamic for future API groups', () => {
+  const parent = { code: 'future.api.read', name: '新平台', module: 'future', description: '', riskLevel: 'LOW', level: 1 }
+  const child = { code: 'future.query.read', name: '查询', module: 'future', description: '', riskLevel: 'LOW', parentCode: parent.code, level: 2 }
+  assert.equal(accessManagement.accessPermissionHierarchyLabel(child, [parent, child], [parent.code]), '二级权限 · 所属新平台 · 当前由一级权限覆盖')
+})
 
 test('parses account report category permissions', () => {
   assert.equal(accessAccountReportCategoriesPath(7), '/v1/access/accounts/7/report-categories')

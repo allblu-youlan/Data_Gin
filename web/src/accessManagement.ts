@@ -17,6 +17,16 @@ export type AccessPermission = {
   module: string
   description: string
   riskLevel: string
+  parentCode?: string
+  level?: number
+}
+
+export function accessPermissionHierarchyLabel(permission: AccessPermission, catalog: readonly AccessPermission[], assignedCodes: readonly string[] = []): string {
+  if (!permission.parentCode) return permission.level === 1 ? '一级权限 · 自动覆盖下属全部二级接口' : ''
+  const parentName = catalog.find(item => item.code === permission.parentCode)?.name ?? permission.parentCode
+  const hierarchy = `二级权限 · 所属${parentName}`
+  if (!assignedCodes.includes(permission.parentCode)) return hierarchy
+  return `${hierarchy} · 当前由一级权限覆盖${assignedCodes.includes(permission.code) ? '，同时独立授权' : ''}`
 }
 
 export type RoleCatalogStatus = 'idle' | 'loading' | 'ready' | 'error'

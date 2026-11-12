@@ -113,7 +113,7 @@ func ApplySchemaMigrations() (resultErr error) {
 	}
 	if currentApplied {
 		console.Info("database schema is current: %s", schemaMigrationVersion)
-		return nil
+		return applyOpenMonitoringPermissionMigration(db)
 	}
 	baselineVersion, baselineApplied, err := appliedSchemaMigrationBaseline(
 		db,
@@ -148,7 +148,7 @@ func ApplySchemaMigrations() (resultErr error) {
 	if err := db.Create(&marker).Error; err != nil {
 		return fmt.Errorf("write schema migration marker: %w", err)
 	}
-	return nil
+	return applyOpenMonitoringPermissionMigration(db)
 }
 
 func finalizeOfficeMessageMigration(db *gorm.DB) error {

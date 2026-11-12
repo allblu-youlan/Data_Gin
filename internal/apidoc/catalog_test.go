@@ -16,7 +16,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 	if err := json.Unmarshal(catalogJSON, &source); err != nil {
 		t.Fatal(err)
 	}
-	if source.Title != "allblu开放接口文档" || len(source.Operations) != 33 {
+	if source.Title != "allblu开放接口文档" || len(source.Operations) != 36 {
 		t.Fatalf("unexpected reference: %s, %d operations", source.Title, len(source.Operations))
 	}
 	seen := map[string]bool{}

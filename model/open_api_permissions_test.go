@@ -7,7 +7,7 @@ import (
 
 func TestOpenAPIPermissionGroupsAreIsolatedAndReadOnly(t *testing.T) {
 	groups := OpenAPIPermissionGroups()
-	if len(groups) != 4 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
+	if len(groups) != 5 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
 		t.Fatalf("permission groups = %+v", groups)
 	}
 	for _, code := range []string{PermissionWeatherRefresh, PermissionWeatherConfigManage, PermissionMallWrite, PermissionSystemAccountManage} {
@@ -28,6 +28,9 @@ func TestOpenAPIPermissionCandidatesOnlyInheritDeclaredParent(t *testing.T) {
 	}{
 		{PermissionTmallOrdersRead, []string{PermissionTmallOrdersRead, PermissionTmallRead}},
 		{PermissionWeatherRead, []string{PermissionWeatherRead, PermissionWeatherAPIRead}},
+		{PermissionMonitoringHourlyRead, []string{PermissionMonitoringHourlyRead, PermissionMonitoringAPIRead}},
+		{PermissionMonitoringDailyRead, []string{PermissionMonitoringDailyRead, PermissionMonitoringAPIRead}},
+		{PermissionMonitoringAreaRead, []string{PermissionMonitoringAreaRead, PermissionMonitoringAPIRead}},
 		{PermissionTmallRead, []string{PermissionTmallRead}},
 		{PermissionWeatherConfigManage, []string{PermissionWeatherConfigManage}},
 		{"tmall.unknown.read", []string{"tmall.unknown.read"}},

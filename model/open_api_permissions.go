@@ -5,6 +5,10 @@ const (
 	PermissionBojunRead               = "bojun.read"
 	PermissionWeatherAPIRead          = "weather.api.read"
 	PermissionBusinessOverviewAPIRead = "business_overview.api.read"
+	PermissionMonitoringAPIRead       = "monitoring.api.read"
+	PermissionMonitoringHourlyRead    = "monitoring.hourly.read"
+	PermissionMonitoringDailyRead     = "monitoring.daily.read"
+	PermissionMonitoringAreaRead      = "monitoring.area.read"
 )
 
 type PermissionDefinition struct {
@@ -50,6 +54,14 @@ var openAPIPermissionGroups = []PermissionGroup{
 		Code: PermissionBusinessOverviewAPIRead, Name: "营业概况", Description: "授权后可查询营业概况下全部二级接口",
 		Children: []PermissionDefinition{
 			{Code: PermissionBusinessOverviewRead, Name: "营业金额查询", Description: "查询销售日结、收款构成与门店对账数据"},
+		},
+	},
+	{
+		Code: PermissionMonitoringAPIRead, Name: "监控数据", Description: "授权后可查询授权店铺的小时、日汇总和区域监控数据",
+		Children: []PermissionDefinition{
+			{Code: PermissionMonitoringHourlyRead, Name: "小时监控查询", Description: "按业务店铺编码查询多日小时监控数据"},
+			{Code: PermissionMonitoringDailyRead, Name: "每日监控汇总", Description: "按日汇总已采集的小时客流计数"},
+			{Code: PermissionMonitoringAreaRead, Name: "区域监控查询", Description: "查询单日区域曝光和停留数据"},
 		},
 	},
 }
