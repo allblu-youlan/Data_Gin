@@ -1,14 +1,18 @@
 package model
 
 const (
-	PermissionTmallRead               = "tmall.read"
-	PermissionBojunRead               = "bojun.read"
-	PermissionWeatherAPIRead          = "weather.api.read"
-	PermissionBusinessOverviewAPIRead = "business_overview.api.read"
-	PermissionMonitoringAPIRead       = "monitoring.api.read"
-	PermissionMonitoringHourlyRead    = "monitoring.hourly.read"
-	PermissionMonitoringDailyRead     = "monitoring.daily.read"
-	PermissionMonitoringAreaRead      = "monitoring.area.read"
+	PermissionTmallRead                 = "tmall.read"
+	PermissionBojunRead                 = "bojun.read"
+	PermissionWeatherAPIRead            = "weather.api.read"
+	PermissionBusinessOverviewAPIRead   = "business_overview.api.read"
+	PermissionMonitoringAPIRead         = "monitoring.api.read"
+	PermissionMonitoringHourlyRead      = "monitoring.hourly.read"
+	PermissionMonitoringDailyRead       = "monitoring.daily.read"
+	PermissionMonitoringAreaRead        = "monitoring.area.read"
+	PermissionFeishuAttendanceRead      = "feishu_attendance.read"
+	PermissionFeishuAttendanceDailyRead = "feishu_attendance.daily.read"
+	PermissionFeishuAttendancePunchRead = "feishu_attendance.punch.read"
+	PermissionFeishuAttendanceItemRead  = "feishu_attendance.item.read"
 )
 
 type PermissionDefinition struct {
@@ -62,6 +66,14 @@ var openAPIPermissionGroups = []PermissionGroup{
 			{Code: PermissionMonitoringHourlyRead, Name: "小时监控查询", Description: "按业务店铺编码查询多日小时监控数据"},
 			{Code: PermissionMonitoringDailyRead, Name: "每日监控汇总", Description: "按日汇总已采集的小时客流计数"},
 			{Code: PermissionMonitoringAreaRead, Name: "区域监控查询", Description: "查询单日区域曝光和停留数据"},
+		},
+	},
+	{
+		Code: PermissionFeishuAttendanceRead, Name: "飞书工时", Description: "按姓名、部门全称和日期范围查询工时日汇总、打卡与指标明细；部门条件不是数据范围授权",
+		Children: []PermissionDefinition{
+			{Code: PermissionFeishuAttendanceDailyRead, Name: "工时日汇总查询", Description: "查询飞书应出勤、实际出勤、加班和请假分钟数"},
+			{Code: PermissionFeishuAttendancePunchRead, Name: "考勤打卡明细查询", Description: "查询飞书打卡时间、结果、状态和地点明细"},
+			{Code: PermissionFeishuAttendanceItemRead, Name: "考勤指标明细查询", Description: "查询飞书统计指标、原始展示值和分单位时长"},
 		},
 	},
 }
