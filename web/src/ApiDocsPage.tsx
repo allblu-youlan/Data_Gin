@@ -11,7 +11,7 @@ export default function ApiDocsPage() {
   const [document, setDocument] = useState<ApiDocument | null>(null)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('permission') ?? '')
   const [selected, setSelected] = useState(() => decodeURIComponent(window.location.hash.slice(1)))
   useEffect(() => {
     window.document.title = title
@@ -33,24 +33,24 @@ export default function ApiDocsPage() {
     return () => { controller.abort(); window.clearTimeout(timeout) }
   }, [attempt])
   const groups = useMemo(() => filterApiGroups(document?.groups ?? [], query), [document, query])
-  const all = document?.groups.flatMap(group => group.children.flatMap(child => child.operations.map(operation => ({ group, child, operation })))) ?? []
-  const current = all.find(item => item.operation.id === selected) ?? all[0]
+  const matches = groups.flatMap(group => group.children.flatMap(child => child.operations.map(operation => ({ group, child, operation }))))
+  const current = matches.find(item => item.operation.id === selected) ?? matches[0]
   const count = groups.reduce((sum, group) => sum + group.children.reduce((n, child) => n + child.operations.length, 0), 0)
   return <div className={styles.page}>
     <a className={styles.skip} href="#api-detail">跳到接口详情</a>
-    <header className={styles.header}><a href="?view=api-docs" className={styles.brand}><BookOpen size={22} aria-hidden="true" /><strong>{title}</strong></a><span className={styles.headerMeta}>API REFERENCE <span>v{document?.version ?? '2.0'}</span></span></header>
+    <header className={styles.header}><a href="?view=api-docs" className={styles.brand}><BookOpen size={22} aria-hidden="true" /><strong>{title}</strong></a><span className={styles.headerMeta}>API REFERENCE <span>{document ? `v${document.version}` : '加载中'}</span></span></header>
     <div className={styles.layout}>
       <aside className={styles.sidebar} aria-label="接口目录">
-        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、路径或字段" aria-label="搜索接口、路径或字段" /></label>
+        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、路径、字段或权限码" aria-label="搜索接口、路径、字段或权限码" /></label>
         <div className={styles.directoryTitle}>接口目录 <span>{count} 个接口</span></div>
         <nav>{groups.map(group => <section className={styles.navGroup} key={group.code}><h2>{group.name}</h2>{group.children.map(child => <details key={child.code} open><summary>{child.name}<span>{child.operations.length}</span></summary><div>{child.operations.map(op => <a key={op.id} href={`#${encodeURIComponent(op.id)}`} aria-current={current?.operation.id === op.id ? 'page' : undefined}><span className={styles.methodSmall}>{op.method}</span><span>{op.title}</span></a>)}</div></details>)}</section>)}</nav>
-        {!count && document && <p className={styles.muted}>未找到匹配接口，试试字段名称或路径。</p>}
+        {!count && document && <p className={styles.muted}>未找到匹配接口，试试字段名称、路径或权限码。</p>}
       </aside>
       <main id="api-detail" className={styles.main} tabIndex={-1}>
         {error ? <div className={styles.feedback} role="alert"><h1>文档暂时不可用</h1><p>{error}</p><button onClick={() => setAttempt(value => value + 1)}>重新加载</button></div> : !document ? <div className={styles.feedback} role="status">正在加载接口文档…</div> : current ? <>
           <div className={styles.breadcrumb}>{current.group.name}<ChevronRight size={14} aria-hidden="true" />{current.child.name}</div>
           <OperationDetail key={current.operation.id} operation={current.operation} />
-        </> : <div className={styles.feedback}>当前没有已发布的接口文档。</div>}
+        </> : query.trim() ? <div className={styles.feedback}><h1>未找到匹配接口</h1><p>试试字段名称、路径或权限码。</p><button onClick={() => setQuery('')}>清除搜索</button></div> : <div className={styles.feedback}>当前没有已发布的接口文档。</div>}
       </main>
     </div>
   </div>

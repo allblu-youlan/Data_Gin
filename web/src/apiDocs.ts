@@ -27,6 +27,12 @@ export type ApiOperation = {
 export type ApiGroup = { code: string; name: string; description?: string; children: { code: string; name: string; operations: ApiOperation[] }[] }
 export type ApiDocument = { title: string; version: string; description?: string; groups: ApiGroup[] }
 
+export function buildApiDocsLink(permission = ''): string {
+  const query = new URLSearchParams({ view: 'api-docs' })
+  if (permission.trim()) query.set('permission', permission.trim())
+  return `?${query}`
+}
+
 export function parseApiDocument(payload: unknown): ApiDocument {
   const envelope = payload as { code?: number; data?: { document?: ApiDocument } } | null
   const document = envelope?.data?.document
@@ -42,7 +48,7 @@ export function filterApiGroups(groups: ApiGroup[], query: string): ApiGroup[] {
   const term = query.trim().toLocaleLowerCase()
   if (!term) return groups
   return groups.map(group => ({ ...group, children: group.children.map(child => ({ ...child, operations: child.operations.filter(op =>
-    `${group.name} ${child.name} ${op.title} ${op.path} ${op.method} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`.toLocaleLowerCase().includes(term),
+    `${group.code} ${group.name} ${child.code} ${child.name} ${op.id} ${op.title} ${op.path} ${op.method} ${op.permission} ${op.parentPermission ?? ''} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`.toLocaleLowerCase().includes(term),
   ) })).filter(child => child.operations.length > 0) })).filter(group => group.children.length > 0)
 }
 
