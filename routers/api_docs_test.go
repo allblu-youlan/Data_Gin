@@ -9,6 +9,7 @@ import (
 	"gin-biz-web-api/internal/apidoc"
 	"gin-biz-web-api/internal/controller/data_ctrl"
 	"gin-biz-web-api/internal/middleware"
+	"gin-biz-web-api/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +21,7 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 	registerAPIDocsRoutes(router, api)
 	api.Use(middleware.RequireDatabaseAvailability())
 	registerOpenTmallRoutes(api, data_ctrl.NewOpenTmallController())
+	registerOpenMonitoringRoutes(api, data_ctrl.NewOpenMonitoringController())
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/api-docs", nil))
@@ -36,15 +38,26 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 		t.Fatal(err)
 	}
 	document := payload.Data.Document
-	if payload.Code != 0 || document.Title != "allblu开放接口文档" || len(document.Groups) != 1 {
-		t.Fatalf("unexpected docs: %+v", payload)
+	if payload.Code != 0 || document.Title != "allblu开放接口文档" || len(document.Groups) != 2 {
+		t.Fatalf("unexpected docs: code=%d title=%q groups=%d", payload.Code, document.Title, len(document.Groups))
 	}
 	count := 0
-	for _, child := range document.Groups[0].Children {
-		count += len(child.Operations)
+	monitoringCount := 0
+	for _, group := range document.Groups {
+		for _, child := range group.Children {
+			count += len(child.Operations)
+			if group.Code == model.PermissionMonitoringAPIRead {
+				for _, operation := range child.Operations {
+					monitoringCount++
+					if operation.ParentPermission != model.PermissionMonitoringAPIRead || len(operation.RequestFields) == 0 || len(operation.ResponseFields) == 0 {
+						t.Fatalf("incomplete monitoring contract: %+v", operation)
+					}
+				}
+			}
+		}
 	}
-	if count != 6 {
-		t.Fatalf("expected six registered Tmall APIs, got %d", count)
+	if count != 9 || monitoringCount != 3 {
+		t.Fatalf("expected six Tmall and three monitoring APIs, got %d total and %d monitoring", count, monitoringCount)
 	}
 	etag := response.Header().Get("ETag")
 	if etag == "" || response.Header().Get("Cache-Control") == "" {
