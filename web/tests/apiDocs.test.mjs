@@ -70,6 +70,32 @@ const monitoringDocument = {
 const operationIDs = groups => groups.flatMap(group => group.children.flatMap(child => child.operations.map(item => item.id)))
 const fieldAt = (fields, path) => path.reduce((field, name) => field.children.find(item => item.name === name), { children: fields })
 
+test('discovers attendance permissions, field search and executable examples from the backend catalog', () => {
+  const operations = catalog.operations.filter(item => item.parentPermission === 'feishu_attendance.read')
+  const ids = ['feishu-attendance-daily', 'feishu-attendance-punch', 'feishu-attendance-item']
+  assert.deepEqual(operations.map(item => item.id), ids)
+  const attendance = parseApiDocument({ code: 0, data: { document: { ...document, groups: [{ code: 'feishu_attendance.read', name: '飞书工时', children: operations.map(item => ({ code: item.permission, name: item.title, operations: [item] })) }] } } })
+  assert.deepEqual(operationIDs(filterApiGroups(attendance.groups, '飞书工时')), ids)
+  assert.deepEqual(operationIDs(filterApiGroups(attendance.groups, 'ACTUAL_MINUTES')), [ids[0]])
+  assert.deepEqual(operationIDs(filterApiGroups(attendance.groups, 'PUNCH_TIME_TEXT')), [ids[1]])
+  assert.deepEqual(operationIDs(filterApiGroups(attendance.groups, 'DURATION_HALF_HOUR')), [ids[2]])
+  for (const item of operations) {
+    const link = new URL(buildApiDocsLink(item.permission), 'https://app.example.com/')
+    assert.deepEqual(operationIDs(filterApiGroups(attendance.groups, link.searchParams.get('permission'))), [item.id])
+    const curl = buildCurl(item, 'https://api.example.com/')
+    assert.ok(curl.startsWith(`curl --request POST 'https://api.example.com${item.path}'`))
+    assert.match(curl, /--header 'token: dg_open_REPLACE_WITH_YOUR_TOKEN'/)
+    assert.match(curl, /--header 'Content-Type: application\/json'/)
+    assert.deepEqual(Object.keys(item.requestExample.filters).sort(), ['DEPARTMENT_NAME', 'USER_NAME'])
+    assert.equal(item.requestExample.filters.USER_NAME, '张三')
+    assert.equal(item.requestExample.filters.DEPARTMENT_NAME, '零售事业部/上海一区')
+    assert.equal(item.requestFields.some(field => field.location === 'query'), false)
+    assert.equal(fieldAt(item.responseFields, ['data', 'items', 'USER_ID']).nullable, true)
+    assert.equal(item.responseExample.data.pagination.hasMore, false)
+    assert.equal('total' in item.responseExample.data, false)
+  }
+})
+
 test('reads and searches all three monitoring contracts from the backend catalog', () => {
   const parsed = parseApiDocument({ code: 0, data: { document: monitoringDocument } })
   const ids = ['monitoring-hourly', 'monitoring-daily', 'monitoring-areas']
