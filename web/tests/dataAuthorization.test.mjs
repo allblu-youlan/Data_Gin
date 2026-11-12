@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import * as dataAuthorization from '../.test-dist/dataAuthorization.js'
 import {
   authorizationExpiryISO,
   buildDataAuthorizationGrant,
@@ -11,6 +12,66 @@ import {
   parseDataAuthorizationAudits,
   parseDataPermissionGroups,
 } from '../.test-dist/dataAuthorization.js'
+
+const monitoringGroup = {
+  code: 'monitoring.api.read', name: '监控数据', description: '查询授权店铺监控数据',
+  children: [
+    { code: 'monitoring.hourly.read', name: '小时监控查询', description: '查询多日小时数据' },
+    { code: 'monitoring.daily.read', name: '每日监控汇总', description: '按日汇总小时计数' },
+    { code: 'monitoring.area.read', name: '区域监控查询', description: '查询单日区域数据' },
+  ],
+}
+
+test('loads the dynamic monitoring catalog with an explicit GET for the console client', async () => {
+  const signal = new AbortController().signal
+  const requests = []
+  const client = async (path, options) => {
+    requests.push({ path, options })
+    if (options?.method !== 'GET') return { ok: false, status: 400, data: { msg: '请求方法未指定' } }
+    return { ok: true, status: 200, data: { data: { groups: [monitoringGroup] } } }
+  }
+  assert.deepEqual(await dataAuthorization.loadDataPermissionGroups(client, signal), [monitoringGroup])
+  assert.deepEqual(requests, [{ path: '/v1/data-authorizations/permissions', options: {
+    method: 'GET', showResult: false, silentLoading: true, signal,
+  } }])
+})
+
+test('reports catalog failures instead of treating them as an empty permission catalog', async () => {
+  for (const response of [{ ok: false, data: { msg: '禁止访问' } }, { ok: true, data: { data: { groups: [] } } }]) {
+    await assert.rejects(() => dataAuthorization.loadDataPermissionGroups(async () => response), /权限目录加载失败/)
+  }
+})
+
+test('uses monitoring parent and child catalog names in permission and audit labels', () => {
+  for (const [code, expected] of [
+    ['monitoring.api.read', '监控数据'], ['monitoring.hourly.read', '小时监控查询'],
+    ['monitoring.daily.read', '每日监控汇总'], ['monitoring.area.read', '区域监控查询'],
+    ['open_api.account', '开放接口账号'], ['open_api.credential', '访问凭证'], ['unknown.read', 'unknown.read'],
+  ]) assert.equal(dataAuthorization.dataPermissionLabel(code, [monitoringGroup]), expected)
+})
+
+test('preserves backend monitoring inheritance and independent child status', () => {
+  const parsed = parseDataAuthorizationAccounts({ data: { accounts: [{
+    id: 14, account: 'monitoring-partner', permissions: [
+      { permission: 'monitoring.api.read', status: 'ACTIVE', permanent: true, level: 1 },
+      { permission: 'monitoring.hourly.read', status: 'ACTIVE', permanent: true, level: 2, parentCode: 'monitoring.api.read', inheritedFrom: 'monitoring.api.read' },
+      { permission: 'monitoring.daily.read', status: 'ACTIVE', permanent: true, level: 2, parentCode: 'monitoring.api.read', inheritedFrom: 'monitoring.api.read' },
+      { permission: 'monitoring.area.read', status: 'ACTIVE', permanent: true, level: 2, parentCode: 'monitoring.api.read', inheritedFrom: 'monitoring.api.read' },
+    ],
+  }] } })
+  assert.deepEqual(parsed.accounts[0].permissions.map(grant => grant.inheritedFrom), [undefined, 'monitoring.api.read', 'monitoring.api.read', 'monitoring.api.read'])
+  const independent = parseDataAuthorizationAccounts({ data: { accounts: [{
+    id: 14, account: 'monitoring-partner', permissions: [
+      { permission: 'monitoring.api.read', status: 'EXPIRED', permanent: false, expiresAt: '2026-11-01T00:00:00+08:00' },
+      { permission: 'monitoring.hourly.read', status: 'ACTIVE', permanent: true, parentCode: 'monitoring.api.read' },
+      { permission: 'monitoring.area.read', status: 'NOT_GRANTED', permanent: false, parentCode: 'monitoring.api.read' },
+    ],
+  }] } })
+  assert.deepEqual(independent.accounts[0].permissions.map(grant => [grant.status, grant.inheritedFrom]), [
+    ['EXPIRED', undefined], ['ACTIVE', undefined], ['NOT_GRANTED', undefined],
+  ])
+  assert.deepEqual(buildDataAuthorizationGrant('monitoring.api.read', '', true), { permission: 'monitoring.api.read', permanent: true })
+})
 
 test('parses safe account envelope and rejects malformed rows', () => {
   const parsed = parseDataAuthorizationAccounts({ data: {

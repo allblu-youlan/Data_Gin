@@ -114,6 +114,28 @@ function parsePermission(value: unknown): DataAuthorizationPermission | null {
 export type DataPermissionDefinition = { code: string; name: string; description: string }
 export type DataPermissionGroup = DataPermissionDefinition & { children: DataPermissionDefinition[] }
 
+type PermissionCatalogClient = (path: string, options: {
+  method: 'GET'; showResult: boolean; silentLoading: boolean; signal?: AbortSignal
+}) => Promise<{ ok: boolean; data: unknown }>
+
+export async function loadDataPermissionGroups(client: PermissionCatalogClient, signal?: AbortSignal): Promise<DataPermissionGroup[]> {
+  const response = await client('/v1/data-authorizations/permissions', { method: 'GET', showResult: false, silentLoading: true, signal })
+  const groups = response.ok ? parseDataPermissionGroups(response.data) : []
+  if (!groups.length) throw new Error('权限目录加载失败')
+  return groups
+}
+
+export function dataPermissionLabel(permission: string, groups: readonly DataPermissionGroup[]): string {
+  for (const group of groups) {
+    if (group.code === permission) return group.name
+    const child = group.children.find(item => item.code === permission)
+    if (child) return child.name
+  }
+  if (permission === 'open_api.account') return '开放接口账号'
+  if (permission === 'open_api.credential') return '访问凭证'
+  return permission
+}
+
 export function parseDataPermissionGroups(payload: unknown): DataPermissionGroup[] {
   const data = envelopeData(payload)
   if (!Array.isArray(data?.groups)) return []
