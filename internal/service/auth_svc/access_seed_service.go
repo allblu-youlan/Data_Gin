@@ -41,6 +41,8 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionTmallQztgRead, "查询天猫全站推广", "天猫", "通过开放接口查询天猫全站推广商品数据", "MEDIUM", true, 340},
 	{model.PermissionTmallTotRead, "查询天猫商品汇总", "天猫", "通过开放接口查询天猫商品汇总数据", "MEDIUM", true, 350},
 	{model.PermissionTmallOrdersRead, "天猫订单商品明细查询", "天猫", "通过开放接口实时查询天猫订单商品明细数据", "MEDIUM", true, 360},
+	{model.PermissionYouzanOrdersRead, "有赞订单查询", "有赞", "通过开放接口查询有赞订单主表数据", "MEDIUM", true, 361},
+	{model.PermissionYouzanOrderItemsRead, "有赞订单商品明细查询", "有赞", "通过开放接口查询有赞订单商品明细数据", "MEDIUM", true, 362},
 	{model.PermissionMonitoringHourlyRead, "小时监控查询", "监控数据", "按业务店铺编码查询多日小时监控数据", "MEDIUM", true, 370},
 	{model.PermissionMonitoringDailyRead, "每日监控汇总", "监控数据", "按日汇总已采集的小时客流计数", "MEDIUM", true, 380},
 	{model.PermissionMonitoringAreaRead, "区域监控查询", "监控数据", "查询单日区域曝光和停留数据", "MEDIUM", true, 390},

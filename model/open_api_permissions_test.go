@@ -7,7 +7,7 @@ import (
 
 func TestOpenAPIPermissionGroupsAreIsolatedAndReadOnly(t *testing.T) {
 	groups := OpenAPIPermissionGroups()
-	if len(groups) != 6 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
+	if len(groups) != 7 || groups[0].Code != PermissionTmallRead || len(groups[0].Children) != 4 {
 		t.Fatalf("permission groups = %+v", groups)
 	}
 	for _, code := range []string{PermissionWeatherRefresh, PermissionWeatherConfigManage, PermissionMallWrite, PermissionSystemAccountManage} {
@@ -54,6 +54,21 @@ func TestOpenAPIPermissionCandidatesOnlyInheritDeclaredParent(t *testing.T) {
 	} {
 		if got := OpenAPIPermissionCandidates(test.code); !reflect.DeepEqual(got, test.want) {
 			t.Errorf("candidates(%s) = %v, want %v", test.code, got, test.want)
+		}
+	}
+}
+
+func TestYouzanParentExpandsForNavigationWithoutSiblingGrants(t *testing.T) {
+	for _, test := range []struct {
+		codes []string
+		want  []string
+	}{
+		{[]string{"youzan.read", "youzan.orders.read"}, []string{"youzan.read", "youzan.orders.read", "youzan.order_items.read"}},
+		{[]string{"youzan.orders.read"}, []string{"youzan.orders.read"}},
+		{[]string{"youzan.order_items.read"}, []string{"youzan.order_items.read"}},
+	} {
+		if got := ExpandOpenAPIPermissions(test.codes); !reflect.DeepEqual(got, test.want) {
+			t.Errorf("expanded permissions = %v, want %v", got, test.want)
 		}
 	}
 }

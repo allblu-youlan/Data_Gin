@@ -45,6 +45,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 	registerSalesSummaryRoutes(api, data_ctrl.NewSalesSummaryController())
 	registerOpenTmallRoutes(api, data_ctrl.NewOpenTmallController())
 	registerOpenFeishuAttendanceRoutes(api, data_ctrl.NewOpenFeishuAttendanceController())
+	registerOpenYouzanRoutes(api, data_ctrl.NewOpenYouzanController())
 	registerOpenMonitoringRoutes(api, data_ctrl.NewOpenMonitoringController())
 	// 开放接口账号与数据授权，仅可信管理员可用
 	registerDataAuthorizationRoutes(api)

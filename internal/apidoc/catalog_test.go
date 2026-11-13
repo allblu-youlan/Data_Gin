@@ -17,7 +17,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 	if err := json.Unmarshal(catalogJSON, &source); err != nil {
 		t.Fatal(err)
 	}
-	if source.Title != "allblu开放接口文档" || len(source.Operations) != 39 {
+	if source.Title != "allblu开放接口文档" || len(source.Operations) != 41 {
 		t.Fatalf("unexpected reference: %s, %d operations", source.Title, len(source.Operations))
 	}
 	seen := map[string]bool{}
@@ -152,6 +152,95 @@ func TestBuildUsesRegisteredRoutesAndSharedPermissionHierarchy(t *testing.T) {
 	empty, err := Build(nil)
 	if err != nil || empty.Groups == nil || len(empty.Groups) != 0 {
 		t.Fatalf("empty catalog: %+v, %v", empty, err)
+	}
+}
+
+func TestYouzanCatalogPublishesIndependentQueryContracts(t *testing.T) {
+	document, err := Build(map[string]bool{
+		"POST /api/open/youzan/orders/query":       true,
+		"POST /api/open/youzan/orders/items/query": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document.Groups) != 1 || document.Groups[0].Code != "youzan.read" || len(document.Groups[0].Children) != 2 {
+		t.Fatalf("expected Youzan parent with two query permissions: %+v", document.Groups)
+	}
+	contracts := map[string]struct {
+		path    string
+		fields  string
+		filters string
+	}{
+		"youzan.orders.read": {
+			path:    "/api/open/youzan/orders/query",
+			fields:  "ID TID STATUS STATUS_STR TYPE NODE_KDT_ID ROOT_KDT_ID SHOP_NAME CREATED UPDATE_TIME PAY_TIME SUCCESS_TIME CONSIGN_TIME CONFIRM_TIME TOTAL_FEE POST_FEE PAYMENT REFUND_STATE CREATED_DWD MODIFIED_DWD",
+			filters: "TID STATUS NODE_KDT_ID ROOT_KDT_ID",
+		},
+		"youzan.order_items.read": {
+			path:    "/api/open/youzan/orders/items/query",
+			fields:  "ID TID OID TITLE NUM ITEM_ID SKU_ID ITEM_NO SKU_NO ITEM_BARCODE SKU_BARCODE PRICE DISCOUNT_PRICE TOTAL_FEE PAYMENT CREATED UPDATE_TIME CREATED_DWD MODIFIED_DWD",
+			filters: "TID OID ITEM_ID SKU_ID SKU_NO",
+		},
+	}
+	for _, category := range document.Groups[0].Children {
+		t.Run(category.Code, func(t *testing.T) {
+			contract, ok := contracts[category.Code]
+			if !ok || len(category.Operations) != 1 {
+				t.Fatalf("unexpected permission operations: %+v", category)
+			}
+			operation := category.Operations[0]
+			if operation.Method != "POST" || operation.Path != contract.path || operation.ParentPermission != "youzan.read" {
+				t.Fatalf("unexpected route contract: %+v", operation)
+			}
+			items := findField(operation.ResponseFields, "data", "items")
+			if items == nil || len(items.Children) != len(strings.Fields(contract.fields)) {
+				t.Fatalf("unexpected Youzan projection: %+v", items)
+			}
+			for _, name := range strings.Fields(contract.fields) {
+				field := findField(items.Children, name)
+				if field == nil || field.Type != "string" || !field.Nullable || !field.Required {
+					t.Errorf("%s must be a required string-or-null field: %+v", name, field)
+				}
+			}
+			filters := findField(operation.RequestFields, "filters")
+			if filters == nil || len(filters.Children) != len(strings.Fields(contract.filters)) {
+				t.Fatalf("unexpected filters: %+v", filters)
+			}
+			for _, name := range strings.Fields(contract.filters) {
+				if findField(filters.Children, name) == nil {
+					t.Errorf("missing exact filter %s", name)
+				}
+			}
+			for _, name := range []string{"startTime", "endTime"} {
+				field := findField(operation.RequestFields, name)
+				if field == nil || field.Required {
+					t.Errorf("%s must allow precise TID requests without a time range", name)
+				}
+			}
+			var request struct {
+				TimeField string `json:"timeField"`
+			}
+			if err := json.Unmarshal(operation.RequestExample, &request); err != nil || request.TimeField != "modifiedDwd" {
+				t.Errorf("example should demonstrate warehouse incremental time: %+v, %v", request, err)
+			}
+			var response struct {
+				Code int    `json:"code"`
+				Msg  string `json:"msg"`
+				Data struct {
+					Items []map[string]any `json:"items"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(operation.ResponseExample, &response); err != nil || response.Code != 0 || response.Msg != "请求成功" || len(response.Data.Items) != 1 {
+				t.Fatalf("unexpected response example: %+v, %v", response, err)
+			}
+			for name, value := range response.Data.Items[0] {
+				if value != nil {
+					if _, ok := value.(string); !ok {
+						t.Errorf("%s is not string or null", name)
+					}
+				}
+			}
+		})
 	}
 }
 
