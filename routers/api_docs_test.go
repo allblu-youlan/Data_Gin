@@ -22,6 +22,7 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 	api.Use(middleware.RequireDatabaseAvailability())
 	registerOpenTmallRoutes(api, data_ctrl.NewOpenTmallController())
 	registerOpenMonitoringRoutes(api, data_ctrl.NewOpenMonitoringController())
+	registerOpenYouzanRoutes(api, data_ctrl.NewOpenYouzanController())
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/api-docs", nil))
@@ -38,11 +39,12 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 		t.Fatal(err)
 	}
 	document := payload.Data.Document
-	if payload.Code != 0 || document.Title != "allblu开放接口文档" || len(document.Groups) != 2 {
+	if payload.Code != 0 || document.Title != "allblu开放接口文档" || len(document.Groups) != 3 {
 		t.Fatalf("unexpected docs: code=%d title=%q groups=%d", payload.Code, document.Title, len(document.Groups))
 	}
 	count := 0
 	monitoringCount := 0
+	youzanCount := 0
 	for _, group := range document.Groups {
 		for _, child := range group.Children {
 			count += len(child.Operations)
@@ -54,10 +56,18 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 					}
 				}
 			}
+			if group.Code == model.PermissionYouzanRead {
+				for _, operation := range child.Operations {
+					youzanCount++
+					if operation.ParentPermission != model.PermissionYouzanRead || len(operation.RequestFields) == 0 || len(operation.ResponseFields) == 0 {
+						t.Fatalf("incomplete youzan contract: %+v", operation)
+					}
+				}
+			}
 		}
 	}
-	if count != 9 || monitoringCount != 3 {
-		t.Fatalf("expected six Tmall and three monitoring APIs, got %d total and %d monitoring", count, monitoringCount)
+	if count != 11 || monitoringCount != 3 || youzanCount != 2 {
+		t.Fatalf("expected six Tmall, three monitoring and two Youzan APIs, got %d total, %d monitoring and %d youzan", count, monitoringCount, youzanCount)
 	}
 	etag := response.Header().Get("ETag")
 	if etag == "" || response.Header().Get("Cache-Control") == "" {
