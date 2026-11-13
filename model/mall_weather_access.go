@@ -3,22 +3,24 @@ package model
 import "time"
 
 const (
-	PermissionMallRead            = "mall.read"
-	PermissionMallWrite           = "mall.write"
-	PermissionMallGeocodeConfirm  = "mall.geocode.confirm"
-	PermissionWeatherRead         = "weather.read"
-	PermissionWeatherRefresh      = "weather.refresh"
-	PermissionWeatherExport       = "weather.export"
-	PermissionWeatherFeishuPush   = "weather.feishu.push"
-	PermissionWeatherConfigManage = "weather.config.manage"
-	PermissionWeatherRawRead      = "weather.raw.read"
-	PermissionBojunOrderRead      = "bojun.order.read"
-	PermissionBojunStoreRead      = "bojun.store.read"
-	PermissionBojunStockRead      = "bojun.stock.read"
-	PermissionTmallSycmRead       = "tmall.sycm.read"
-	PermissionTmallQztgRead       = "tmall.qztg.read"
-	PermissionTmallTotRead        = "tmall.tot.read"
-	PermissionTmallOrdersRead     = "tmall.orders.read"
+	PermissionMallRead             = "mall.read"
+	PermissionMallWrite            = "mall.write"
+	PermissionMallGeocodeConfirm   = "mall.geocode.confirm"
+	PermissionWeatherRead          = "weather.read"
+	PermissionWeatherRefresh       = "weather.refresh"
+	PermissionWeatherExport        = "weather.export"
+	PermissionWeatherFeishuPush    = "weather.feishu.push"
+	PermissionWeatherConfigManage  = "weather.config.manage"
+	PermissionWeatherRawRead       = "weather.raw.read"
+	PermissionBojunOrderRead       = "bojun.order.read"
+	PermissionBojunStoreRead       = "bojun.store.read"
+	PermissionBojunStockRead       = "bojun.stock.read"
+	PermissionTmallSycmRead        = "tmall.sycm.read"
+	PermissionTmallQztgRead        = "tmall.qztg.read"
+	PermissionTmallTotRead         = "tmall.tot.read"
+	PermissionTmallOrdersRead      = "tmall.orders.read"
+	PermissionYouzanOrdersRead     = "youzan.orders.read"
+	PermissionYouzanOrderItemsRead = "youzan.order_items.read"
 )
 
 var mallWeatherAdminPermissions = [...]string{
@@ -38,6 +40,8 @@ var mallWeatherAdminPermissions = [...]string{
 	PermissionTmallQztgRead,
 	PermissionTmallTotRead,
 	PermissionTmallOrdersRead,
+	PermissionYouzanOrdersRead,
+	PermissionYouzanOrderItemsRead,
 }
 
 // GrantableDataPermissions returns the module and individual API permissions

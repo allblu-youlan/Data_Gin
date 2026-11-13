@@ -129,7 +129,7 @@ func TestDataAuthorizationSecretsAreNotSerialized(t *testing.T) {
 
 func TestGrantableDataPermissionsReturnsDefensiveAllowlist(t *testing.T) {
 	permissions := GrantableDataPermissions()
-	if !reflect.DeepEqual(permissions, []string{PermissionTmallRead, PermissionTmallSycmRead, PermissionTmallQztgRead, PermissionTmallTotRead, PermissionTmallOrdersRead, PermissionBojunRead, PermissionBojunOrderRead, PermissionBojunStoreRead, PermissionBojunStockRead, PermissionWeatherAPIRead, PermissionWeatherRead, PermissionBusinessOverviewAPIRead, PermissionBusinessOverviewRead, PermissionMonitoringAPIRead, PermissionMonitoringHourlyRead, PermissionMonitoringDailyRead, PermissionMonitoringAreaRead}) {
+	if !reflect.DeepEqual(permissions, []string{PermissionTmallRead, PermissionTmallSycmRead, PermissionTmallQztgRead, PermissionTmallTotRead, PermissionTmallOrdersRead, PermissionBojunRead, PermissionBojunOrderRead, PermissionBojunStoreRead, PermissionBojunStockRead, PermissionYouzanRead, PermissionYouzanOrdersRead, PermissionYouzanOrderItemsRead, PermissionWeatherAPIRead, PermissionWeatherRead, PermissionBusinessOverviewAPIRead, PermissionBusinessOverviewRead, PermissionMonitoringAPIRead, PermissionMonitoringHourlyRead, PermissionMonitoringDailyRead, PermissionMonitoringAreaRead}) {
 		t.Fatalf("permissions = %v", permissions)
 	}
 	permissions[0] = "mall.write"

@@ -3,6 +3,7 @@ package model
 const (
 	PermissionTmallRead               = "tmall.read"
 	PermissionBojunRead               = "bojun.read"
+	PermissionYouzanRead              = "youzan.read"
 	PermissionWeatherAPIRead          = "weather.api.read"
 	PermissionBusinessOverviewAPIRead = "business_overview.api.read"
 	PermissionMonitoringAPIRead       = "monitoring.api.read"
@@ -42,6 +43,13 @@ var openAPIPermissionGroups = []PermissionGroup{
 			{Code: PermissionBojunOrderRead, Name: "Bojun 订单查询", Description: "查询伯俊订单数据"},
 			{Code: PermissionBojunStoreRead, Name: "伯俊店仓查询", Description: "查询伯俊店仓档案"},
 			{Code: PermissionBojunStockRead, Name: "伯俊实时库存查询", Description: "按店仓和商品条码、款色或款号查询实时库存"},
+		},
+	},
+	{
+		Code: PermissionYouzanRead, Name: "有赞", Description: "授权后可查询有赞订单主表与商品明细接口",
+		Children: []PermissionDefinition{
+			{Code: PermissionYouzanOrdersRead, Name: "有赞订单查询", Description: "查询有赞订单主表数据"},
+			{Code: PermissionYouzanOrderItemsRead, Name: "有赞订单商品明细查询", Description: "查询有赞订单商品明细数据"},
 		},
 	},
 	{

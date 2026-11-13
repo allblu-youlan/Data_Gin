@@ -4,8 +4,8 @@ import "testing"
 
 func TestMallWeatherAdminPermissions(t *testing.T) {
 	permissions := MallWeatherAdminPermissions()
-	if len(permissions) != 16 {
-		t.Fatalf("MallWeatherAdminPermissions() len = %d, want 16", len(permissions))
+	if len(permissions) != 18 {
+		t.Fatalf("MallWeatherAdminPermissions() len = %d, want 18", len(permissions))
 	}
 
 	seen := make(map[string]struct{}, len(permissions))
@@ -27,6 +27,11 @@ func TestMallWeatherAdminPermissions(t *testing.T) {
 	for _, permission := range []string{"tmall.sycm.read", "tmall.qztg.read", "tmall.tot.read", "tmall.orders.read"} {
 		if _, exists := seen[permission]; !exists {
 			t.Fatalf("missing tmall permission %q", permission)
+		}
+	}
+	for _, permission := range []string{"youzan.orders.read", "youzan.order_items.read"} {
+		if _, exists := seen[permission]; !exists {
+			t.Fatalf("missing youzan permission %q", permission)
 		}
 	}
 

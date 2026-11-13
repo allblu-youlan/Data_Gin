@@ -93,3 +93,26 @@ func TestTmallPermissionsCanBeGrantedIndependently(t *testing.T) {
 		})
 	}
 }
+
+func TestYouzanPermissionsAreGrantableWithDeclaredHierarchy(t *testing.T) {
+	for _, test := range []struct {
+		code, parent string
+		level        int
+	}{
+		{"youzan.read", "", 1},
+		{"youzan.orders.read", "youzan.read", 2},
+		{"youzan.order_items.read", "youzan.read", 2},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			for _, permission := range PermissionCatalog() {
+				if permission.Code == test.code {
+					if !permission.APIGrantable || permission.ParentCode != test.parent || permission.Level != test.level {
+						t.Fatalf("invalid grantable hierarchy: %+v", permission)
+					}
+					return
+				}
+			}
+			t.Fatal("youzan permission missing from API grant catalog")
+		})
+	}
+}
