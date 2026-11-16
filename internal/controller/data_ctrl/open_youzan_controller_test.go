@@ -124,7 +124,7 @@ func TestOpenYouzanControllerReturnsSafeErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != test.status || response.Code != 100000+test.status || response.Msg == "" ||
-				string(response.Data) != "null" || strings.Contains(recorder.Body.String(), "private detail") {
+				string(response.Data) != "{}" || strings.Contains(recorder.Body.String(), "private detail") {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
 		})

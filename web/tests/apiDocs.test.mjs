@@ -150,7 +150,7 @@ test('discovers attendance permissions, field search and executable examples fro
     assert.equal(item.requestExample.filters.USER_NAME, '张三')
     assert.equal(item.requestExample.filters.DEPARTMENT_NAME, '零售事业部/上海一区')
     assert.equal(item.requestFields.some(field => field.location === 'query'), false)
-    assert.equal(fieldAt(item.responseFields, ['data', 'items', 'USER_ID']).nullable, true)
+    assert.notEqual(fieldAt(item.responseFields, ['data', 'items', 'USER_ID']).nullable, true)
     assert.equal(item.responseExample.data.pagination.hasMore, false)
     assert.equal('total' in item.responseExample.data, false)
   }

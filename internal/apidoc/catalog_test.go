@@ -28,6 +28,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 				t.Fatalf("duplicate ID or unknown permission: %s", operation.ID)
 			}
 			seen[operation.ID] = true
+			assertNonNullableResponseFields(t, operation.ResponseFields, "")
 			var example any
 			if err := json.Unmarshal(operation.ResponseExample, &example); err != nil {
 				t.Fatal(err)
@@ -99,8 +100,8 @@ func TestFeishuAttendanceContracts(t *testing.T) {
 			var names []string
 			for _, field := range items.Children {
 				names = append(names, field.Name)
-				if field.Type != "string" || !field.Nullable || field.Description == "" {
-					t.Errorf("source values must retain string/null and description: %+v", field)
+				if field.Type != "string" || field.Nullable || field.Description == "" {
+					t.Errorf("source values must retain strings and description without null: %+v", field)
 				}
 			}
 			if want := strings.Fields(common + " " + extras[kind]); !reflect.DeepEqual(names, want) {
@@ -198,8 +199,8 @@ func TestYouzanCatalogPublishesIndependentQueryContracts(t *testing.T) {
 			}
 			for _, name := range strings.Fields(contract.fields) {
 				field := findField(items.Children, name)
-				if field == nil || field.Type != "string" || !field.Nullable || !field.Required {
-					t.Errorf("%s must be a required string-or-null field: %+v", name, field)
+				if field == nil || field.Type != "string" || field.Nullable || !field.Required {
+					t.Errorf("%s must be a required string field without null: %+v", name, field)
 				}
 			}
 			filters := findField(operation.RequestFields, "filters")
@@ -234,10 +235,8 @@ func TestYouzanCatalogPublishesIndependentQueryContracts(t *testing.T) {
 				t.Fatalf("unexpected response example: %+v, %v", response, err)
 			}
 			for name, value := range response.Data.Items[0] {
-				if value != nil {
-					if _, ok := value.(string); !ok {
-						t.Errorf("%s is not string or null", name)
-					}
+				if _, ok := value.(string); !ok {
+					t.Errorf("%s is not a string", name)
 				}
 			}
 		})
@@ -259,6 +258,8 @@ func findField(fields []Field, path ...string) *Field {
 func assertExampleFields(t *testing.T, example any, fields []Field, path string) {
 	t.Helper()
 	switch value := example.(type) {
+	case nil:
+		t.Errorf("response example contains null: %s", path)
 	case map[string]any:
 		for name, child := range value {
 			field := findField(fields, name)
@@ -272,5 +273,16 @@ func assertExampleFields(t *testing.T, example any, fields []Field, path string)
 		for _, child := range value {
 			assertExampleFields(t, child, fields, path+"[].")
 		}
+	}
+}
+
+func assertNonNullableResponseFields(t *testing.T, fields []Field, path string) {
+	t.Helper()
+	for _, field := range fields {
+		fieldPath := path + field.Name
+		if field.Nullable || strings.Contains(field.Type, "null") {
+			t.Errorf("response field allows null: %s", fieldPath)
+		}
+		assertNonNullableResponseFields(t, field.Children, fieldPath+".")
 	}
 }

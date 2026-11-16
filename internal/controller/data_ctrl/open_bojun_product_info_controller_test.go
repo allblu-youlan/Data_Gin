@@ -44,7 +44,7 @@ func (service *fakeOpenBojunProductInfoQueryService) Query(_ context.Context, ac
 	}, nil
 }
 
-func TestOpenBojunProductInfoControllerReturnsProductIDsAsStringsAndNulls(t *testing.T) {
+func TestOpenBojunProductInfoControllerReturnsProductIDsAsStringsAndEmptyValues(t *testing.T) {
 	productID, productColorID, productAliasID := "9007199254740993", "9007199254740994", "9007199254740995"
 	service := &fakeOpenBojunProductInfoQueryService{items: []data_svc.OpenBojunProductInfoDTO{
 		{ProductID: &productID, ProductColorID: &productColorID, ProductAliasID: &productAliasID},
@@ -68,8 +68,8 @@ func TestOpenBojunProductInfoControllerReturnsProductIDsAsStringsAndNulls(t *tes
 		if response.Data.Items[0][field.name] != field.value {
 			t.Fatalf("ID precision or JSON string type changed for %s: %s", field.name, recorder.Body.String())
 		}
-		if value, exists := response.Data.Items[1][field.name]; !exists || value != nil {
-			t.Fatalf("NULL ID omitted or converted for %s: %s", field.name, recorder.Body.String())
+		if value, exists := response.Data.Items[1][field.name]; !exists || value != "" {
+			t.Fatalf("empty ID must be an empty string for %s: %s", field.name, recorder.Body.String())
 		}
 	}
 }
@@ -161,7 +161,7 @@ func TestOpenBojunProductInfoControllerMapsSafeErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != test.status || service.calls != 1 || response.Code != 100000+test.status ||
-				response.Msg != test.message || string(response.Data) != "null" || strings.Contains(recorder.Body.String(), "private detail") {
+				response.Msg != test.message || string(response.Data) != "{}" || strings.Contains(recorder.Body.String(), "private detail") {
 				t.Fatalf("status=%d calls=%d body=%s", recorder.Code, service.calls, recorder.Body.String())
 			}
 		})

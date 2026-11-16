@@ -53,14 +53,14 @@ func newOpenMonitoringControllerRouter(service *fakeOpenMonitoringQueryService) 
 		c.Next()
 	})
 	controller := NewOpenMonitoringControllerWithService(service)
-	router.POST("/hourly", controller.QueryHourly)
-	router.POST("/daily", controller.QueryDaily)
-	router.POST("/areas", controller.QueryAreas)
+	router.POST("/api/open/monitoring/hourly", controller.QueryHourly)
+	router.POST("/api/open/monitoring/daily", controller.QueryDaily)
+	router.POST("/api/open/monitoring/areas", controller.QueryAreas)
 	return router
 }
 
 func performOpenMonitoringQuery(router *gin.Engine, path, body, contentType string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	request := httptest.NewRequest(http.MethodPost, "/api/open/monitoring"+path, strings.NewReader(body))
 	request.Header.Set("Content-Type", contentType)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -104,6 +104,9 @@ func TestOpenMonitoringControllerPassesTypedRequestsAndActor(t *testing.T) {
 			}
 			if envelope.Code != 0 || envelope.Data == nil {
 				t.Fatalf("unexpected public response: %s", response.Body)
+			}
+			if items, ok := envelope.Data["items"].([]any); !ok || len(items) != 0 {
+				t.Fatalf("items must be an empty array: %s", response.Body)
 			}
 		})
 	}
@@ -152,7 +155,7 @@ func TestOpenMonitoringControllerMapsSafeErrors(t *testing.T) {
 			router := newOpenMonitoringControllerRouter(service)
 			for _, path := range []string{"/hourly", "/daily", "/areas"} {
 				response := performOpenMonitoringQuery(router, path, `{}`, "application/json")
-				if response.Code != test.status || strings.Contains(response.Body.String(), "private") || !strings.Contains(response.Body.String(), `"data":null`) {
+				if response.Code != test.status || strings.Contains(response.Body.String(), "private") || !strings.Contains(response.Body.String(), `"data":{}`) {
 					t.Fatalf("path=%s status=%d body=%s", path, response.Code, response.Body)
 				}
 			}

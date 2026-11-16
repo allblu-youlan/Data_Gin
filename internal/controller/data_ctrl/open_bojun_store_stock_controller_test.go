@@ -54,12 +54,12 @@ func newBojunStoreStockControllerRouter(store *fakeOpenBojunStoreQueryService, s
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Set(constant.CurrentUserID, "17"); c.Next() })
-	router.POST("/stores", NewOpenBojunStoreControllerWithService(store).Query)
-	router.POST("/stocks", NewOpenBojunStockControllerWithService(stock).Query)
+	router.POST("/api/open/bojun/stores", NewOpenBojunStoreControllerWithService(store).Query)
+	router.POST("/api/open/bojun/stocks", NewOpenBojunStockControllerWithService(stock).Query)
 	return router
 }
 func performBojunQuery(router *gin.Engine, path, body string) *httptest.ResponseRecorder {
-	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/api/open/bojun"+path, strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)
@@ -121,15 +121,17 @@ func TestOpenBojunStoreStockControllersReturnExactPublicFields(t *testing.T) {
 				t.Fatalf("unexpected envelope: %s", w.Body.String())
 			}
 			for _, field := range tt.fields {
-				if _, ok := body.Data.Items[0][field]; !ok {
-					t.Fatalf("missing %s", field)
+				if value, ok := body.Data.Items[0][field]; !ok || value == nil {
+					t.Fatalf("missing or null %s: %s", field, w.Body.String())
 				}
 			}
 			if body.Data.Items[0]["storeCode"] != "001" {
 				t.Fatal("lost leading zero")
 			}
-			if tt.path == "/stocks" && (body.Data.Items[0]["qty"] != "-123456789012345678.1234567890" || body.Data.Items[0]["qtyOms"] != nil) {
-				t.Fatal("lost decimal precision or null")
+			if tt.path == "/stocks" && (body.Data.Items[0]["qty"] != "-123456789012345678.1234567890" ||
+				body.Data.Items[0]["qtyOms"] != "" || body.Data.Items[0]["storeName"] != "" ||
+				body.Data.Items[0]["attributeSetInstanceId"] != float64(0)) {
+				t.Fatalf("unexpected decimal precision or empty values: %s", w.Body.String())
 			}
 		})
 	}
@@ -152,7 +154,7 @@ func TestOpenBojunStoreStockControllersMapSafeErrors(t *testing.T) {
 			router := newBojunStoreStockControllerRouter(&fakeOpenBojunStoreQueryService{err: tt.storeErr}, &fakeOpenBojunStockQueryService{err: tt.stockErr})
 			for _, path := range []string{"/stores", "/stocks"} {
 				w := performBojunQuery(router, path, `{}`)
-				if w.Code != tt.status || strings.Contains(w.Body.String(), "Oracle") || !strings.Contains(w.Body.String(), `"data":null`) {
+				if w.Code != tt.status || strings.Contains(w.Body.String(), "Oracle") || !strings.Contains(w.Body.String(), `"data":{}`) {
 					t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 				}
 			}

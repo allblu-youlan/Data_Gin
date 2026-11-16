@@ -47,7 +47,7 @@ func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, d
 
 func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 	page, pageSize := 2, 25
-	productID := "000123"
+	productID, emptyName := "000123", ""
 	wantRequest := requestbody.OpenTmallQueryRequest{
 		StartDate: "2026-10-01", EndDate: "2026-10-31",
 		Filters: map[string]string{"BATCH_ID": "batch-20261001"}, Page: &page, PageSize: &pageSize,
@@ -62,11 +62,13 @@ func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			for _, data := range []struct {
-				name  string
-				items []reportoracle.TmallRow
+				name      string
+				items     []reportoracle.TmallRow
+				wantItems []reportoracle.TmallRow
 			}{
-				{"empty", []reportoracle.TmallRow{}},
-				{"nonempty", []reportoracle.TmallRow{{"PRODUCT_ID": &productID, "PRODUCT_NAME": nil}}},
+				{"empty", []reportoracle.TmallRow{}, []reportoracle.TmallRow{}},
+				{"nonempty", []reportoracle.TmallRow{{"PRODUCT_ID": &productID, "PRODUCT_NAME": nil}},
+					[]reportoracle.TmallRow{{"PRODUCT_ID": &productID, "PRODUCT_NAME": &emptyName}}},
 			} {
 				t.Run(data.name, func(t *testing.T) {
 					service := &fakeOpenTmallQueryService{items: data.items}
@@ -84,7 +86,7 @@ func TestOpenTmallControllerSelectsDatasetAndReturnsEnvelope(t *testing.T) {
 					if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 						t.Fatal(err)
 					}
-					if response.Code != 0 || !reflect.DeepEqual(response.Data.Items, data.items) ||
+					if response.Code != 0 || !reflect.DeepEqual(response.Data.Items, data.wantItems) ||
 						response.Data.Pagination != (data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50}) {
 						t.Fatalf("unexpected response envelope: %s", recorder.Body.String())
 					}
@@ -153,7 +155,7 @@ func TestOpenTmallControllerReturnsSafeErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != test.status || response.Code != 100000+test.status || response.Msg == "" ||
-				string(response.Data) != "null" || strings.Contains(recorder.Body.String(), "private detail") {
+				string(response.Data) != "{}" || strings.Contains(recorder.Body.String(), "private detail") {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
 		})

@@ -40,7 +40,7 @@ func newBojunStockSnapshotControllerRouter(service *fakeOpenBojunStockSnapshotSe
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Set(constant.CurrentUserID, "17"); c.Next() })
-	router.POST("/snapshots", NewOpenBojunStockSnapshotControllerWithService(service).Query)
+	router.POST("/api/open/bojun/snapshots", NewOpenBojunStockSnapshotControllerWithService(service).Query)
 	return router
 }
 
@@ -79,8 +79,8 @@ func TestOpenBojunStockSnapshotControllerStrictJSONAndPublicFields(t *testing.T)
 			t.Fatalf("missing %s", field)
 		}
 	}
-	if body.Data.Items[0]["total"] != "9007199254740993.123456789" || body.Data.Items[0]["storeName"] != nil {
-		t.Fatalf("decimal or null changed: %s", response.Body.String())
+	if body.Data.Items[0]["total"] != "9007199254740993.123456789" || body.Data.Items[0]["storeName"] != "" {
+		t.Fatalf("decimal or empty string changed: %s", response.Body.String())
 	}
 }
 
