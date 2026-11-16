@@ -126,7 +126,7 @@ func TestOpenBojunProductInfoControllerMapsSafeErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != test.status || service.calls != 1 || response.Code != 100000+test.status ||
-				response.Msg != test.message || string(response.Data) != "null" || strings.Contains(recorder.Body.String(), "private detail") {
+				response.Msg != test.message || string(response.Data) != "{}" || strings.Contains(recorder.Body.String(), "private detail") {
 				t.Fatalf("status=%d calls=%d body=%s", recorder.Code, service.calls, recorder.Body.String())
 			}
 		})

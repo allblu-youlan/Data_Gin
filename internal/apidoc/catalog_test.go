@@ -27,6 +27,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 				t.Fatalf("duplicate ID or unknown permission: %s", operation.ID)
 			}
 			seen[operation.ID] = true
+			assertNonNullableResponseFields(t, operation.ResponseFields, "")
 			var example any
 			if err := json.Unmarshal(operation.ResponseExample, &example); err != nil {
 				t.Fatal(err)
@@ -87,6 +88,8 @@ func findField(fields []Field, path ...string) *Field {
 func assertExampleFields(t *testing.T, example any, fields []Field, path string) {
 	t.Helper()
 	switch value := example.(type) {
+	case nil:
+		t.Errorf("response example contains null: %s", path)
 	case map[string]any:
 		for name, child := range value {
 			field := findField(fields, name)
@@ -100,5 +103,16 @@ func assertExampleFields(t *testing.T, example any, fields []Field, path string)
 		for _, child := range value {
 			assertExampleFields(t, child, fields, path+"[].")
 		}
+	}
+}
+
+func assertNonNullableResponseFields(t *testing.T, fields []Field, path string) {
+	t.Helper()
+	for _, field := range fields {
+		fieldPath := path + field.Name
+		if field.Nullable || strings.Contains(field.Type, "null") {
+			t.Errorf("response field allows null: %s", fieldPath)
+		}
+		assertNonNullableResponseFields(t, field.Children, fieldPath+".")
 	}
 }

@@ -80,3 +80,57 @@ func TestForOpenAPIFormatsNestedDateTimes(t *testing.T) {
 		}
 	}
 }
+
+func TestResponseNormalizesEmptyDataOnlyForOpenAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, test := range []struct {
+		name   string
+		render func(*Response)
+		status int
+	}{
+		{"success", func(r *Response) { r.ToResponse(nil) }, http.StatusOK},
+		{"status success", func(r *Response) { r.ToResponseWithStatus(http.StatusCreated, nil) }, http.StatusCreated},
+		{"safe error", func(r *Response) { r.ToSafeErrorResponse(errcode.Forbidden, "") }, http.StatusForbidden},
+		{"legacy error", func(r *Response) { r.ToErrorResponse(errcode.Forbidden) }, http.StatusOK},
+		{"validation error", func(r *Response) { r.ToErrorValidateResponse(errcode.UnprocessableEntity, nil) }, http.StatusOK},
+	} {
+		for _, path := range []string{"/api/open/tmall/qztg/hourly/query", "/api/v1/reports"} {
+			t.Run(test.name+path, func(t *testing.T) {
+				recorder := httptest.NewRecorder()
+				ctx, _ := gin.CreateTestContext(recorder)
+				ctx.Request = httptest.NewRequest(http.MethodPost, path, nil)
+				test.render(New(ctx))
+				wantData := `"data":{}`
+				if path == "/api/v1/reports" && strings.Contains(test.name, "error") {
+					wantData = `"data":null`
+				}
+				if recorder.Code != test.status || !strings.Contains(recorder.Body.String(), wantData) {
+					t.Fatalf("status=%d body=%s, want status=%d %s", recorder.Code, recorder.Body.String(), test.status, wantData)
+				}
+			})
+		}
+	}
+}
+
+func TestResponsePreservesNonOpenAPIFieldsAndExistingDateFormats(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, path := range []string{"/api/open/tmall/qztg/hourly/query", "/api/v1/reports"} {
+		t.Run(path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodPost, path, nil)
+			New(ctx).ToResponseWithStatus(http.StatusOK, gin.H{
+				"text":         (*string)(nil),
+				"fetchedAtUtc": "2026-11-04T14:00:00Z",
+			})
+			wantText := `"text":null`
+			if strings.HasPrefix(path, "/api/open/") {
+				wantText = `"text":""`
+			}
+			body := recorder.Body.String()
+			if !strings.Contains(body, wantText) || !strings.Contains(body, `"fetchedAtUtc":"2026-11-04T14:00:00Z"`) {
+				t.Fatalf("unexpected response: %s", body)
+			}
+		})
+	}
+}

@@ -109,7 +109,7 @@ func performOpenRateLimitRequest(t *testing.T, limiter gin.HandlerFunc) (*httpte
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	calls := 0
-	router.POST("/open", func(c *gin.Context) {
+	router.POST("/api/open/test", func(c *gin.Context) {
 		c.Set(constant.CurrentUserID, "17")
 		c.Next()
 	}, limiter, func(c *gin.Context) {
@@ -117,7 +117,7 @@ func performOpenRateLimitRequest(t *testing.T, limiter gin.HandlerFunc) (*httpte
 		c.Status(http.StatusNoContent)
 	})
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/open", nil))
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/open/test", nil))
 	return recorder, calls
 }
 
@@ -129,5 +129,8 @@ func assertOpenRateLimitCode(t *testing.T, recorder *httptest.ResponseRecorder, 
 	}
 	if body.Code != want {
 		t.Fatalf("response=%+v", body)
+	}
+	if data, ok := body.Data.(map[string]any); !ok || len(data) != 0 {
+		t.Fatalf("error data must be an empty object: %s", recorder.Body.String())
 	}
 }

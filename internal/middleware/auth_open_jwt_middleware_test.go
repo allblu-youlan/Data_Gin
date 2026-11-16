@@ -28,7 +28,7 @@ func TestAuthOpenTokenRejectsOtherCredentialSources(t *testing.T) {
 		{name: "missing"},
 		{name: "authorization open token is ignored", authorization: "Bearer dg_open_value"},
 		{name: "authorization internal jwt is ignored", authorization: "Bearer abc.def.ghi"},
-		{name: "query token is ignored", url: "/open?token=dg_open_value"},
+		{name: "query token is ignored", url: "/api/open/test?token=dg_open_value"},
 		{name: "non open token is rejected", tokenHeader: "abc.def.ghi"},
 		{name: "empty open token is rejected", tokenHeader: "dg_open_"},
 		{name: "surrounding whitespace is rejected", tokenHeader: " dg_open_value "},
@@ -38,13 +38,13 @@ func TestAuthOpenTokenRejectsOtherCredentialSources(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
 			calls := 0
-			router.POST("/open", AuthOpenToken(), func(c *gin.Context) {
+			router.POST("/api/open/test", AuthOpenToken(), func(c *gin.Context) {
 				calls++
 				c.Status(http.StatusNoContent)
 			})
 			url := test.url
 			if url == "" {
-				url = "/open"
+				url = "/api/open/test"
 			}
 			request := httptest.NewRequest(http.MethodPost, url, nil)
 			if test.tokenHeader != "" {
@@ -65,6 +65,9 @@ func TestAuthOpenTokenRejectsOtherCredentialSources(t *testing.T) {
 			}
 			if body.Code != errcode.Unauthorized.Code() {
 				t.Fatalf("response=%+v", body)
+			}
+			if data, ok := body.Data.(map[string]any); !ok || len(data) != 0 {
+				t.Fatalf("error data must be an empty object: %s", recorder.Body.String())
 			}
 		})
 	}

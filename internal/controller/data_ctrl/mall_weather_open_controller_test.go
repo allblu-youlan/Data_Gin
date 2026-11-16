@@ -83,7 +83,7 @@ func TestMallWeatherControllerOpenRealtimeRejectsHistoricalQueryFields(t *testin
 	}
 }
 
-func TestMallWeatherControllerOpenRealtimeReturnsNullWhenUnavailable(t *testing.T) {
+func TestMallWeatherControllerOpenRealtimeReturnsEmptyObjectWhenUnavailable(t *testing.T) {
 	service := fakeMallWeatherControllerService{currentRealtime: func(
 		context.Context,
 		uint,
@@ -95,7 +95,7 @@ func TestMallWeatherControllerOpenRealtimeReturnsNullWhenUnavailable(t *testing.
 		}, nil
 	}}
 	recorder := performOpenMallWeatherRequest(t, service, "/api/open/weather/realtime", `{"mallId":7}`)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"realtime":null`) ||
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"realtime":{}`) ||
 		!strings.Contains(recorder.Body.String(), `"freshnessStatus":"UNAVAILABLE"`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -179,8 +179,35 @@ func TestMallWeatherControllerOpenHistoryDaySummaryUsesBodyAndFormatsTimes(t *te
 		gotRequest.TimeZone != "Asia/Shanghai" || gotRequest.QualityStatus != "VALID" ||
 		!strings.Contains(response, `"observedStartUtc":"2026-07-27 16:00:00"`) ||
 		!strings.Contains(response, `"observedEndLocal":"2026-07-28 23:50:00"`) ||
+		!strings.Contains(response, `"dominantSkycon":""`) ||
+		!strings.Contains(response, `"temperatureMinC":0`) ||
+		!strings.Contains(response, `"aqiChnMax":0`) || strings.Contains(response, ":null") ||
 		strings.Contains(response, `"items"`) || strings.Contains(response, `"pagination"`) {
 		t.Fatalf("status=%d actor=%d mall=%d request=%+v body=%s", recorder.Code, gotActor, gotMall, gotRequest, response)
+	}
+}
+
+func TestMallWeatherControllerOpenHistoryDaySummaryReturnsEmptyObjectWhenUnavailable(t *testing.T) {
+	service := fakeMallWeatherControllerService{historyDaySummary: func(
+		context.Context,
+		uint,
+		uint,
+		requestbody.OpenWeatherHistoryDaySummaryRequest,
+	) (*data_svc.OpenWeatherHistoryDaySummaryResult, error) {
+		return &data_svc.OpenWeatherHistoryDaySummaryResult{
+			ObservationStatus: "UNAVAILABLE",
+			Meta: data_svc.MallWeatherQueryMeta{
+				TimeZone: "Asia/Shanghai", FreshnessStatus: "UNAVAILABLE",
+			},
+		}, nil
+	}}
+	recorder := performOpenMallWeatherRequest(
+		t, service, "/api/open/weather/history/day/summary", `{"mallId":7,"date":"2026-07-28"}`,
+	)
+	response := recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(response, `"summary":{}`) ||
+		!strings.Contains(response, `"observationStatus":"UNAVAILABLE"`) || strings.Contains(response, ":null") {
+		t.Fatalf("status=%d body=%s", recorder.Code, response)
 	}
 }
 

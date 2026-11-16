@@ -25,6 +25,7 @@ type fakeOpenTmallQueryService struct {
 	calls   int
 	err     error
 	request requestbody.OpenTmallQueryRequest
+	rows    []reportoracle.TmallRow
 }
 
 func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, dataset reportoracle.TmallDataset, request requestbody.OpenTmallQueryRequest) (*data_svc.OpenTmallQueryDTO, error) {
@@ -34,8 +35,12 @@ func (service *fakeOpenTmallQueryService) Query(_ context.Context, actor uint, d
 	if service.err != nil {
 		return nil, service.err
 	}
+	rows := service.rows
+	if rows == nil {
+		rows = []reportoracle.TmallRow{}
+	}
 	return &data_svc.OpenTmallQueryDTO{
-		Items:      []reportoracle.TmallRow{},
+		Items:      rows,
 		Pagination: data_svc.OpenBojunQueryPagination{Page: 1, PageSize: 50},
 	}, nil
 }
@@ -125,7 +130,7 @@ func TestOpenTmallControllerReturnsSafeErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != test.status || response.Code != 100000+test.status || response.Msg == "" ||
-				string(response.Data) != "null" || strings.Contains(recorder.Body.String(), "private detail") {
+				string(response.Data) != "{}" || strings.Contains(recorder.Body.String(), "private detail") {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
 		})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -44,6 +45,7 @@ func (r *Response) ToResponse(data interface{}) {
 		response.Data = data
 	}
 
+	response.Data = r.publicData(response.Data)
 	r.Ctx.JSON(http.StatusOK, response)
 }
 
@@ -56,7 +58,7 @@ func (r *Response) ToResponseWithStatus(status int, data interface{}) {
 	r.Ctx.JSON(status, ResponseData{
 		Code: errcode.Success.Code(),
 		Msg:  errcode.Success.Msg(),
-		Data: data,
+		Data: r.publicData(data),
 	})
 }
 
@@ -72,7 +74,7 @@ func (r *Response) ToSafeErrorResponse(err *errcode.Error, message string) {
 	r.Ctx.AbortWithStatusJSON(err.HttpStatusCode(), ResponseData{
 		Code: err.Code(),
 		Msg:  message,
-		Data: nil,
+		Data: r.publicData(nil),
 	})
 }
 
@@ -94,7 +96,7 @@ func (r *Response) ToErrorResponse(err error, messages ...string) {
 	response := ResponseData{
 		Code: e.Code(),
 		Msg:  e.Msg(),
-		Data: nil,
+		Data: r.publicData(nil),
 	}
 
 	if len(messages) > 0 {
@@ -113,7 +115,7 @@ func (r *Response) ToErrorValidateResponse(err *errcode.Error, errors map[string
 	response := ResponseData{
 		Code: err.Code(),
 		Msg:  err.Msg(),
-		Data: nil,
+		Data: r.publicData(nil),
 	}
 
 	if len(errors) > 0 {
@@ -132,6 +134,19 @@ func (r *Response) ToErrorValidateResponse(err *errcode.Error, errors map[string
 
 	// r.Ctx.AbortWithStatusJSON(err.HttpStatusCode(), response)
 	r.Ctx.AbortWithStatusJSON(http.StatusOK, response)
+}
+
+// publicData applies the open platform contract to success and error responses,
+// including errors raised before route-specific authentication middleware.
+func (r *Response) publicData(data interface{}) interface{} {
+	request := r.Ctx.Request
+	if request == nil || request.URL == nil || !strings.HasPrefix(request.URL.Path, "/api/open/") {
+		return data
+	}
+	if _, ok := data.(openAPIData); ok {
+		return data
+	}
+	return openAPIData{value: data}
 }
 
 func (r *Response) logErrorResponse(code *errcode.Error, err error, message string, status int) {
