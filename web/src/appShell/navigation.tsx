@@ -74,8 +74,8 @@ export const navGroups: NavGroup[] = [
   {
     label: '基础信息',
     items: [
-      { key: 'business_overview', label: '营业概况', description: '销售日结与门店对账', icon: <ChartColumn aria-hidden="true" /> },
-      { key: 'sales_summary', label: '销售汇总', description: '已推送销售数据与经营指标', icon: <ChartColumn aria-hidden="true" /> },
+      { key: 'business_overview', label: '已推送业绩日报', description: '按首次成功推送日期查看每日净额与件数', icon: <ChartColumn aria-hidden="true" /> },
+      { key: 'sales_summary', label: '已推送业绩汇总', description: '按首次成功推送日期汇总净额与件数', icon: <ChartColumn aria-hidden="true" /> },
       { key: 'store_info', label: '店铺信息', description: '店铺资料与坐标维护', icon: <Building2 aria-hidden="true" /> },
     ],
   },

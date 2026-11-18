@@ -11,6 +11,7 @@ export type SalesSummaryMetrics = {
   salesQuantity: number
   returnQuantity: number
   orderCount: number
+  pushedOrderCount: number
   averageItemPrice: number
   discountRate: number
 }
@@ -29,8 +30,25 @@ export type SalesDateRange = { startDate: string; endDate: string }
 const metricNames: Array<keyof SalesSummaryMetrics> = [
   'salesAmount', 'salesTarget', 'salesAchievementRate', 'averageOrderValue',
   'itemsPerOrder', 'quantityTarget', 'conversionRate', 'memberSalesRatio',
-  'totalQuantity', 'salesQuantity', 'returnQuantity', 'orderCount', 'averageItemPrice', 'discountRate',
+  'totalQuantity', 'salesQuantity', 'returnQuantity', 'orderCount', 'pushedOrderCount', 'averageItemPrice', 'discountRate',
 ]
+
+export const pushedSalesSummaryDescription = '按首次成功推送日期（北京时间）统计，同一流水重复推送只计一次；退款扣减金额和件数，已推送总笔数包含销售与退款。'
+
+type SummaryReader = (path: string, options: {
+  method: 'GET'
+  showResult: false
+  silentLoading: true
+  signal: AbortSignal
+}) => Promise<{ ok: boolean; status: number; data: unknown }>
+
+export async function loadPushedSalesSummary(client: SummaryReader, mallCode: string, range: SalesDateRange, signal: AbortSignal) {
+  const response = await client(salesSummaryPath(mallCode, range), { method: 'GET', showResult: false, silentLoading: true, signal })
+  if (!response.ok) throw new Error(response.status === 403 ? '当前账号无权查询该商场已推送业绩。' : '已推送业绩加载失败，请重试。')
+  const summary = parseSalesSummary(response.data, mallCode, range)
+  if (!summary) throw new Error('已推送业绩响应异常，请重试。')
+  return summary
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
