@@ -100,9 +100,9 @@ func writeOpenTmallError(c *gin.Context, err error) {
 	case errors.Is(err, data_svc.ErrOpenTmallInvalidQuery):
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, "天猫查询参数校验失败")
 	case errors.Is(err, data_svc.ErrOpenTmallUnavailable):
-		responses.New(c).ToSafeErrorResponse(errcode.ServiceUnavailable, "天猫查询服务暂时不可用")
+		responses.New(c).ToSafeErrorResponse(errcode.ServiceUnavailable.WithError(err), "天猫查询服务暂时不可用")
 	default:
-		responses.New(c).ToSafeErrorResponse(errcode.InternalServerError, "天猫查询服务暂时不可用")
+		responses.New(c).ToSafeErrorResponse(errcode.InternalServerError.WithError(err), "天猫查询服务暂时不可用")
 	}
 }
 
