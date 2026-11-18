@@ -7,7 +7,7 @@ import { businessOverviewMallsPath, parseBusinessOverviewMalls, type BusinessOve
 import { mallWeatherSkyconLabel } from '../mallWeather'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import {
-  isSalesDate, parseSalesSummary, salesPeriodRange, salesSummaryPath,
+  isSalesDate, loadPushedSalesSummary, pushedSalesSummaryDescription, salesPeriodRange,
   type SalesDateRange, type SalesPeriod, type SalesSummary, type SalesSummaryMetrics,
 } from './contracts'
 import styles from './SalesSummaryPage.module.css'
@@ -20,29 +20,17 @@ export type SalesSummaryPageProps = {
   onOpenNavigation?: () => void
 }
 
-type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' | 'percent' | 'ratio' }
+type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' }
 const metrics: MetricDefinition[] = [
-  { key: 'salesAmount', label: '销售金额', format: 'money' },
-  { key: 'salesTarget', label: '销售指标' },
-  { key: 'salesAchievementRate', label: '销售达成率', format: 'percent' },
-  { key: 'averageOrderValue', label: '客单价' },
-  { key: 'itemsPerOrder', label: '连带率', format: 'ratio' },
-  { key: 'quantityTarget', label: '销量指标' },
-  { key: 'conversionRate', label: '转化率' },
-  { key: 'memberSalesRatio', label: '会员销售占比', format: 'percent' },
-  { key: 'totalQuantity', label: '总件数' },
-  { key: 'salesQuantity', label: '销售件数' },
-  { key: 'returnQuantity', label: '退货件数' },
-  { key: 'orderCount', label: '总笔数' },
-  { key: 'averageItemPrice', label: '件单价' },
-  { key: 'discountRate', label: '销售折扣率', format: 'percent' },
+  { key: 'salesAmount', label: '已推送净额（元）', format: 'money' },
+  { key: 'pushedOrderCount', label: '已推送总笔数' },
+  { key: 'salesQuantity', label: '已推送销售件数' },
+  { key: 'returnQuantity', label: '已推送退货件数' },
+  { key: 'totalQuantity', label: '已推送净件数' },
 ]
 
 function formatMetric(value: number, format: MetricDefinition['format']) {
-  if (format === 'money') return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
-  if (format === 'percent') return `${Number(value.toFixed(2))}%`
-  if (format === 'ratio') return Number(value.toFixed(2)).toString()
-  return Math.round(value).toString()
+  return value.toLocaleString('zh-CN', { minimumFractionDigits: format === 'money' ? 2 : 0, maximumFractionDigits: 2 })
 }
 
 function WeatherIcon({ skycon }: { skycon: string }) {
@@ -112,14 +100,11 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
       setSummary(null)
       setSummaryError('')
       try {
-        const response = await client(salesSummaryPath(mallCode, range), { method: 'GET', showResult: false, silentLoading: true, signal: controller.signal })
+        const parsed = await loadPushedSalesSummary(client, mallCode, range, controller.signal)
         if (controller.signal.aborted) return
-        if (!response.ok) throw new Error(response.status === 403 ? '当前账号无权查询该商场销售数据。' : '销售数据加载失败，请点击刷新重试。')
-        const parsed = parseSalesSummary(response.data, mallCode, range)
-        if (!parsed) throw new Error('销售数据响应异常，请点击刷新重试。')
         setSummary(parsed)
       } catch (error) {
-        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : '销售数据加载失败，请点击刷新重试。')
+        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : '已推送业绩加载失败，请点击刷新重试。')
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -190,31 +175,29 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         <span className={styles.storeCode}>{selectedMall?.mallCode ?? '—'}</span>
       </div>
       <nav className={styles.primaryNav} aria-label="门店导航">
-        <button type="button" onClick={() => onNavigate?.('business-overview')}>收银</button>
+        <button type="button" onClick={() => onNavigate?.('business-overview')}>推送日报</button>
         <button type="button" className={styles.primaryActive} aria-current="page">店长导航</button>
         <button type="button" onClick={() => onNavigate?.('store-info')}>店务管理</button>
         <button type="button" onClick={() => onNavigate?.('report-center')}>报表</button>
       </nav>
       <div className={styles.headerTools}>
-        <button type="button" title="刷新销售数据" aria-label="刷新销售数据" onClick={refresh} disabled={busy}><RefreshCcw /></button>
+        <button type="button" title="刷新已推送业绩" aria-label="刷新已推送业绩" onClick={refresh} disabled={busy}><RefreshCcw /></button>
         <button type="button" title="切换全屏" aria-label="切换全屏" onClick={() => void toggleFullscreen()}><Hexagon /><span className={styles.hexagonDot} /></button>
-        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage('选择商场和时段可查看已推送的销售汇总，点击刷新获取最新数据。')}><CircleHelp /></button>
+        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage(pushedSalesSummaryDescription)}><CircleHelp /></button>
         <button type="button" title="退出登录" aria-label="退出登录" onClick={onLogout}><LogOut /></button>
       </div>
     </header>
 
-    <nav className={styles.secondaryNav} aria-label="销售数据导航">
-      <button type="button" className={styles.secondaryActive} aria-current="page" onClick={() => setSystemMessage('')}>概览</button>
-      <button type="button" onClick={() => onNavigate?.('business-overview')}>付款明细</button>
-      <button type="button" onClick={() => setSystemMessage('TOP20商品暂未接入。')}>TOP20商品</button>
-      <button type="button" onClick={() => setSystemMessage('员工业绩暂未接入。')}>员工业绩</button>
+    <nav className={styles.secondaryNav} aria-label="已推送业绩导航">
+      <button type="button" className={styles.secondaryActive} aria-current="page" onClick={() => setSystemMessage('')}>已推送业绩汇总</button>
+      <button type="button" onClick={() => onNavigate?.('business-overview')}>已推送业绩日报</button>
     </nav>
     <div className={styles.divider} aria-hidden="true"><ChevronLeft /><ChevronRight /></div>
 
     <main className={styles.content}>
-      <section className={styles.filters} aria-label="销售查询条件">
+      <section className={styles.filters} aria-label="已推送业绩查询条件">
         <div className={styles.periodControls}>
-          <strong>时段:</strong>
+          <strong>推送日期：</strong>
           <div className={styles.periodButtons}>
             {([['today', '今日'], ['week', '本周'], ['month', '本月']] as const).map(([key, label]) =>
               <button key={key} type="button" aria-pressed={period === key} className={period === key ? styles.periodActive : ''} onClick={() => selectPeriod(key)}>{label}</button>)}
@@ -222,11 +205,11 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
           <div className={styles.dateControl}>
             <button type="button" className={styles.dateRange} aria-expanded={datePickerOpen} onClick={() => { setDraftRange(range); setDateError(''); setDatePickerOpen(!datePickerOpen) }}>{range.startDate} 至 {range.endDate}</button>
             {datePickerOpen && <form className={styles.datePicker} onSubmit={(event) => { event.preventDefault(); applyDateRange() }}>
-              <label>开始日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => {
+              <label>开始推送日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => {
                 const startDate = event.currentTarget.value
                 setDraftRange((current) => ({ ...current, startDate }))
               }} /></label>
-              <label>结束日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => {
+              <label>结束推送日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => {
                 const endDate = event.currentTarget.value
                 setDraftRange((current) => ({ ...current, endDate }))
               }} /></label>
@@ -238,14 +221,16 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         <button type="button" className={styles.refresh} onClick={refresh} disabled={busy}><RefreshCcw className={busy ? styles.spinning : ''} />{busy ? '加载中' : '刷新'}</button>
       </section>
 
-      <section className={styles.salesPanel} aria-label="销售数据" aria-busy={busy}>
-        <h1>销售数据</h1>
+      <section className={styles.salesPanel} aria-label="已推送业绩汇总" aria-busy={busy}>
+        <h1>已推送业绩汇总</h1>
+        <p className={styles.summaryScope}>{pushedSalesSummaryDescription}</p>
         <div className={styles.metrics}>
           {metrics.map((metric) => <div className={styles.metric} key={metric.key}>
             <div className={styles.metricLabel}>{metric.label}</div>
             <div className={styles.metricValue}>{summary ? formatMetric(summary.metrics[metric.key], metric.format) : busy ? '…' : '—'}</div>
           </div>)}
         </div>
+        {summary && summary.metrics.pushedOrderCount === 0 && <p className={styles.summaryScope} role="status">所选推送日期内暂无已推送业绩。</p>}
       </section>
     </main>
 
