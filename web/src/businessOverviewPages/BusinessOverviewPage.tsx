@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CalendarDays, Maximize2, Minimize2, Save } from 'lucide-react'
 import {
+  emptyBusinessSummary,
   businessOverviewMallsPath,
+  businessOverviewPaymentsPath,
   mergeBusinessOverviewMalls,
   parseBusinessOverviewMalls,
+  parseBusinessOverviewPayments,
+  recordPaymentDetail,
+  recordTotal,
   shiftBusinessDate,
   type CashierID,
   type BusinessOverviewMall,
 } from '../businessOverview'
-import { isSalesDate, loadPushedSalesSummary, pushedSalesSummaryDescription, shanghaiSalesDate, type SalesSummary } from '../salesSummary/contracts'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { PageCanvas } from '../ui'
 import styles from './BusinessOverviewPage.module.css'
@@ -18,16 +22,16 @@ const cashierOptions: Array<{ id: CashierID; label: string }> = [
 ]
 
 type MallLoadState = 'loading' | 'success' | 'error'
-type SummaryLoadState = 'idle' | 'loading' | 'success' | 'error'
+type PaymentLoadState = 'idle' | 'loading' | 'success' | 'error'
 
 export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient }) {
-  const today = shanghaiSalesDate()
+  const today = shanghaiDate(new Date())
   const yesterday = shiftBusinessDate(today, -1)
   const fullscreenSurfaceRef = useRef<HTMLDivElement>(null)
   const mallRequestSequence = useRef(0)
   const mallController = useRef<AbortController | null>(null)
-  const summaryRequestSequence = useRef(0)
-  const summaryController = useRef<AbortController | null>(null)
+  const paymentRequestSequence = useRef(0)
+  const paymentController = useRef<AbortController | null>(null)
   const mallsRef = useRef<BusinessOverviewMall[]>([])
   const [malls, setMalls] = useState<BusinessOverviewMall[]>([])
   const [mallCode, setMallCode] = useState('')
@@ -36,29 +40,25 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   const [nextAfterID, setNextAfterID] = useState(0)
   const [selectedDate, setSelectedDate] = useState(today)
   const [cashierID, setCashierID] = useState<CashierID>('all')
-  const [summary, setSummary] = useState<SalesSummary | null>(null)
-  const [summaryLoadState, setSummaryLoadState] = useState<SummaryLoadState>('idle')
-  const [summaryError, setSummaryError] = useState('')
+  const [summary, setSummary] = useState(() => emptyBusinessSummary(today))
+  const [paymentLoadState, setPaymentLoadState] = useState<PaymentLoadState>('idle')
+  const [paymentError, setPaymentError] = useState('')
   const [savedMessage, setSavedMessage] = useState('')
   const [fullscreenError, setFullscreenError] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const selectedMall = malls.find((mall) => mall.mallCode === mallCode)
-  const hasPushedData = summary !== null && summary.metrics.pushedOrderCount > 0
-  const emptyMessage = summaryLoadState === 'loading' ? '正在加载已推送业绩…'
-    : summaryLoadState === 'error' ? '已推送业绩加载失败，请重试。'
-      : summary ? '所选推送日期内暂无已推送业绩。' : '请选择商场查看已推送业绩。'
 
   const saveReconciliation = useCallback(() => {
-    if (!selectedMall || summaryLoadState !== 'success') return
+    if (!selectedMall || paymentLoadState !== 'success') return
     setSavedMessage(`${selectedMall.nameCn} ${selectedDate} 的对账数据已保存（模拟）`)
-  }, [summaryLoadState, selectedDate, selectedMall])
+  }, [paymentLoadState, selectedDate, selectedMall])
 
   function changeDate(date: string) {
-    if (!isSalesDate(date) || date === selectedDate) return
+    if (date === selectedDate) return
     setSelectedDate(date)
-    setSummary(null)
-    setSummaryLoadState(mallCode ? 'loading' : 'idle')
-    setSummaryError('')
+    setSummary(emptyBusinessSummary(date))
+    setPaymentLoadState(mallCode ? 'loading' : 'idle')
+    setPaymentError('')
     setSavedMessage('')
   }
 
@@ -71,9 +71,9 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   function changeMall(value: string) {
     if (!malls.some((mall) => mall.mallCode === value)) return
     setMallCode(value)
-    setSummary(null)
-    setSummaryLoadState('loading')
-    setSummaryError('')
+    setSummary(emptyBusinessSummary(selectedDate))
+    setPaymentLoadState('loading')
+    setPaymentError('')
     setSavedMessage('')
   }
 
@@ -113,26 +113,36 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     }
   }, [client])
 
-  const loadSummary = useCallback(async (date: string, code: string) => {
-    const sequence = ++summaryRequestSequence.current
-    summaryController.current?.abort()
+  const loadPayments = useCallback(async (date: string, code: string) => {
+    const sequence = ++paymentRequestSequence.current
+    paymentController.current?.abort()
     const controller = new AbortController()
-    summaryController.current = controller
-    setSummary(null)
-    setSummaryLoadState('loading')
-    setSummaryError('')
-    setSavedMessage('')
+    paymentController.current = controller
+    setSummary(emptyBusinessSummary(date))
+    setPaymentLoadState('loading')
+    setPaymentError('')
     try {
-      const parsed = await loadPushedSalesSummary(client, code, { startDate: date, endDate: date }, controller.signal)
-      if (controller.signal.aborted || sequence !== summaryRequestSequence.current) return
+      const response = await client(businessOverviewPaymentsPath(date, code), { method: 'GET', showResult: false, silentLoading: true, signal: controller.signal })
+      if (controller.signal.aborted || sequence !== paymentRequestSequence.current) return
+      if (!response.ok) {
+        setPaymentLoadState('error')
+        setPaymentError(response.status === 403 ? '当前账号无权查询该商场营业数据。' : '营业数据加载失败，请稍后重试。')
+        return
+      }
+      const parsed = parseBusinessOverviewPayments(response.data, date, code)
+      if (!parsed) {
+        setPaymentLoadState('error')
+        setPaymentError('营业数据响应格式不正确，请联系管理员。')
+        return
+      }
       setSummary(parsed)
-      setSummaryLoadState('success')
-    } catch (error) {
-      if (controller.signal.aborted || sequence !== summaryRequestSequence.current) return
-      setSummaryLoadState('error')
-      setSummaryError(error instanceof Error ? error.message : '已推送业绩加载异常，请检查网络后重试。')
+      setPaymentLoadState('success')
+    } catch {
+      if (controller.signal.aborted || sequence !== paymentRequestSequence.current) return
+      setPaymentLoadState('error')
+      setPaymentError('营业数据加载异常，请检查网络后重试。')
     } finally {
-      if (summaryController.current === controller) summaryController.current = null
+      if (paymentController.current === controller) paymentController.current = null
     }
   }, [client])
 
@@ -159,15 +169,15 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
 
   useEffect(() => {
     if (!mallCode) {
-      summaryController.current?.abort()
-      setSummary(null)
-      setSummaryLoadState('idle')
-      setSummaryError('')
+      paymentController.current?.abort()
+      setSummary(emptyBusinessSummary(selectedDate))
+      setPaymentLoadState('idle')
+      setPaymentError('')
       return
     }
-    void loadSummary(selectedDate, mallCode)
-    return () => summaryController.current?.abort()
-  }, [loadSummary, mallCode, selectedDate])
+    void loadPayments(selectedDate, mallCode)
+    return () => paymentController.current?.abort()
+  }, [loadPayments, mallCode, selectedDate])
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -221,10 +231,10 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
         {!isFullscreen && mallLoadState === 'success' && malls.length === 0 ? <div className={styles.mallEmpty} role="status">当前账号暂无可查看的商场。</div> : null}
         {fullscreenError ? <div className={styles.fullscreenError} role="alert">{fullscreenError}</div> : null}
 
-        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}营业概况（已推送业绩）`} aria-busy={summaryLoadState === 'loading'}>
+        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}营业概况日结核对`} aria-busy={paymentLoadState === 'loading'}>
         <div className={styles.filterBar}>
-          <strong className={styles.filterTitle}>推送日期：</strong>
-          <div className={styles.quickDates} aria-label="快捷选择推送日期">
+          <strong className={styles.filterTitle}>销售日期：</strong>
+          <div className={styles.quickDates} aria-label="快捷选择销售日期">
             <button aria-pressed={selectedDate === today} className={selectedDate === today ? styles.active : ''} type="button" onClick={() => changeDate(today)}>今天</button>
             <button aria-pressed={selectedDate === yesterday} className={selectedDate === yesterday ? styles.active : ''} type="button" onClick={() => changeDate(yesterday)}>昨天</button>
           </div>
@@ -235,7 +245,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
               <CalendarDays aria-hidden="true" />
             </span>
           </label>
-          <button className={styles.saveButton} type="button" onClick={saveReconciliation} disabled={!selectedMall || summaryLoadState !== 'success'}><Save aria-hidden="true" />保存 F2</button>
+          <button className={styles.saveButton} type="button" onClick={saveReconciliation} disabled={!selectedMall || paymentLoadState !== 'success'}><Save aria-hidden="true" />保存 F2</button>
           <label className={styles.cashierField}>
             <span>收银机号：</span>
             <select value={cashierID} onChange={(event) => changeCashier(event.currentTarget.value)} disabled>
@@ -245,32 +255,33 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
         </div>
 
         {savedMessage ? <div className={styles.savedMessage} role="status" aria-live="polite">{savedMessage}</div> : null}
-        {summaryLoadState === 'loading' ? <div className={styles.mallEmpty} role="status">正在加载已推送业绩…</div> : null}
-        {summaryLoadState === 'error' ? <div className={styles.mallError} role="alert"><span>{summaryError}</span><button type="button" onClick={() => void loadSummary(selectedDate, mallCode)}>重新加载</button></div> : null}
+        {paymentLoadState === 'loading' ? <div className={styles.mallEmpty} role="status">正在加载营业数据…</div> : null}
+        {paymentLoadState === 'error' ? <div className={styles.mallError} role="alert"><span>{paymentError}</span><button type="button" onClick={() => void loadPayments(selectedDate, mallCode)}>重新加载</button></div> : null}
 
         <div className={styles.summaryArea}>
           <div className={styles.amountSummary}>
-            <div className={styles.unsettledAmount}><strong>{formatAmount(summary?.metrics.salesAmount)}</strong><span>已推送金额（元）</span></div>
+            <div className={styles.unsettledAmount}><strong>{formatAmount(summary.unsettledAmount)}</strong><span>末日结金额（元）</span></div>
             <div className={styles.channelAmounts}>
-              <div><span>门店： </span><strong>{formatAmount(summary?.metrics.salesAmount)}（元）</strong></div>
-              <div title="当前数据未提供云仓金额"><span>云仓： </span><strong>{formatAmount(null)}（元）</strong></div>
+              <div><span>门店： </span><strong>{formatAmount(summary.storeAmount)}（元）</strong></div>
+              <div><span>云仓： </span><strong>{formatAmount(summary.cloudAmount)}（元）</strong></div>
             </div>
-            <div className={styles.reconciliationTip} title={`${pushedSalesSummaryDescription} 未提供的收款和日结明细显示为 —。`}>
+            <div className={styles.reconciliationTip}>
               <span className={styles.tipIcon}><img src="/business-overview-reconciliation-tip.png" alt="" /></span>
-              <p><span>按首次成功推送日期统计</span><br />退款已扣减，重复推送只计一次</p>
+              <p><span>亲，日结时请核对收款金额</span><br />是否正确哦～</p>
             </div>
           </div>
 
           <div className={styles.paymentSummary}>
             <div className={styles.paymentList}>
-              {hasPushedData ? <div className={styles.paymentRow}><span>已推送金额</span><output>{formatAmount(summary?.metrics.salesAmount)}</output></div>
-                : <div className={styles.emptyPayments}>{emptyMessage}</div>}
+              {summary.payments.length > 0 ? summary.payments.map((payment) => (
+                <div className={styles.paymentRow} key={payment.name}><span>{payment.name}</span><output>{formatAmount(payment.amount)}</output></div>
+              )) : <div className={styles.emptyPayments}>所选日期暂无收款数据</div>}
             </div>
             <div className={styles.adjustments}>
-              <MetricField label="当日实存" value={null} />
-              <MetricField label="公关费用" value={null} />
-              <MetricField label="预订金额" value={null} />
-              <MetricField label="预售金额" value={null} />
+              <MetricField label="当日实存" value={summary.actualAmount} />
+              <MetricField label="公关费用" value={summary.publicExpense} />
+              <MetricField label="预订金额" value={summary.depositAmount} />
+              <MetricField label="预售金额" value={summary.presaleAmount} />
             </div>
           </div>
         </div>
@@ -279,11 +290,13 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
           <h2 id="reconciliation-title">门店对账单</h2>
           <div className={styles.tableWrap} role="region" aria-label="门店对账记录，可横向滚动" tabIndex={0}>
             <table>
-              <thead><tr><th scope="col">推送日期</th><th scope="col">收银机号</th><th scope="col">总计</th><th scope="col">实收金额</th><th scope="col">末日结金额</th><th scope="col">推送明细</th></tr></thead>
+              <thead><tr><th scope="col">销售日期</th><th scope="col">收银机号</th><th scope="col">总计</th><th scope="col">实收金额</th><th scope="col">末日结金额</th><th scope="col">日结明细</th></tr></thead>
               <tbody>
-                {summary && hasPushedData ? <tr>
-                  <td>{summary.startDate}</td><td>—</td><td>{formatAmount(summary.metrics.salesAmount)}</td><td>—</td><td>—</td><td>已推送 {formatAmount(summary.metrics.pushedOrderCount)} 笔，净件数 {formatAmount(summary.metrics.totalQuantity)} 件</td>
-                </tr> : <tr><td className={styles.emptyTable} colSpan={6}>{emptyMessage}</td></tr>}
+                {summary.records.length > 0 ? summary.records.map((record) => (
+                  <tr key={record.id}>
+                    <td>{record.date}</td><td>{record.cashierName}</td><td>{formatAmount(recordTotal(record))}</td><td>{formatAmount(record.received)}</td><td>{formatAmount(record.unsettled)}</td><td>{recordPaymentDetail(record)}</td>
+                  </tr>
+                )) : <tr><td className={styles.emptyTable} colSpan={6}>当前筛选条件下暂无门店对账记录</td></tr>}
               </tbody>
             </table>
           </div>
@@ -294,11 +307,16 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   )
 }
 
-function MetricField({ label, value }: { label: string; value: number | null }) {
-  return <label className={styles.metricField}><span>{label}</span><output title={value === null ? '当前数据未提供此项金额' : undefined}>{formatAmount(value)}</output></label>
+function MetricField({ label, value }: { label: string; value: number }) {
+  return <label className={styles.metricField}><span>{label}</span><output>{formatAmount(value)}</output></label>
 }
 
-function formatAmount(value: number | null | undefined) {
-  if (value == null) return '—'
+function formatAmount(value: number) {
   return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value)
+}
+
+function shanghaiDate(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
 }

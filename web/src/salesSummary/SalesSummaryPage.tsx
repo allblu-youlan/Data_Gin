@@ -7,7 +7,7 @@ import { businessOverviewMallsPath, parseBusinessOverviewMalls, type BusinessOve
 import { mallWeatherSkyconLabel } from '../mallWeather'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import {
-  isSalesDate, loadPushedSalesSummary, pushedSalesSummaryDescription, salesPeriodRange,
+  isSalesDate, parseSalesSummary, salesPeriodRange, salesSummaryPath,
   type SalesDateRange, type SalesPeriod, type SalesSummary, type SalesSummaryMetrics,
 } from './contracts'
 import styles from './SalesSummaryPage.module.css'
@@ -20,26 +20,26 @@ export type SalesSummaryPageProps = {
   onOpenNavigation?: () => void
 }
 
-type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' | 'percent' | 'ratio'; unavailable?: boolean }
+type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' | 'percent' | 'ratio' }
 const metrics: MetricDefinition[] = [
   { key: 'salesAmount', label: '销售金额', format: 'money' },
-  { key: 'salesTarget', unavailable: true, label: '销售指标' },
-  { key: 'salesAchievementRate', unavailable: true, label: '销售达成率', format: 'percent' },
-  { key: 'averageOrderValue', label: '客单价', format: 'money' },
+  { key: 'salesTarget', label: '销售指标' },
+  { key: 'salesAchievementRate', label: '销售达成率', format: 'percent' },
+  { key: 'averageOrderValue', label: '客单价' },
   { key: 'itemsPerOrder', label: '连带率', format: 'ratio' },
-  { key: 'quantityTarget', unavailable: true, label: '销量指标' },
-  { key: 'conversionRate', unavailable: true, label: '转化率' },
-  { key: 'memberSalesRatio', unavailable: true, label: '会员销售占比', format: 'percent' },
+  { key: 'quantityTarget', label: '销量指标' },
+  { key: 'conversionRate', label: '转化率' },
+  { key: 'memberSalesRatio', label: '会员销售占比', format: 'percent' },
   { key: 'totalQuantity', label: '总件数' },
   { key: 'salesQuantity', label: '销售件数' },
   { key: 'returnQuantity', label: '退货件数' },
-  { key: 'pushedOrderCount', label: '总笔数' },
-  { key: 'averageItemPrice', label: '件单价', format: 'money' },
-  { key: 'discountRate', unavailable: true, label: '销售折扣率', format: 'percent' },
+  { key: 'orderCount', label: '总笔数' },
+  { key: 'averageItemPrice', label: '件单价' },
+  { key: 'discountRate', label: '销售折扣率', format: 'percent' },
 ]
 
 function formatMetric(value: number, format: MetricDefinition['format']) {
-  if (format === 'money') return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (format === 'money') return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
   if (format === 'percent') return `${Number(value.toFixed(2))}%`
   if (format === 'ratio') return Number(value.toFixed(2)).toString()
   return Math.round(value).toString()
@@ -112,8 +112,11 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
       setSummary(null)
       setSummaryError('')
       try {
-        const parsed = await loadPushedSalesSummary(client, mallCode, range, controller.signal)
+        const response = await client(salesSummaryPath(mallCode, range), { method: 'GET', showResult: false, silentLoading: true, signal: controller.signal })
         if (controller.signal.aborted) return
+        if (!response.ok) throw new Error(response.status === 403 ? '当前账号无权查询该商场销售数据。' : '销售数据加载失败，请点击刷新重试。')
+        const parsed = parseSalesSummary(response.data, mallCode, range)
+        if (!parsed) throw new Error('销售数据响应异常，请点击刷新重试。')
         setSummary(parsed)
       } catch (error) {
         if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : '销售数据加载失败，请点击刷新重试。')
@@ -169,7 +172,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
   const weatherText = weather
     ? `${weather.temperatureMinC === null ? '—' : Math.round(weather.temperatureMinC)}°C ～ ${weather.temperatureMaxC === null ? '—' : Math.round(weather.temperatureMaxC)}°C ${mallWeatherSkyconLabel(weather.skycon).replace(/（.*）/, '')}`
     : '暂无天气数据'
-  const message = mallError || summaryError || systemMessage || (summary?.metrics.pushedOrderCount === 0 ? '所选推送日期内暂无已推送业绩。' : '')
+  const message = mallError || summaryError || systemMessage
   const busy = loading || mallLoading
 
   return <div className={styles.page} ref={surface}>
@@ -195,7 +198,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
       <div className={styles.headerTools}>
         <button type="button" title="刷新销售数据" aria-label="刷新销售数据" onClick={refresh} disabled={busy}><RefreshCcw /></button>
         <button type="button" title="切换全屏" aria-label="切换全屏" onClick={() => void toggleFullscreen()}><Hexagon /><span className={styles.hexagonDot} /></button>
-        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage(`${pushedSalesSummaryDescription} 暂无数据来源的指标显示“—”。`)}><CircleHelp /></button>
+        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage('选择商场和时段可查看已推送的销售汇总，点击刷新获取最新数据。')}><CircleHelp /></button>
         <button type="button" title="退出登录" aria-label="退出登录" onClick={onLogout}><LogOut /></button>
       </div>
     </header>
@@ -211,7 +214,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
     <main className={styles.content}>
       <section className={styles.filters} aria-label="销售查询条件">
         <div className={styles.periodControls}>
-          <strong>推送日期：</strong>
+          <strong>时段:</strong>
           <div className={styles.periodButtons}>
             {([['today', '今日'], ['week', '本周'], ['month', '本月']] as const).map(([key, label]) =>
               <button key={key} type="button" aria-pressed={period === key} className={period === key ? styles.periodActive : ''} onClick={() => selectPeriod(key)}>{label}</button>)}
@@ -219,11 +222,11 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
           <div className={styles.dateControl}>
             <button type="button" className={styles.dateRange} aria-expanded={datePickerOpen} onClick={() => { setDraftRange(range); setDateError(''); setDatePickerOpen(!datePickerOpen) }}>{range.startDate} 至 {range.endDate}</button>
             {datePickerOpen && <form className={styles.datePicker} onSubmit={(event) => { event.preventDefault(); applyDateRange() }}>
-              <label>开始推送日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => {
+              <label>开始日期<input type="date" value={draftRange.startDate} max={draftRange.endDate || undefined} required onChange={(event) => {
                 const startDate = event.currentTarget.value
                 setDraftRange((current) => ({ ...current, startDate }))
               }} /></label>
-              <label>结束推送日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => {
+              <label>结束日期<input type="date" value={draftRange.endDate} min={draftRange.startDate || undefined} required onChange={(event) => {
                 const endDate = event.currentTarget.value
                 setDraftRange((current) => ({ ...current, endDate }))
               }} /></label>
@@ -240,7 +243,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         <div className={styles.metrics}>
           {metrics.map((metric) => <div className={styles.metric} key={metric.key}>
             <div className={styles.metricLabel}>{metric.label}</div>
-            <div className={styles.metricValue}>{metric.unavailable ? '—' : summary ? formatMetric(summary.metrics[metric.key], metric.format) : busy ? '…' : '—'}</div>
+            <div className={styles.metricValue}>{summary ? formatMetric(summary.metrics[metric.key], metric.format) : busy ? '…' : '—'}</div>
           </div>)}
         </div>
       </section>
