@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -41,6 +40,7 @@ type SalesSummaryMetrics struct {
 	SalesQuantity        float64 `json:"salesQuantity"`
 	ReturnQuantity       float64 `json:"returnQuantity"`
 	OrderCount           int64   `json:"orderCount"`
+	PushedOrderCount     int64   `json:"pushedOrderCount"`
 	AverageItemPrice     float64 `json:"averageItemPrice"`
 	DiscountRate         float64 `json:"discountRate"`
 }
@@ -220,6 +220,7 @@ func addSalesSummaryOrder(metrics *SalesSummaryMetrics, order model.BojunRetailO
 	}
 	metrics.SalesQuantity += sales
 	metrics.ReturnQuantity += returns
+	metrics.PushedOrderCount++
 	if sales > 0 || (!retail.IsRefund() && returns == 0) {
 		metrics.OrderCount++
 	}
@@ -232,10 +233,10 @@ func finishSalesSummaryMetrics(metrics *SalesSummaryMetrics) {
 	if metrics.OrderCount > 0 {
 		metrics.AverageOrderValue = math.Round(metrics.SalesAmount/float64(metrics.OrderCount)*100) / 100
 		metrics.ItemsPerOrder = math.Round(metrics.SalesQuantity/float64(metrics.OrderCount)*100) / 100
-		// The requested reference uses sales amount / order count for both prices.
-		metrics.AverageItemPrice = metrics.AverageOrderValue
 	}
-	metrics.DiscountRate = float64(8000+rand.IntN(301)) / 100
+	if metrics.TotalQuantity > 0 {
+		metrics.AverageItemPrice = math.Round(metrics.SalesAmount/metrics.TotalQuantity*100) / 100
+	}
 }
 
 type salesSummaryDBStore struct {
@@ -250,25 +251,28 @@ func (store *salesSummaryDBStore) FindMall(ctx context.Context, code string) (*m
 }
 
 func salesSummaryPushedOrdersQuery(db *gorm.DB, mallCode string, start, end int) *gorm.DB {
-	// synced=1 also includes policy skips and orders that never need a push.
-	// Require delivery evidence, or Oracle's confirmed status without a local skip.
-	return db.Model(&model.BojunRetailOrder{}).
-		Where("c_store_code = ? AND billdate >= ? AND billdate <= ?", mallCode, start, end).
-		Where(`EXISTS (
-SELECT 1 FROM delivery_logs AS sent
-WHERE sent.clean_record_id = bojun_retail_orders.id
-AND (sent.source_code = 'bojun_order' OR
+	// MySQL stores these DATETIME values in Asia/Shanghai. Bind local midnight
+	// strings so the query uses the sent_at index without DATE/timezone conversion.
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	startAt := time.Date(start/10000, time.Month(start/100%100), start%100, 0, 0, 0, 0, location).Format(time.DateTime)
+	endAt := time.Date(end/10000, time.Month(end/100%100), end%100, 0, 0, 0, 0, location).AddDate(0, 0, 1).Format(time.DateTime)
+	// IN deduplicates successful retries within the window. The indexed lookup
+	// by clean_record_id excludes orders whose first real success was earlier.
+	sentOrders := db.Table("delivery_logs AS sent").Select("sent.clean_record_id").
+		Where("sent.sent_at >= ? AND sent.sent_at < ?", startAt, endAt).
+		Where(`(sent.source_code = 'bojun_order' OR
   (COALESCE(sent.source_code, '') = '' AND sent.destination_id = 0 AND sent.dataset_kind = 'retail_order'))
-AND sent.success = TRUE AND COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy'
-) OR (
-oracle_retail_id IS NOT NULL AND JSON_UNQUOTE(JSON_EXTRACT(raw_content_json, '$.STATUS')) = '1'
-AND NOT EXISTS (
-SELECT 1 FROM delivery_logs AS skipped
-WHERE skipped.clean_record_id = bojun_retail_orders.id
-AND (skipped.source_code = 'bojun_order' OR
-  (COALESCE(skipped.source_code, '') = '' AND skipped.destination_id = 0 AND skipped.dataset_kind = 'retail_order'))
-AND skipped.response_body = 'skipped_by_order_push_policy'
-))`)
+AND sent.success = TRUE AND COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy'`).
+		Where(`NOT EXISTS (
+SELECT 1 FROM delivery_logs AS earlier
+WHERE earlier.clean_record_id = sent.clean_record_id AND earlier.sent_at < ?
+AND (earlier.source_code = 'bojun_order' OR
+  (COALESCE(earlier.source_code, '') = '' AND earlier.destination_id = 0 AND earlier.dataset_kind = 'retail_order'))
+AND earlier.success = TRUE AND COALESCE(earlier.response_body, '') <> 'skipped_by_order_push_policy'
+)`, startAt)
+	return db.Model(&model.BojunRetailOrder{}).
+		Where("c_store_code = ?", mallCode).
+		Where("id IN (?)", sentOrders)
 }
 
 func (store *salesSummaryDBStore) ReadPushedOrders(

@@ -33,14 +33,14 @@ func TestSalesSummaryMetricsUsePushedAmountAndItemQuantities(t *testing.T) {
 		}
 	}
 	finishSalesSummaryMetrics(&metrics)
-	if metrics.SalesAmount != 480 || metrics.SalesQuantity != 9 || metrics.ReturnQuantity != -3 || metrics.TotalQuantity != 6 || metrics.OrderCount != 3 {
+	if metrics.SalesAmount != 480 || metrics.SalesQuantity != 9 || metrics.ReturnQuantity != -3 || metrics.TotalQuantity != 6 || metrics.OrderCount != 3 || metrics.PushedOrderCount != 4 {
 		t.Fatalf("unexpected totals: %+v", metrics)
 	}
-	if metrics.AverageOrderValue != 160 || metrics.AverageItemPrice != 160 || metrics.ItemsPerOrder != 3 {
+	if metrics.AverageOrderValue != 160 || metrics.AverageItemPrice != 80 || metrics.ItemsPerOrder != 3 {
 		t.Fatalf("unexpected ratios: %+v", metrics)
 	}
-	if metrics.DiscountRate < 80 || metrics.DiscountRate > 83 {
-		t.Fatalf("discount rate out of requested range: %v", metrics.DiscountRate)
+	if metrics.DiscountRate != 0 {
+		t.Fatalf("unavailable discount rate must not contain fabricated data: %v", metrics.DiscountRate)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestSalesSummaryRejectsUnauthorizedMallAndInvalidDate(t *testing.T) {
 	}
 }
 
-func TestSalesSummaryQueryRequiresPushEvidenceAndExcludesPolicySkips(t *testing.T) {
+func TestSalesSummaryQueryUsesFirstSuccessfulPushDate(t *testing.T) {
 	db, err := gorm.Open(mysql.New(mysql.Config{Conn: &sql.DB{}, SkipInitializeWithVersion: true}), &gorm.Config{
 		DryRun: true, DisableAutomaticPing: true,
 	})
@@ -224,16 +224,24 @@ func TestSalesSummaryQueryRequiresPushEvidenceAndExcludesPolicySkips(t *testing.
 		Find(&[]model.BojunRetailOrder{}).Statement
 	query := statement.SQL.String()
 	for _, required := range []string{
-		"c_store_code = ? AND billdate >= ? AND billdate <= ?", "AND (EXISTS (",
+		"c_store_code = ?", "sent.sent_at >= ? AND sent.sent_at < ?",
 		"sent.success = TRUE", "sent.source_code = 'bojun_order'", "sent.destination_id = 0",
 		"COALESCE(sent.response_body, '') <> 'skipped_by_order_push_policy'",
-		"JSON_EXTRACT(raw_content_json, '$.STATUS')", "AND NOT EXISTS (", "skipped.response_body = 'skipped_by_order_push_policy'",
+		"NOT EXISTS (", "earlier.clean_record_id = sent.clean_record_id", "earlier.sent_at < ?",
+		"earlier.success = TRUE", "COALESCE(earlier.response_body, '') <> 'skipped_by_order_push_policy'",
 	} {
 		if !strings.Contains(query, required) {
 			t.Fatalf("missing pushed-order filter %q in %s", required, query)
 		}
 	}
-	if len(statement.Vars) != 3 || statement.Vars[0] != "ABCN001A003" || statement.Vars[1] != 20261001 || statement.Vars[2] != 20261031 {
+	for _, excluded := range []string{"billdate", "JSON_EXTRACT", "DATE(sent.sent_at)", "GROUP BY"} {
+		if strings.Contains(query, excluded) {
+			t.Fatalf("push-date query contains obsolete or unbounded filter %q: %s", excluded, query)
+		}
+	}
+	if len(statement.Vars) != 4 || statement.Vars[0] != "ABCN001A003" ||
+		statement.Vars[1] != "2026-10-01 00:00:00" || statement.Vars[2] != "2026-11-01 00:00:00" ||
+		statement.Vars[3] != "2026-10-01 00:00:00" {
 		t.Fatalf("unexpected bound query parameters: %v", statement.Vars)
 	}
 }
@@ -243,6 +251,9 @@ func TestSalesSummaryEmptyOrdersAndQuantityFallback(t *testing.T) {
 	finishSalesSummaryMetrics(&empty)
 	if empty.AverageOrderValue != 0 || empty.AverageItemPrice != 0 || empty.ItemsPerOrder != 0 {
 		t.Fatalf("empty ratios: %+v", empty)
+	}
+	if empty.PushedOrderCount != 0 || empty.DiscountRate != 0 {
+		t.Fatalf("empty orders produced push count or discount: %+v", empty)
 	}
 	var metrics SalesSummaryMetrics
 	if err := addSalesSummaryOrder(&metrics, model.BojunRetailOrder{OrderTypeCode: "CMR", TotalQty: 5, TotalAmtActual: 99, ItemsJSON: `[]`}); err != nil {
@@ -279,7 +290,8 @@ func TestSalesSummaryNegativeAmountRefundAndExchangeQuantities(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if refund.SalesQuantity != 0 || refund.ReturnQuantity != -2 || refund.OrderCount != 0 {
+	finishSalesSummaryMetrics(&refund)
+	if refund.SalesQuantity != 0 || refund.ReturnQuantity != -2 || refund.OrderCount != 0 || refund.PushedOrderCount != 1 || refund.AverageItemPrice != 0 {
 		t.Fatalf("negative amount refund counted as sales: %+v", refund)
 	}
 	var exchange SalesSummaryMetrics
@@ -290,5 +302,9 @@ func TestSalesSummaryNegativeAmountRefundAndExchangeQuantities(t *testing.T) {
 	}
 	if exchange.SalesQuantity != 1 || exchange.ReturnQuantity != -1 || exchange.OrderCount != 1 {
 		t.Fatalf("negative exchange lost item directions: %+v", exchange)
+	}
+	finishSalesSummaryMetrics(&exchange)
+	if exchange.TotalQuantity != 0 || exchange.PushedOrderCount != 1 || exchange.AverageItemPrice != 0 {
+		t.Fatalf("zero-net-quantity exchange produced an item price: %+v", exchange)
 	}
 }
