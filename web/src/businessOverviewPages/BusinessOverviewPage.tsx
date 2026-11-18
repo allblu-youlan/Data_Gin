@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarDays, Maximize2, Minimize2, RefreshCcw } from 'lucide-react'
+import { CalendarDays, Maximize2, Minimize2, Save } from 'lucide-react'
 import {
   businessOverviewMallsPath,
   mergeBusinessOverviewMalls,
   parseBusinessOverviewMalls,
   shiftBusinessDate,
+  type CashierID,
   type BusinessOverviewMall,
 } from '../businessOverview'
 import { isSalesDate, loadPushedSalesSummary, pushedSalesSummaryDescription, shanghaiSalesDate, type SalesSummary } from '../salesSummary/contracts'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { PageCanvas } from '../ui'
 import styles from './BusinessOverviewPage.module.css'
+
+const cashierOptions: Array<{ id: CashierID; label: string }> = [
+  { id: 'all', label: '全部' },
+]
 
 type MallLoadState = 'loading' | 'success' | 'error'
 type SummaryLoadState = 'idle' | 'loading' | 'success' | 'error'
@@ -30,12 +35,23 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   const [mallError, setMallError] = useState('')
   const [nextAfterID, setNextAfterID] = useState(0)
   const [selectedDate, setSelectedDate] = useState(today)
+  const [cashierID, setCashierID] = useState<CashierID>('all')
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   const [summaryLoadState, setSummaryLoadState] = useState<SummaryLoadState>('idle')
   const [summaryError, setSummaryError] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
   const [fullscreenError, setFullscreenError] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const selectedMall = malls.find((mall) => mall.mallCode === mallCode)
+  const hasPushedData = summary !== null && summary.metrics.pushedOrderCount > 0
+  const emptyMessage = summaryLoadState === 'loading' ? '正在加载已推送业绩…'
+    : summaryLoadState === 'error' ? '已推送业绩加载失败，请重试。'
+      : summary ? '所选推送日期内暂无已推送业绩。' : '请选择商场查看已推送业绩。'
+
+  const saveReconciliation = useCallback(() => {
+    if (!selectedMall || summaryLoadState !== 'success') return
+    setSavedMessage(`${selectedMall.nameCn} ${selectedDate} 的对账数据已保存（模拟）`)
+  }, [summaryLoadState, selectedDate, selectedMall])
 
   function changeDate(date: string) {
     if (!isSalesDate(date) || date === selectedDate) return
@@ -43,6 +59,13 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     setSummary(null)
     setSummaryLoadState(mallCode ? 'loading' : 'idle')
     setSummaryError('')
+    setSavedMessage('')
+  }
+
+  function changeCashier(value: string) {
+    if (!cashierOptions.some((option) => option.id === value)) return
+    setCashierID(value as CashierID)
+    setSavedMessage('')
   }
 
   function changeMall(value: string) {
@@ -51,6 +74,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     setSummary(null)
     setSummaryLoadState('loading')
     setSummaryError('')
+    setSavedMessage('')
   }
 
   const loadMalls = useCallback(async (afterID = 0) => {
@@ -97,6 +121,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     setSummary(null)
     setSummaryLoadState('loading')
     setSummaryError('')
+    setSavedMessage('')
     try {
       const parsed = await loadPushedSalesSummary(client, code, { startDate: date, endDate: date }, controller.signal)
       if (controller.signal.aborted || sequence !== summaryRequestSequence.current) return
@@ -145,6 +170,16 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   }, [loadSummary, mallCode, selectedDate])
 
   useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key !== 'F2') return
+      event.preventDefault()
+      saveReconciliation()
+    }
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [saveReconciliation])
+
+  useEffect(() => {
     const syncFullscreenState = () => {
       setIsFullscreen(document.fullscreenElement === fullscreenSurfaceRef.current)
       setFullscreenError('')
@@ -165,7 +200,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   return (
     <div className={styles.fullscreenSurface} ref={fullscreenSurfaceRef}>
       <PageCanvas className={styles.page}>
-        <header className={styles.titleBar}><h1>已推送业绩日报</h1></header>
+        <header className={styles.titleBar}><h1>营业概况</h1></header>
 
         <div className={styles.pageControls}>
           {!isFullscreen && <label className={styles.mallField}>
@@ -186,7 +221,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
         {!isFullscreen && mallLoadState === 'success' && malls.length === 0 ? <div className={styles.mallEmpty} role="status">当前账号暂无可查看的商场。</div> : null}
         {fullscreenError ? <div className={styles.fullscreenError} role="alert">{fullscreenError}</div> : null}
 
-        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}已推送业绩日报`} aria-busy={summaryLoadState === 'loading'}>
+        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}营业概况（已推送业绩）`} aria-busy={summaryLoadState === 'loading'}>
         <div className={styles.filterBar}>
           <strong className={styles.filterTitle}>推送日期：</strong>
           <div className={styles.quickDates} aria-label="快捷选择推送日期">
@@ -194,40 +229,61 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
             <button aria-pressed={selectedDate === yesterday} className={selectedDate === yesterday ? styles.active : ''} type="button" onClick={() => changeDate(yesterday)}>昨天</button>
           </div>
           <label className={styles.dateField}>
-            <span>指定推送日期</span>
+            <span>指定日期</span>
             <span className={styles.dateInputWrap}>
               <input type="date" value={selectedDate} onChange={(event) => changeDate(event.currentTarget.value)} />
               <CalendarDays aria-hidden="true" />
             </span>
           </label>
-          <button className={styles.refreshButton} type="button" onClick={() => void loadSummary(selectedDate, mallCode)} disabled={!selectedMall || summaryLoadState === 'loading'}><RefreshCcw aria-hidden="true" />刷新</button>
+          <button className={styles.saveButton} type="button" onClick={saveReconciliation} disabled={!selectedMall || summaryLoadState !== 'success'}><Save aria-hidden="true" />保存 F2</button>
+          <label className={styles.cashierField}>
+            <span>收银机号：</span>
+            <select value={cashierID} onChange={(event) => changeCashier(event.currentTarget.value)} disabled>
+              {cashierOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
         </div>
 
-        <p className={styles.summaryScope}>{pushedSalesSummaryDescription}</p>
+        {savedMessage ? <div className={styles.savedMessage} role="status" aria-live="polite">{savedMessage}</div> : null}
         {summaryLoadState === 'loading' ? <div className={styles.mallEmpty} role="status">正在加载已推送业绩…</div> : null}
         {summaryLoadState === 'error' ? <div className={styles.mallError} role="alert"><span>{summaryError}</span><button type="button" onClick={() => void loadSummary(selectedDate, mallCode)}>重新加载</button></div> : null}
 
         <div className={styles.summaryArea}>
           <div className={styles.amountSummary}>
-            <div className={styles.pushedAmount}><strong>{summary ? formatAmount(summary.metrics.salesAmount) : '—'}</strong><span>已推送净额（元）</span></div>
+            <div className={styles.unsettledAmount}><strong>{formatAmount(summary?.metrics.salesAmount)}</strong><span>已推送金额（元）</span></div>
+            <div className={styles.channelAmounts}>
+              <div><span>门店： </span><strong>{formatAmount(summary?.metrics.salesAmount)}（元）</strong></div>
+              <div title="当前数据未提供云仓金额"><span>云仓： </span><strong>{formatAmount(null)}（元）</strong></div>
+            </div>
+            <div className={styles.reconciliationTip} title={`${pushedSalesSummaryDescription} 未提供的收款和日结明细显示为 —。`}>
+              <span className={styles.tipIcon}><img src="/business-overview-reconciliation-tip.png" alt="" /></span>
+              <p><span>按首次成功推送日期统计</span><br />退款已扣减，重复推送只计一次</p>
+            </div>
           </div>
-          <div className={styles.pushedMetrics}>
-            <MetricField label="已推送总笔数" value={summary?.metrics.pushedOrderCount} />
-            <MetricField label="已推送销售件数" value={summary?.metrics.salesQuantity} />
-            <MetricField label="已推送退货件数" value={summary?.metrics.returnQuantity} />
-            <MetricField label="已推送净件数" value={summary?.metrics.totalQuantity} />
+
+          <div className={styles.paymentSummary}>
+            <div className={styles.paymentList}>
+              {hasPushedData ? <div className={styles.paymentRow}><span>已推送金额</span><output>{formatAmount(summary?.metrics.salesAmount)}</output></div>
+                : <div className={styles.emptyPayments}>{emptyMessage}</div>}
+            </div>
+            <div className={styles.adjustments}>
+              <MetricField label="当日实存" value={null} />
+              <MetricField label="公关费用" value={null} />
+              <MetricField label="预订金额" value={null} />
+              <MetricField label="预售金额" value={null} />
+            </div>
           </div>
         </div>
 
         <section className={styles.reconciliationSection} aria-labelledby="reconciliation-title">
-          <h2 id="reconciliation-title">已推送业绩汇总</h2>
-          <div className={styles.tableWrap} role="region" aria-label="已推送业绩汇总，可横向滚动" tabIndex={0}>
+          <h2 id="reconciliation-title">门店对账单</h2>
+          <div className={styles.tableWrap} role="region" aria-label="门店对账记录，可横向滚动" tabIndex={0}>
             <table>
-              <thead><tr><th scope="col">推送日期</th><th scope="col">已推送净额（元）</th><th scope="col">已推送总笔数</th><th scope="col">已推送销售件数</th><th scope="col">已推送退货件数</th><th scope="col">已推送净件数</th></tr></thead>
+              <thead><tr><th scope="col">推送日期</th><th scope="col">收银机号</th><th scope="col">总计</th><th scope="col">实收金额</th><th scope="col">末日结金额</th><th scope="col">推送明细</th></tr></thead>
               <tbody>
-                {summary && summary.metrics.pushedOrderCount > 0 ? <tr>
-                  <td>{selectedDate}</td><td>{formatAmount(summary.metrics.salesAmount)}</td><td>{formatQuantity(summary.metrics.pushedOrderCount)}</td><td>{formatQuantity(summary.metrics.salesQuantity)}</td><td>{formatQuantity(summary.metrics.returnQuantity)}</td><td>{formatQuantity(summary.metrics.totalQuantity)}</td>
-                </tr> : <tr><td className={styles.emptyTable} colSpan={6}>{summaryLoadState === 'loading' ? '正在加载已推送业绩…' : summaryLoadState === 'error' ? '已推送业绩加载失败，请重试。' : summary ? '所选推送日期内暂无已推送业绩。' : '请选择商场查看已推送业绩。'}</td></tr>}
+                {summary && hasPushedData ? <tr>
+                  <td>{summary.startDate}</td><td>—</td><td>{formatAmount(summary.metrics.salesAmount)}</td><td>—</td><td>—</td><td>已推送 {formatAmount(summary.metrics.pushedOrderCount)} 笔，净件数 {formatAmount(summary.metrics.totalQuantity)} 件</td>
+                </tr> : <tr><td className={styles.emptyTable} colSpan={6}>{emptyMessage}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -238,14 +294,11 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   )
 }
 
-function MetricField({ label, value }: { label: string; value: number | undefined }) {
-  return <label className={styles.metricField}><span>{label}</span><output>{value === undefined ? '—' : formatQuantity(value)}</output></label>
+function MetricField({ label, value }: { label: string; value: number | null }) {
+  return <label className={styles.metricField}><span>{label}</span><output title={value === null ? '当前数据未提供此项金额' : undefined}>{formatAmount(value)}</output></label>
 }
 
-function formatAmount(value: number) {
-  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
-}
-
-function formatQuantity(value: number) {
-  return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(value)
+function formatAmount(value: number | null | undefined) {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value)
 }

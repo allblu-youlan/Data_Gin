@@ -20,17 +20,29 @@ export type SalesSummaryPageProps = {
   onOpenNavigation?: () => void
 }
 
-type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' }
+type MetricDefinition = { key: keyof SalesSummaryMetrics; label: string; format?: 'money' | 'percent' | 'ratio'; unavailable?: boolean }
 const metrics: MetricDefinition[] = [
-  { key: 'salesAmount', label: '已推送净额（元）', format: 'money' },
-  { key: 'pushedOrderCount', label: '已推送总笔数' },
-  { key: 'salesQuantity', label: '已推送销售件数' },
-  { key: 'returnQuantity', label: '已推送退货件数' },
-  { key: 'totalQuantity', label: '已推送净件数' },
+  { key: 'salesAmount', label: '销售金额', format: 'money' },
+  { key: 'salesTarget', unavailable: true, label: '销售指标' },
+  { key: 'salesAchievementRate', unavailable: true, label: '销售达成率', format: 'percent' },
+  { key: 'averageOrderValue', label: '客单价', format: 'money' },
+  { key: 'itemsPerOrder', label: '连带率', format: 'ratio' },
+  { key: 'quantityTarget', unavailable: true, label: '销量指标' },
+  { key: 'conversionRate', unavailable: true, label: '转化率' },
+  { key: 'memberSalesRatio', unavailable: true, label: '会员销售占比', format: 'percent' },
+  { key: 'totalQuantity', label: '总件数' },
+  { key: 'salesQuantity', label: '销售件数' },
+  { key: 'returnQuantity', label: '退货件数' },
+  { key: 'pushedOrderCount', label: '总笔数' },
+  { key: 'averageItemPrice', label: '件单价', format: 'money' },
+  { key: 'discountRate', unavailable: true, label: '销售折扣率', format: 'percent' },
 ]
 
 function formatMetric(value: number, format: MetricDefinition['format']) {
-  return value.toLocaleString('zh-CN', { minimumFractionDigits: format === 'money' ? 2 : 0, maximumFractionDigits: 2 })
+  if (format === 'money') return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (format === 'percent') return `${Number(value.toFixed(2))}%`
+  if (format === 'ratio') return Number(value.toFixed(2)).toString()
+  return Math.round(value).toString()
 }
 
 function WeatherIcon({ skycon }: { skycon: string }) {
@@ -104,7 +116,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         if (controller.signal.aborted) return
         setSummary(parsed)
       } catch (error) {
-        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : '已推送业绩加载失败，请点击刷新重试。')
+        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : '销售数据加载失败，请点击刷新重试。')
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -157,7 +169,7 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
   const weatherText = weather
     ? `${weather.temperatureMinC === null ? '—' : Math.round(weather.temperatureMinC)}°C ～ ${weather.temperatureMaxC === null ? '—' : Math.round(weather.temperatureMaxC)}°C ${mallWeatherSkyconLabel(weather.skycon).replace(/（.*）/, '')}`
     : '暂无天气数据'
-  const message = mallError || summaryError || systemMessage
+  const message = mallError || summaryError || systemMessage || (summary?.metrics.pushedOrderCount === 0 ? '所选推送日期内暂无已推送业绩。' : '')
   const busy = loading || mallLoading
 
   return <div className={styles.page} ref={surface}>
@@ -175,27 +187,29 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         <span className={styles.storeCode}>{selectedMall?.mallCode ?? '—'}</span>
       </div>
       <nav className={styles.primaryNav} aria-label="门店导航">
-        <button type="button" onClick={() => onNavigate?.('business-overview')}>推送日报</button>
+        <button type="button" onClick={() => onNavigate?.('business-overview')}>收银</button>
         <button type="button" className={styles.primaryActive} aria-current="page">店长导航</button>
         <button type="button" onClick={() => onNavigate?.('store-info')}>店务管理</button>
         <button type="button" onClick={() => onNavigate?.('report-center')}>报表</button>
       </nav>
       <div className={styles.headerTools}>
-        <button type="button" title="刷新已推送业绩" aria-label="刷新已推送业绩" onClick={refresh} disabled={busy}><RefreshCcw /></button>
+        <button type="button" title="刷新销售数据" aria-label="刷新销售数据" onClick={refresh} disabled={busy}><RefreshCcw /></button>
         <button type="button" title="切换全屏" aria-label="切换全屏" onClick={() => void toggleFullscreen()}><Hexagon /><span className={styles.hexagonDot} /></button>
-        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage(pushedSalesSummaryDescription)}><CircleHelp /></button>
+        <button type="button" title="帮助" aria-label="帮助" onClick={() => setSystemMessage(`${pushedSalesSummaryDescription} 暂无数据来源的指标显示“—”。`)}><CircleHelp /></button>
         <button type="button" title="退出登录" aria-label="退出登录" onClick={onLogout}><LogOut /></button>
       </div>
     </header>
 
-    <nav className={styles.secondaryNav} aria-label="已推送业绩导航">
-      <button type="button" className={styles.secondaryActive} aria-current="page" onClick={() => setSystemMessage('')}>已推送业绩汇总</button>
-      <button type="button" onClick={() => onNavigate?.('business-overview')}>已推送业绩日报</button>
+    <nav className={styles.secondaryNav} aria-label="销售数据导航">
+      <button type="button" className={styles.secondaryActive} aria-current="page" onClick={() => setSystemMessage('')}>概览</button>
+      <button type="button" onClick={() => onNavigate?.('business-overview')}>付款明细</button>
+      <button type="button" onClick={() => setSystemMessage('TOP20商品暂未接入。')}>TOP20商品</button>
+      <button type="button" onClick={() => setSystemMessage('员工业绩暂未接入。')}>员工业绩</button>
     </nav>
     <div className={styles.divider} aria-hidden="true"><ChevronLeft /><ChevronRight /></div>
 
     <main className={styles.content}>
-      <section className={styles.filters} aria-label="已推送业绩查询条件">
+      <section className={styles.filters} aria-label="销售查询条件">
         <div className={styles.periodControls}>
           <strong>推送日期：</strong>
           <div className={styles.periodButtons}>
@@ -221,16 +235,14 @@ export function SalesSummaryPage({ client, username, onNavigate, onLogout, onOpe
         <button type="button" className={styles.refresh} onClick={refresh} disabled={busy}><RefreshCcw className={busy ? styles.spinning : ''} />{busy ? '加载中' : '刷新'}</button>
       </section>
 
-      <section className={styles.salesPanel} aria-label="已推送业绩汇总" aria-busy={busy}>
-        <h1>已推送业绩汇总</h1>
-        <p className={styles.summaryScope}>{pushedSalesSummaryDescription}</p>
+      <section className={styles.salesPanel} aria-label="销售数据" aria-busy={busy}>
+        <h1>销售数据</h1>
         <div className={styles.metrics}>
           {metrics.map((metric) => <div className={styles.metric} key={metric.key}>
             <div className={styles.metricLabel}>{metric.label}</div>
-            <div className={styles.metricValue}>{summary ? formatMetric(summary.metrics[metric.key], metric.format) : busy ? '…' : '—'}</div>
+            <div className={styles.metricValue}>{metric.unavailable ? '—' : summary ? formatMetric(summary.metrics[metric.key], metric.format) : busy ? '…' : '—'}</div>
           </div>)}
         </div>
-        {summary && summary.metrics.pushedOrderCount === 0 && <p className={styles.summaryScope} role="status">所选推送日期内暂无已推送业绩。</p>}
       </section>
     </main>
 
