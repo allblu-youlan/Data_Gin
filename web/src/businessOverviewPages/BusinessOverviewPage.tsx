@@ -13,6 +13,7 @@ import {
   type CashierID,
   type BusinessOverviewMall,
 } from '../businessOverview'
+import { loadPushedSalesSummary } from '../salesSummary/contracts'
 import type { WorkspaceApiClient } from '../appShell/WorkspaceRouter'
 import { PageCanvas } from '../ui'
 import styles from './BusinessOverviewPage.module.css'
@@ -32,6 +33,8 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   const mallController = useRef<AbortController | null>(null)
   const paymentRequestSequence = useRef(0)
   const paymentController = useRef<AbortController | null>(null)
+  const salesRequestSequence = useRef(0)
+  const salesController = useRef<AbortController | null>(null)
   const mallsRef = useRef<BusinessOverviewMall[]>([])
   const [malls, setMalls] = useState<BusinessOverviewMall[]>([])
   const [mallCode, setMallCode] = useState('')
@@ -43,10 +46,15 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
   const [summary, setSummary] = useState(() => emptyBusinessSummary(today))
   const [paymentLoadState, setPaymentLoadState] = useState<PaymentLoadState>('idle')
   const [paymentError, setPaymentError] = useState('')
+  const [salesAmount, setSalesAmount] = useState(0)
+  const [salesLoadState, setSalesLoadState] = useState<PaymentLoadState>('idle')
+  const [salesError, setSalesError] = useState('')
   const [savedMessage, setSavedMessage] = useState('')
   const [fullscreenError, setFullscreenError] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const selectedMall = malls.find((mall) => mall.mallCode === mallCode)
+  const businessLoading = paymentLoadState === 'loading' || salesLoadState === 'loading'
+  const businessError = paymentError || salesError
 
   const saveReconciliation = useCallback(() => {
     if (!selectedMall || paymentLoadState !== 'success') return
@@ -59,6 +67,9 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     setSummary(emptyBusinessSummary(date))
     setPaymentLoadState(mallCode ? 'loading' : 'idle')
     setPaymentError('')
+    setSalesAmount(0)
+    setSalesLoadState(mallCode ? 'loading' : 'idle')
+    setSalesError('')
     setSavedMessage('')
   }
 
@@ -74,6 +85,9 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     setSummary(emptyBusinessSummary(selectedDate))
     setPaymentLoadState('loading')
     setPaymentError('')
+    setSalesAmount(0)
+    setSalesLoadState('loading')
+    setSalesError('')
     setSavedMessage('')
   }
 
@@ -146,6 +160,28 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     }
   }, [client])
 
+  const loadSalesAmount = useCallback(async (date: string, code: string) => {
+    const sequence = ++salesRequestSequence.current
+    salesController.current?.abort()
+    const controller = new AbortController()
+    salesController.current = controller
+    setSalesAmount(0)
+    setSalesLoadState('loading')
+    setSalesError('')
+    try {
+      const parsed = await loadPushedSalesSummary(client, code, { startDate: date, endDate: date }, controller.signal)
+      if (controller.signal.aborted || sequence !== salesRequestSequence.current) return
+      setSalesAmount(parsed.metrics.salesAmount)
+      setSalesLoadState('success')
+    } catch {
+      if (controller.signal.aborted || sequence !== salesRequestSequence.current) return
+      setSalesLoadState('error')
+      setSalesError('营业数据加载失败，请稍后重试。')
+    } finally {
+      if (salesController.current === controller) salesController.current = null
+    }
+  }, [client])
+
   const toggleFullscreen = useCallback(async () => {
     const surface = fullscreenSurfaceRef.current
     if (!surface) return
@@ -178,6 +214,18 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
     void loadPayments(selectedDate, mallCode)
     return () => paymentController.current?.abort()
   }, [loadPayments, mallCode, selectedDate])
+
+  useEffect(() => {
+    if (!mallCode) {
+      salesController.current?.abort()
+      setSalesAmount(0)
+      setSalesLoadState('idle')
+      setSalesError('')
+      return
+    }
+    void loadSalesAmount(selectedDate, mallCode)
+    return () => salesController.current?.abort()
+  }, [loadSalesAmount, mallCode, selectedDate])
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -231,7 +279,7 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
         {!isFullscreen && mallLoadState === 'success' && malls.length === 0 ? <div className={styles.mallEmpty} role="status">当前账号暂无可查看的商场。</div> : null}
         {fullscreenError ? <div className={styles.fullscreenError} role="alert">{fullscreenError}</div> : null}
 
-        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}营业概况日结核对`} aria-busy={paymentLoadState === 'loading'}>
+        <section className={styles.overviewPanel} aria-label={`${selectedMall?.nameCn ?? '当前商场'}营业概况日结核对`} aria-busy={businessLoading}>
         <div className={styles.filterBar}>
           <strong className={styles.filterTitle}>销售日期：</strong>
           <div className={styles.quickDates} aria-label="快捷选择销售日期">
@@ -255,14 +303,17 @@ export function BusinessOverviewPage({ client }: { client: WorkspaceApiClient })
         </div>
 
         {savedMessage ? <div className={styles.savedMessage} role="status" aria-live="polite">{savedMessage}</div> : null}
-        {paymentLoadState === 'loading' ? <div className={styles.mallEmpty} role="status">正在加载营业数据…</div> : null}
-        {paymentLoadState === 'error' ? <div className={styles.mallError} role="alert"><span>{paymentError}</span><button type="button" onClick={() => void loadPayments(selectedDate, mallCode)}>重新加载</button></div> : null}
+        {businessLoading ? <div className={styles.mallEmpty} role="status">正在加载营业数据…</div> : null}
+        {businessError ? <div className={styles.mallError} role="alert"><span>{businessError}</span><button type="button" onClick={() => {
+          if (paymentLoadState === 'error') void loadPayments(selectedDate, mallCode)
+          if (salesLoadState === 'error') void loadSalesAmount(selectedDate, mallCode)
+        }}>重新加载</button></div> : null}
 
         <div className={styles.summaryArea}>
           <div className={styles.amountSummary}>
-            <div className={styles.unsettledAmount}><strong>{formatAmount(summary.unsettledAmount)}</strong><span>末日结金额（元）</span></div>
+            <div className={styles.unsettledAmount}><strong>{formatAmount(salesAmount)}</strong><span>末日结金额（元）</span></div>
             <div className={styles.channelAmounts}>
-              <div><span>门店： </span><strong>{formatAmount(summary.storeAmount)}（元）</strong></div>
+              <div><span>门店： </span><strong>{formatAmount(salesAmount)}（元）</strong></div>
               <div><span>云仓： </span><strong>{formatAmount(summary.cloudAmount)}（元）</strong></div>
             </div>
             <div className={styles.reconciliationTip}>

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/internal/dao/data_dao"
+	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/cache"
@@ -66,7 +67,12 @@ type salesSummaryStore interface {
 	ReadDailyWeather(context.Context, uint, time.Time) ([]model.MallWeatherDaily, error)
 }
 
+type salesSummaryOracle interface {
+	QuerySalesSummary(context.Context, reportoracle.SalesSummaryQuery) (reportoracle.SalesSummaryTotals, error)
+}
+
 type SalesSummaryService struct {
+	oracle       salesSummaryOracle
 	store        salesSummaryStore
 	mallScope    businessOverviewMallScope
 	now          func() time.Time
@@ -81,6 +87,7 @@ type salesSummaryCacheKey struct {
 
 func NewSalesSummaryService() *SalesSummaryService {
 	return &SalesSummaryService{
+		oracle:       NewOpenBojunOracleProvider(),
 		store:        &salesSummaryDBStore{db: database.DB},
 		mallScope:    auth_svc.NewMallScopeService(database.DB),
 		now:          time.Now,
@@ -128,7 +135,7 @@ func (service *SalesSummaryService) Query(
 	key := salesSummaryCacheKey{MallCode: mallCode, Start: statusTimeBillDate(start), End: statusTimeBillDate(end)}
 	result.Metrics, err = service.readMetrics(queryCtx, key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: summarize pushed orders: %v", ErrSalesSummaryUnavailable, err)
+		return nil, fmt.Errorf("%w: summarize orders: %v", ErrSalesSummaryUnavailable, err)
 	}
 	finishSalesSummaryMetrics(&result.Metrics)
 	result.Weather = service.todayWeather(queryCtx, mall)
@@ -137,6 +144,20 @@ func (service *SalesSummaryService) Query(
 
 func (service *SalesSummaryService) readMetrics(ctx context.Context, key salesSummaryCacheKey) (SalesSummaryMetrics, error) {
 	return service.metricsCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (SalesSummaryMetrics, error) {
+		if _, requiresPush := bojunTargetForStore(key.MallCode); !requiresPush {
+			// Stores without a delivery channel report the source order amount
+			// for the business day; they do not have successful delivery logs.
+			location := time.FixedZone("Asia/Shanghai", 8*60*60)
+			start := time.Date(key.Start/10000, time.Month(key.Start/100%100), key.Start%100, 0, 0, 0, 0, location)
+			end := time.Date(key.End/10000, time.Month(key.End/100%100), key.End%100, 0, 0, 0, 0, location).AddDate(0, 0, 1)
+			totals, err := service.oracle.QuerySalesSummary(loadCtx, reportoracle.SalesSummaryQuery{
+				Start: start, End: end, StoreCode: key.MallCode, IncludeNonToShop: true,
+			})
+			return SalesSummaryMetrics{
+				SalesAmount: totals.SalesAmount, SalesQuantity: totals.SalesQuantity,
+				ReturnQuantity: totals.ReturnQuantity, OrderCount: totals.OrderCount,
+			}, err
+		}
 		var metrics SalesSummaryMetrics
 		err := service.store.ReadPushedOrders(loadCtx, key.MallCode, key.Start, key.End, func(order model.BojunRetailOrder) error {
 			return addSalesSummaryOrder(&metrics, order)

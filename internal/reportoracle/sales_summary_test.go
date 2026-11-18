@@ -102,6 +102,31 @@ func TestSalesSummaryDoesNotRestrictToCompletedPushesOrLocalDocuments(t *testing
 	}
 }
 
+func TestSalesSummaryWithoutPushTargetIncludesAllToShopFlags(t *testing.T) {
+	query := salesSummaryTestQuery()
+	query.IncludeNonToShop = true
+	statement, arguments, err := buildSalesSummaryQuery(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"IS_TOSHOP", "PUSH_DATE", "delivery_logs"} {
+		if strings.Contains(statement, forbidden) {
+			t.Fatalf("store without push target is restricted by %q: %s", forbidden, statement)
+		}
+	}
+	if regexp.MustCompile(`\br\.STATUS\b`).MatchString(statement) {
+		t.Fatalf("store without push target is restricted to push status: %s", statement)
+	}
+	for _, required := range []string{"r.TOT_AMT_TS", "r.STATUSTIME >= :2", "r.STATUSTIME < :3", "r.STORE_CODE = :1", "h.STATUS = 2", "h.ISACTIVE = 'Y'"} {
+		if !strings.Contains(statement, required) {
+			t.Fatalf("missing source order filter %q: %s", required, statement)
+		}
+	}
+	if len(arguments) != 3 {
+		t.Fatalf("unexpected source bindings: %v", arguments)
+	}
+}
+
 func TestQuerySalesSummaryEmptyAggregateReturnsZeroTotals(t *testing.T) {
 	rows := salesSummaryTestRows([]driver.Value{nil, nil, nil, nil})
 	adapter := newBojunQueryTestAdapter(t, func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {

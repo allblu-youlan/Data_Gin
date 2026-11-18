@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/service/auth_svc"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/cache"
@@ -17,6 +19,85 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
+
+type fakeSalesSummaryOracle struct {
+	queries []reportoracle.SalesSummaryQuery
+	totals  reportoracle.SalesSummaryTotals
+	err     error
+}
+
+func (oracle *fakeSalesSummaryOracle) QuerySalesSummary(_ context.Context, query reportoracle.SalesSummaryQuery) (reportoracle.SalesSummaryTotals, error) {
+	oracle.queries = append(oracle.queries, query)
+	return oracle.totals, oracle.err
+}
+
+func TestSalesSummaryStoreWithoutPushTargetUsesOracleAmounts(t *testing.T) {
+	t.Setenv("SHANGHAI_XINJIA_CENTER_BOJUN_STORE_CODE", "ABCN001A008")
+	store := &fakeSalesSummaryStore{orderErr: errors.New("no local orders")}
+	oracle := &fakeSalesSummaryOracle{totals: reportoracle.SalesSummaryTotals{
+		SalesAmount: 13613.70, SalesQuantity: 31, OrderCount: 31,
+	}}
+	service := &SalesSummaryService{
+		store: store, oracle: oracle,
+		mallScope: &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A002"}}, now: time.Now,
+		metricsCache: cache.NewMemoryTTL[salesSummaryCacheKey, SalesSummaryMetrics](30*time.Second, 256),
+	}
+	for range 2 {
+		result, err := service.Query(t.Context(), 17, "ABCN001A002", "2026-11-18", "2026-11-18")
+		if err != nil || result.Metrics.SalesAmount != 13613.70 || result.Metrics.OrderCount != 31 {
+			t.Fatalf("store without push target lost source totals: result=%+v err=%v", result, err)
+		}
+		if result.Metrics.PushedOrderCount != 0 || result.Metrics.DiscountRate != 0 {
+			t.Fatalf("source orders fabricated push count or discount: %+v", result.Metrics)
+		}
+	}
+	if store.readCalls != 0 || len(oracle.queries) != 1 {
+		t.Fatalf("wrong data source or cache behavior: local=%d oracle=%d", store.readCalls, len(oracle.queries))
+	}
+	query := oracle.queries[0]
+	if query.StoreCode != "ABCN001A002" || !query.IncludeNonToShop ||
+		query.Start.Format(time.RFC3339) != "2026-11-18T00:00:00+08:00" ||
+		query.End.Format(time.RFC3339) != "2026-11-19T00:00:00+08:00" {
+		t.Fatalf("wrong source date or store filter: %+v", query)
+	}
+}
+
+func TestSalesSummaryConfiguredTargetNeverFallsBackToOracleAmounts(t *testing.T) {
+	t.Setenv("SHANGHAI_XINJIA_CENTER_BOJUN_STORE_CODE", "ABCN001A008")
+	for _, code := range []string{"ABCN001A003", "ABCN001A008"} {
+		for _, queryErr := range []error{nil, errors.New("delivery query unavailable")} {
+			t.Run(code+"/"+fmt.Sprint(queryErr), func(t *testing.T) {
+				store := &fakeSalesSummaryStore{orderErr: queryErr, emptyOrders: true}
+				oracle := &fakeSalesSummaryOracle{totals: reportoracle.SalesSummaryTotals{SalesAmount: 13613.70}}
+				service := &SalesSummaryService{store: store, oracle: oracle,
+					mallScope: &fakeBusinessOverviewMallScope{allowed: []string{code}}, now: time.Now}
+				result, err := service.Query(t.Context(), 17, code, "2026-11-18", "2026-11-18")
+				if queryErr != nil {
+					if !errors.Is(err, ErrSalesSummaryUnavailable) || result != nil {
+						t.Fatalf("delivery query failure was hidden: result=%+v err=%v", result, err)
+					}
+				} else if err != nil || result.Metrics.SalesAmount != 0 || result.Metrics.PushedOrderCount != 0 {
+					t.Fatalf("no successful deliveries must produce zero amount: result=%+v err=%v", result, err)
+				}
+				if len(oracle.queries) != 0 {
+					t.Fatalf("configured target queried unpushed source totals: %d", len(oracle.queries))
+				}
+			})
+		}
+	}
+}
+
+func TestSalesSummaryStoreWithoutPushTargetPreservesOracleFailure(t *testing.T) {
+	t.Setenv("SHANGHAI_XINJIA_CENTER_BOJUN_STORE_CODE", "ABCN001A008")
+	store := &fakeSalesSummaryStore{}
+	oracle := &fakeSalesSummaryOracle{err: errors.New("Oracle unavailable")}
+	service := &SalesSummaryService{store: store, oracle: oracle,
+		mallScope: &fakeBusinessOverviewMallScope{allowed: []string{"ABCN001A002"}}, now: time.Now}
+	result, err := service.Query(t.Context(), 17, "ABCN001A002", "2026-11-18", "2026-11-18")
+	if !errors.Is(err, ErrSalesSummaryUnavailable) || result != nil || store.readCalls != 0 {
+		t.Fatalf("source failure returned partial local amount: result=%+v err=%v local=%d", result, err, store.readCalls)
+	}
+}
 
 func TestSalesSummaryMetricsUsePushedAmountAndItemQuantities(t *testing.T) {
 	oracleID := uint64(25)
@@ -47,6 +128,7 @@ func TestSalesSummaryMetricsUsePushedAmountAndItemQuantities(t *testing.T) {
 type fakeSalesSummaryStore struct {
 	called       bool
 	readCalls    int
+	emptyOrders  bool
 	orderErr     error
 	code         string
 	start        int
@@ -115,6 +197,9 @@ func (store *fakeSalesSummaryStore) ReadPushedOrders(
 		return store.orderErr
 	}
 	store.code, store.start, store.end = code, start, end
+	if store.emptyOrders {
+		return nil
+	}
 	return visit(model.BojunRetailOrder{TotalAmtActual: 80, TotalQty: 2, OrderTypeCode: "CMR"})
 }
 

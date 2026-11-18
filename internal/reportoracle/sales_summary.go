@@ -12,6 +12,8 @@ type SalesSummaryQuery struct {
 	Start     time.Time
 	End       time.Time
 	StoreCode string
+	// IncludeNonToShop reports all source orders for stores without a push target.
+	IncludeNonToShop bool
 }
 
 type SalesSummaryTotals struct {
@@ -46,7 +48,11 @@ func buildSalesSummaryQuery(query SalesSummaryQuery) (string, []any, error) {
 		return "", nil, fmt.Errorf("query sales summary: invalid store or date range")
 	}
 	arguments := []any{storeCode, query.Start, query.End}
-	return salesSummaryOrdersSQL + salesSummaryTotalsSQL, arguments, nil
+	filter := ""
+	if !query.IncludeNonToShop {
+		filter = "\n      AND r.IS_TOSHOP = 'Y'"
+	}
+	return salesSummaryOrdersSQL + filter + salesSummaryTotalsSQL, arguments, nil
 }
 
 const salesSummaryOrdersSQL = `WITH orders AS (
@@ -58,8 +64,7 @@ const salesSummaryOrdersSQL = `WITH orders AS (
       AND EXISTS (
           SELECT 1 FROM ` + bojunRetailSourceHeadTable + ` h
           WHERE h.ID = r.M_RETAIL_ID AND h.STATUS = 2 AND h.ISACTIVE = 'Y'
-      )
-      AND r.IS_TOSHOP = 'Y'`
+      )`
 
 // Item totals remain one row per order, so an order's pushed amount is never
 // multiplied by its number of items. A missing quantity retains the existing
