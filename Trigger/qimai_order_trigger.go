@@ -65,57 +65,40 @@ func (t *QimaiOrderTrigger) Trigger(ctx context.Context, rawData *model.RawData)
 		return fmt.Errorf("查询token数据失败: %w", err)
 	}
 
-	log.Printf("查询到token数据数量: %d", len(tokenDataList))
-
 	var verificationInfo map[string]string
 	for _, tokenData := range tokenDataList {
-		log.Printf("token数据: account_name=%s, verification_info类型=%T, verification_info值=%v", tokenData.AccountName, tokenData.VerificationInfo, tokenData.VerificationInfo)
 		if tokenData.AccountName == "野选" {
-			log.Printf("找到account_name为野选的token数据")
 			// 解析verification_info
 			// 处理指针类型
 			viValue := tokenData.VerificationInfo
 			// 解引用指针，直到得到实际值
 			for {
 				if ptr, ok := viValue.(*interface{}); ok {
-					log.Printf("解引用一级指针")
 					viValue = *ptr
 				} else if ptr2, ok := viValue.(**interface{}); ok {
-					log.Printf("解引用二级指针")
 					viValue = **ptr2
 				} else {
 					break
 				}
 			}
-			log.Printf("解引用后verification_info类型=%T, 值=%v", viValue, viValue)
-
 			// 处理[]uint8类型（字节切片，GORM读取TEXT类型的结果）
 			if viBytes, ok := viValue.([]uint8); ok {
-				log.Printf("verification_info是[]uint8类型，转换为string")
 				viValue = string(viBytes)
-				log.Printf("转换后verification_info类型=%T, 值=%v", viValue, viValue)
 			}
 
 			if viJSON, ok := viValue.(string); ok {
-				log.Printf("verification_info是string类型: %s", viJSON)
 				if err := json.Unmarshal([]byte(viJSON), &verificationInfo); err != nil {
-					log.Printf("解析verification_info失败: %v", err)
 					return fmt.Errorf("解析verification_info失败: %w", err)
 				}
-				log.Printf("解析verification_info成功: %v", verificationInfo)
 				break
 			} else if viMap, ok := viValue.(map[string]interface{}); ok {
-				log.Printf("verification_info是map类型: %v", viMap)
 				verificationInfo = make(map[string]string)
 				for k, v := range viMap {
 					if vStr, ok := v.(string); ok {
 						verificationInfo[k] = vStr
 					}
 				}
-				log.Printf("解析verification_info成功: %v", verificationInfo)
 				break
-			} else {
-				log.Printf("verification_info类型不支持: %T", viValue)
 			}
 		}
 	}

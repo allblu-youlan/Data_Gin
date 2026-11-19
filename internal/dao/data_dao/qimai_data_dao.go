@@ -2,11 +2,13 @@ package data_dao
 
 import (
 	"context"
+	"errors"
 
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/database"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // QimaiDataDAO qimai_order_data表的DAO
@@ -21,10 +23,36 @@ func NewQimaiDataDAO() *QimaiDataDAO {
 	}
 }
 
-// Create 创建企迈订单数据
+// Create creates at most one order for each raw record. The raw row lock also
+// serializes retries on other workers; provider requests run before this transaction.
 func (dao *QimaiDataDAO) Create(ctx context.Context, qimaiData *model.QIMAI_ORDER_DATA) (uint, error) {
-	result := dao.db.WithContext(ctx).Create(qimaiData)
-	return qimaiData.ID, result.Error
+	var id uint
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var rawData model.RawData
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").
+			Where("id = ?", qimaiData.RawDataID).First(&rawData).Error; err != nil {
+			return err
+		}
+		var existing model.QIMAI_ORDER_DATA
+		err := tx.Select("id").Where("raw_data_id = ?", qimaiData.RawDataID).First(&existing).Error
+		if err == nil {
+			id = existing.ID
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err := tx.Create(qimaiData).Error; err != nil {
+			return err
+		}
+		id = qimaiData.ID
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	qimaiData.ID = id
+	return id, nil
 }
 
 // Update 更新企迈订单数据

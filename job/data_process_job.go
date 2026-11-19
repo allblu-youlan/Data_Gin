@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"gin-biz-web-api/Trigger"
 	"gin-biz-web-api/internal/dao/data_dao"
@@ -63,8 +64,7 @@ func HandleDataProcessTask(ctx context.Context, t *asynq.Task) error {
 	// 3. 调用企迈订单触发器
 	qimaiTrigger := Trigger.NewQimaiOrderTrigger()
 	if err := qimaiTrigger.Trigger(ctx, rawData); err != nil {
-		logger.Error("企迈订单触发器执行失败", zap.Uint("raw_data_id", payload.RawDataID), zap.Error(err))
-		// 不返回错误，允许任务继续执行
+		return fmt.Errorf("process qimai order raw_data_id=%d: %w", payload.RawDataID, err)
 	}
 
 	logger.Info("数据处理任务完成", zap.Uint("raw_data_id", payload.RawDataID))
