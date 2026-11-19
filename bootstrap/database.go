@@ -113,6 +113,9 @@ func ApplySchemaMigrations() (resultErr error) {
 	}
 	if currentApplied {
 		console.Info("database schema is current: %s", schemaMigrationVersion)
+		if err := applyQimaiOrderUTF8MB4Migration(db); err != nil {
+			return err
+		}
 		return applyOpenMonitoringPermissionMigration(db)
 	}
 	baselineVersion, baselineApplied, err := appliedSchemaMigrationBaseline(
@@ -147,6 +150,9 @@ func ApplySchemaMigrations() (resultErr error) {
 	marker := schemaMigrationRecord{Version: schemaMigrationVersion, AppliedAt: time.Now().UTC()}
 	if err := db.Create(&marker).Error; err != nil {
 		return fmt.Errorf("write schema migration marker: %w", err)
+	}
+	if err := applyQimaiOrderUTF8MB4Migration(db); err != nil {
+		return err
 	}
 	return applyOpenMonitoringPermissionMigration(db)
 }
@@ -439,6 +445,9 @@ func autoMigrateTables() error {
 		logger.Error("回填报表授权版本快照失败", zap.Error(err))
 		return fmt.Errorf("prepare report grant version snapshot: %w", err)
 	}
+	if err := autoMigrateQimaiOrderTable(db); err != nil {
+		return err
+	}
 
 	// 迁移数据存储相关表
 	models := []interface{}{
@@ -453,7 +462,6 @@ func autoMigrateTables() error {
 		&model.RawData{},               // 原始数据表
 		&model.ProcessedData{},         // 处理结果表
 		&model.DataStatistics{},        // 数据统计表
-		&model.QIMAI_ORDER_DATA{},      //企迈订单表
 		&model.TokenData{},             //验证信息表
 		&model.YOUZAN_ORDER_DATA{},     //有赞订单表
 		&model.YOUZAN_RETURN_DATA{},    //有赞退款订单表
