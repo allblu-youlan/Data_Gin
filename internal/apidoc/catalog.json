@@ -19693,6 +19693,10 @@
           "body": "startDate、endDate 均用 YYYY-MM-DD，包含起止两日，合计最多连续31天；相同日期表示查询一天。过滤源列为 PAY_DATE，服务将开始日期与结束日期次日转成 YYYY-MM-DD 绑定，按 PAY_DATE >= 开始日期 AND PAY_DATE < 结束日期次日 查询；响应保留源 PAY_DATE 格式。按 PAY_DATE、内部 ID 升序分页。\n\n不得传入 batchNo、startTime、endTime、timeField。导入批次可使用白名单中的 filters.BATCH_ID 精确筛选，但不能替代付款日期范围。入库时间 CREATED_ODS/UPDATED_ODS 不作为日期过滤列。"
         },
         {
+          "title": "日小时指标对应",
+          "body": "日接口与小时新增字段中的3项对应：\nDIRECT_FAV_ITEM_CNT：直接收藏宝贝数。\nPLATFORM_SUBSIDY_AMT：平台补贴金额。\nSUBSIDY_GUIDE_PAY_AMT：补贴引导成交金额。\n\n日 FAV_ITEM_CNT 表示收藏宝贝数，对应小时 TOTAL_FAV_ITEM_CNT 的指标含义。小时 FAV_ITEM_CNT 来自原 TOTAL_FAV_CNT，两列分别返回。日、小时各按其查询范围返回源数据。"
+        },
+        {
           "title": "字段口径与使用说明",
           "body": "- 同一商品可有多个计划、场景和导入批次，接口保留各条源记录。\n- 直接、间接、总成交及自然流量等指标各有统计口径；ROI和转化率不直接累加。\n\n错误处理见天猫通用错误。"
         },
@@ -20136,7 +20140,7 @@
                   "name": "TOTAL_FAV_ITEM_CNT",
                   "type": "string",
                   "required": true,
-                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：总收藏宝贝数\n单位/格式与使用说明：计数原值；次数/个数及去重方式以该字段源口径为准",
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：收藏宝贝数。原导出名称为“总收藏宝贝数”，新导出仅调整中文名称，接口仍使用 TOTAL_FAV_ITEM_CNT。对应日维度 FAV_ITEM_CNT 的“收藏宝贝数”含义；小时 FAV_ITEM_CNT（由原 TOTAL_FAV_CNT 改名）是另一源字段，两列分别返回。\n单位/格式与使用说明：计数原值；次数/个数及去重方式以该字段源口径为准",
                   "nullable": false
                 },
                 {
@@ -20269,7 +20273,7 @@
                   "name": "NET_PRESEAL_ROI",
                   "type": "string",
                   "required": true,
-                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：净含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示，不改变精度",
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：净含预售投产比。与 DIRECT_NET_PRESEAL_ROI（直接净含预售投产比）为独立指标，分别返回。\n单位/格式与使用说明：比值原值；不按百分数展示，不改变精度",
                   "nullable": false
                 },
                 {
@@ -20304,7 +20308,7 @@
                   "name": "DIRECT_ROI",
                   "type": "string",
                   "required": true,
-                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：直接成交ROI\n单位/格式与使用说明：比值原值；不按百分数展示，不改变精度",
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：直接成交实际投产比，等于直接成交金额÷花费（DIRECT_PAY_AMT÷COST）。与 DIRECT_PRESEAL_ROI（直接含预售投产比）分别返回。接口保留源比值，不自行重算或按百分数展示。\n单位/格式与使用说明：比值原值；不按百分数展示，不改变精度",
                   "nullable": false
                 },
                 {
@@ -20521,14 +20525,14 @@
                   "name": "DIRECT_NET_PRESEAL_ROI",
                   "type": "string",
                   "required": true,
-                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净含预售投产比。与 NET_PRESEAL_ROI（净含预售投产比）为独立指标，分别返回。\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
                   "nullable": false
                 },
                 {
                   "name": "DIRECT_PRESEAL_ROI",
                   "type": "string",
                   "required": true,
-                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接含预售投产比。与 DIRECT_ROI（直接成交实际投产比）、DIRECT_NET_PRESEAL_ROI（直接净含预售投产比）为独立指标，分别返回。\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
                   "nullable": false
                 },
                 {
@@ -20802,6 +20806,10 @@
         {
           "title": "时间口径与查询规则",
           "body": "只接受必填 batchNo，按 BATCH_NO 等值匹配。格式为 yyyyMMddHHmm，必须是真实有效的年月日小时且分钟为00，例如 202611061300 标志该数据对应 2026-11-06 13:00 整点。按内部 ID 升序分页。\n\n不得传入 startDate、endDate、startTime、endTime、timeField；也不在 filters 中重复传 BATCH_NO。查询仍以 BATCH_NO 为准，直接返回源批次，不进行小时差分、日聚合或比率换算。\n\n时间说明： BATCH_NO=202611061300 标注2026-11-06 13:00整点。自动化采集存在延迟，实际数据时点以 DOWNLOAD_TIME 为准；例如下载时间为13:12，则实际数据时点为13:12。\n\n推广小时表中注明“小数”的比例按小数原值返回，例如 CLICK_RATE=\"0.061\" 表示6.1%；ROI为比值。没有明确尺度的字段保持原值，不能仅因字段带 RATE/RATIO 就统一换算。"
+        },
+        {
+          "title": "新增字段含义与指标区别",
+          "body": "小时接口新增的10个指标：\nDIRECT_FAV_ITEM_CNT：直接收藏宝贝数。\nDIRECT_NET_ACTUAL_ROI：直接净实际投产比。\nDIRECT_NET_DEAL_AMT：直接净成交金额。\nDIRECT_NET_DEAL_AMT_RATIO：直接净成交金额占比。\nDIRECT_NET_DEAL_CNT：直接净成交笔数。\nDIRECT_NET_PRESEAL_ROI：直接净含预售投产比。\nDIRECT_PRESEAL_ROI：直接含预售投产比。\nDIRECT_ITEM_FAV_CART_CNT：宝贝直接收藏加购数。\nPLATFORM_SUBSIDY_AMT：平台补贴金额。\nSUBSIDY_GUIDE_PAY_AMT：补贴引导成交金额。\n\n其中 DIRECT_FAV_ITEM_CNT、PLATFORM_SUBSIDY_AMT、SUBSIDY_GUIDE_PAY_AMT 在日接口中已有同名指标；其余7个字段由小时接口提供。所有数值均为源值的十进制字符串，数据库 NULL 返回空字符串。\n\nDIRECT_ROI 表示直接成交实际投产比，等于 DIRECT_PAY_AMT÷COST。DIRECT_PRESEAL_ROI 表示直接含预售投产比；DIRECT_NET_PRESEAL_ROI 表示直接净含预售投产比，与 NET_PRESEAL_ROI（净含预售投产比）独立。上述指标分别返回，不相互替代。\n\nTOTAL_FAV_ITEM_CNT 的新导出名称为“收藏宝贝数”，接口字段名不变。日 FAV_ITEM_CNT 对应这一指标含义；小时 FAV_ITEM_CNT 来自原 TOTAL_FAV_CNT，两列分别返回。"
         },
         {
           "title": "字段口径与使用说明",

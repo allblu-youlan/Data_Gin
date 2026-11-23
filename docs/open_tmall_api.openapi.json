@@ -3422,7 +3422,7 @@
           "TOTAL_FAV_ITEM_CNT": {
             "type": "string",
             "nullable": false,
-            "description": "总收藏宝贝数 以十进制字符串返回，保留数值精度。",
+            "description": "收藏宝贝数。原导出名称为“总收藏宝贝数”，新导出仅调整中文名称，接口仍使用 TOTAL_FAV_ITEM_CNT。对应日维度 FAV_ITEM_CNT 的“收藏宝贝数”含义；小时 FAV_ITEM_CNT（由原 TOTAL_FAV_CNT 改名）是另一源字段，两列分别返回。 以十进制字符串返回，保留数值精度。",
             "x-oracle-data-type": "NUMBER",
             "x-oracle-data-length": 22,
             "x-oracle-comment": "总收藏宝贝数",
@@ -3612,7 +3612,7 @@
           "NET_PRESEAL_ROI": {
             "type": "string",
             "nullable": false,
-            "description": "净含预售投产比 以十进制字符串返回，保留数值精度。",
+            "description": "净含预售投产比。与 DIRECT_NET_PRESEAL_ROI（直接净含预售投产比）为独立指标，分别返回。 以十进制字符串返回，保留数值精度。",
             "x-oracle-data-type": "NUMBER",
             "x-oracle-data-length": 22,
             "x-oracle-comment": "净含预售投产比",
@@ -3662,7 +3662,7 @@
           "DIRECT_ROI": {
             "type": "string",
             "nullable": false,
-            "description": "直接成交ROI 以十进制字符串返回，保留数值精度。",
+            "description": "直接成交实际投产比，等于直接成交金额÷花费（DIRECT_PAY_AMT÷COST）。与 DIRECT_PRESEAL_ROI（直接含预售投产比）分别返回。接口保留源比值，不自行重算或按百分数展示。 以十进制字符串返回，保留数值精度。",
             "x-oracle-data-type": "NUMBER",
             "x-oracle-data-length": 22,
             "x-oracle-comment": "直接成交ROI",
@@ -3971,7 +3971,7 @@
           "DIRECT_NET_PRESEAL_ROI": {
             "type": "string",
             "nullable": false,
-            "description": "直接净含预售投产比。比值原值；不按百分数展示；以十进制字符串返回，保留数值精度。",
+            "description": "直接净含预售投产比。与 NET_PRESEAL_ROI（净含预售投产比）为独立指标，分别返回。 以十进制字符串返回，保留数值精度。",
             "x-oracle-data-type": "NUMBER",
             "x-oracle-data-length": 22,
             "x-oracle-comment": "直接净含预售投产比",
@@ -3981,7 +3981,7 @@
           "DIRECT_PRESEAL_ROI": {
             "type": "string",
             "nullable": false,
-            "description": "直接含预售投产比。比值原值；不按百分数展示；以十进制字符串返回，保留数值精度。",
+            "description": "直接含预售投产比。与 DIRECT_ROI（直接成交实际投产比）、DIRECT_NET_PRESEAL_ROI（直接净含预售投产比）为独立指标，分别返回。 以十进制字符串返回，保留数值精度。",
             "x-oracle-data-type": "NUMBER",
             "x-oracle-data-length": 22,
             "x-oracle-comment": "直接含预售投产比",
