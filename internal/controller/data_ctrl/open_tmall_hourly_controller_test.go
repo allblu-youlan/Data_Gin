@@ -18,11 +18,11 @@ import (
 func TestOpenTmallQztgHourlyControllerReturnsEmptyStringsWithoutChangingValues(t *testing.T) {
 	roi, cost, productID := "0", "16.02", "90071992547409931234567890"
 	service := &fakeOpenTmallQueryService{rows: []reportoracle.TmallRow{{
-		"ADD_CART_COST": nil,
-		"BOOST_CLICK":   nil,
-		"ACTUAL_ROI":    &roi,
-		"COST":          &cost,
-		"PRODUCT_ID":    &productID,
+		"ADD_CART_COST":            nil,
+		"PLATFORM_BOOST_CLICK_CNT": nil,
+		"ACTUAL_ROI":               &roi,
+		"COST":                     &cost,
+		"PRODUCT_ID":               &productID,
 	}}}
 	recorder := performOpenTmallControllerRequest(service, "/api/open/tmall/qztg/hourly/query", `{"batchNo":"202611041300"}`)
 	var response struct {
@@ -38,11 +38,11 @@ func TestOpenTmallQztgHourlyControllerReturnsEmptyStringsWithoutChangingValues(t
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	want := map[string]any{
-		"ADD_CART_COST": "",
-		"BOOST_CLICK":   "",
-		"ACTUAL_ROI":    "0",
-		"COST":          "16.02",
-		"PRODUCT_ID":    productID,
+		"ADD_CART_COST":            "",
+		"PLATFORM_BOOST_CLICK_CNT": "",
+		"ACTUAL_ROI":               "0",
+		"COST":                     "16.02",
+		"PRODUCT_ID":               productID,
 	}
 	if !reflect.DeepEqual(response.Data.Items[0], want) {
 		t.Fatalf("row=%#v want=%#v", response.Data.Items[0], want)

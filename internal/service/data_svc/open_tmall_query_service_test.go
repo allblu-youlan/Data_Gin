@@ -120,7 +120,7 @@ func TestOpenTmallQueryOmitsItemNoFromResponse(t *testing.T) {
 			if dataset == reportoracle.TmallQztgHourly || dataset == reportoracle.TmallSycmHourly {
 				request = requestbody.OpenTmallQueryRequest{BatchNo: "202611041300"}
 			}
-			if dataset == reportoracle.TmallSycm || dataset == reportoracle.TmallTot {
+			if dataset == reportoracle.TmallSycm || dataset == reportoracle.TmallSycmHourly || dataset == reportoracle.TmallTot {
 				request.Filters = map[string]string{"ITEM_NO": itemNo}
 			}
 			originalColumns := reportoracle.TmallColumns(dataset)

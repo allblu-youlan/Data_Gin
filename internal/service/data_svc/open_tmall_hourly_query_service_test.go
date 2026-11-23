@@ -17,7 +17,7 @@ func TestOpenTmallHourlyQueryAuthorizesAndPreservesBatch(t *testing.T) {
 		permission string
 		columns    int
 	}{
-		{reportoracle.TmallQztgHourly, model.PermissionTmallQztgRead, 92},
+		{reportoracle.TmallQztgHourly, model.PermissionTmallQztgRead, 102},
 		{reportoracle.TmallSycmHourly, model.PermissionTmallSycmRead, 47},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
