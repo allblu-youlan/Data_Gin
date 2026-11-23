@@ -30,7 +30,7 @@
         ],
         "summary": "查询天猫生意参谋数据",
         "operationId": "queryTmallSycm",
-        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表PAY_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER_DAY。请求startDate/endDate仍使用YYYY-MM-DD；服务端按源表PAY_DATE的YYYYMMDD格式筛选，响应保留该原始格式。需要独立权限 tmall.sycm.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
         "x-required-permission": "tmall.sycm.read",
         "requestBody": {
           "required": true,
@@ -144,7 +144,7 @@
         ],
         "summary": "查询天猫全站推广数据",
         "operationId": "queryTmallQztg",
-        "description": "只读查询 ODS_TM_QZTG_PRODUCT。需要独立权限 tmall.qztg.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
+        "description": "只读查询 ODS_TM_QZTG_PRODUCT_DAY。需要独立权限 tmall.qztg.read。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。请求使用application/json，JSON请求体最大1MiB，不接受URL查询参数。",
         "x-required-permission": "tmall.qztg.read",
         "requestBody": {
           "required": true,
@@ -372,7 +372,7 @@
         ],
         "summary": "天猫全站推广数据-小时维度查询",
         "operationId": "queryTmallQztgHourly",
-        "description": "只读查询 YD_WXYG_PALN，按 batchNo 等值匹配 BATCH_NO。需要权限 tmall.qztg.read，与同数据集日期范围接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值。不接受startDate/endDate。batchNo为数据所属整点，示例202611041300表示2026-11-04 13:00，与下载、导出或写入时间无关。直接返回该小时批次的源数据，不计算相邻批次差值、不聚合、不作比率换算。推广比率以小数存储，0.061表示6.1%。",
+        "description": "只读查询 ODS_TM_QZTG_PRODUCT_HOUR，按 batchNo 等值匹配 BATCH_NO。需要权限 tmall.qztg.read，与同数据集日期范围接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值。不接受startDate/endDate。batchNo为数据所属整点，示例202611041300表示2026-11-04 13:00，与下载、导出或写入时间无关。直接返回该小时批次的源数据，不计算相邻批次差值、不聚合、不作比率换算。推广比率以小数存储，0.061表示6.1%。",
         "x-required-permission": "tmall.qztg.read",
         "requestBody": {
           "required": true,
@@ -444,7 +444,7 @@
         ],
         "summary": "天猫生意参谋商品ID数据-小时维度查询",
         "operationId": "queryTmallSycmHourly",
-        "description": "只读查询 YD_SYCM_PRODUCT，按 batchNo 等值匹配 BATCH_NO。需要权限 tmall.sycm.read，与同数据集日期范围接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值。不接受startDate/endDate。batchNo为数据所属整点，示例202611041300表示2026-11-04 13:00，与下载、导出或写入时间无关。直接返回该小时批次的源数据，不计算相邻批次差值、不聚合、不作比率换算。生意参谋比率以百分数原值存储，4.32表示4.32%，-20.00表示-20%。",
+        "description": "只读查询 ODS_TM_SYCM_PRODUCTORDER_HOUR，按 batchNo 等值匹配 BATCH_NO。需要权限 tmall.sycm.read，与同数据集日期范围接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收application/json请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值。不接受startDate/endDate。batchNo为数据所属整点，示例202611041300表示2026-11-04 13:00，与下载、导出或写入时间无关。直接返回该小时批次的源数据，不计算相邻批次差值、不聚合、不作比率换算。生意参谋比率以百分数原值存储，4.32表示4.32%，-20.00表示-20%。",
         "x-required-permission": "tmall.sycm.read",
         "requestBody": {
           "required": true,
@@ -785,7 +785,7 @@
           "CREATED_ODS",
           "UPDATED_ODS"
         ],
-        "description": "ODS_TM_SYCM_PRODUCTORDER 的全部36个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。",
+        "description": "ODS_TM_SYCM_PRODUCTORDER_DAY 的35个公开字段（不返回ITEM_NO）。每个公开字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。",
         "properties": {
           "ID": {
             "type": "string",
@@ -1396,7 +1396,7 @@
           "CREATED_ODS",
           "UPDATED_ODS"
         ],
-        "description": "ODS_TM_QZTG_PRODUCT 的全部90个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。",
+        "description": "ODS_TM_QZTG_PRODUCT_DAY 的全部90个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。",
         "properties": {
           "ID": {
             "type": "string",
@@ -2945,7 +2945,7 @@
           "PLAN_GROUP",
           "PLAN_GROUP_ID",
           "PLAN_TAG",
-          "SUBJECT_NAME",
+          "PRODUCT_NAME",
           "PRODUCT_ID",
           "PRODUCT_URL",
           "MARKETING_RADAR",
@@ -2977,38 +2977,38 @@
           "AVG_CLICK_COST",
           "CPM",
           "BOOST_IMPRESSION",
-          "BOOST_CLICK",
+          "PLATFORM_BOOST_CLICK_CNT",
           "TOTAL_CART_CNT",
           "TOTAL_FAV_ITEM_CNT",
           "TOTAL_FAV_CART_COST",
           "DIRECT_CART_CNT",
           "INDIRECT_CART_CNT",
-          "SHOP_FAV_CNT",
+          "FAV_SHOP_CNT",
           "SHOP_FAV_COST",
           "TOTAL_FAV_CART_CNT",
-          "TOTAL_PRESEAL_CNT",
-          "TOTAL_PRESEAL_AMT",
+          "TOTAL_PRESALE_PAY_CNT",
+          "TOTAL_PRESALE_PAY_AMT",
           "CLICK_CONV_RATE",
-          "TOTAL_DEAL_CNT",
-          "TOTAL_DEAL_AMT",
-          "DIRECT_DEAL_CNT",
-          "INDIRECT_DEAL_CNT",
-          "DIRECT_DEAL_AMT",
-          "INDIRECT_DEAL_AMT",
+          "TOTAL_PAY_CNT",
+          "TOTAL_PAY_AMT",
+          "DIRECT_PAY_CNT",
+          "INDIRECT_PAY_CNT",
+          "DIRECT_PAY_AMT",
+          "INDIRECT_PAY_AMT",
           "NET_DEAL_AMT",
           "NET_DEAL_AMT_RATIO",
           "NET_DEAL_CNT",
           "NET_PRESEAL_ROI",
-          "DIRECT_PRESEAL_AMT",
-          "DIRECT_PRESEAL_CNT",
-          "PRESEAL_ROI",
+          "DIRECT_PRESALE_PAY_AMT",
+          "DIRECT_PRESALE_PAY_CNT",
+          "PRESALE_ROI",
           "NEW_CUSTOMER_AMT",
           "DIRECT_ROI",
-          "TOTAL_DEAL_COST",
+          "TOTAL_PAY_COST",
           "ADD_CART_RATE",
           "ITEM_FAV_CART_CNT",
           "ITEM_FAV_CART_COST",
-          "TOTAL_FAV_CNT",
+          "FAV_ITEM_CNT",
           "ITEM_FAV_COST",
           "ITEM_FAV_RATE",
           "ADD_CART_COST",
@@ -3028,9 +3028,19 @@
           "DOWNLOAD_TIME",
           "WRITE_TIME",
           "CREATE_TIME",
-          "MODIFIED"
+          "MODIFIED",
+          "DIRECT_FAV_ITEM_CNT",
+          "DIRECT_NET_ACTUAL_ROI",
+          "DIRECT_NET_DEAL_AMT",
+          "DIRECT_NET_DEAL_AMT_RATIO",
+          "DIRECT_NET_DEAL_CNT",
+          "DIRECT_NET_PRESEAL_ROI",
+          "DIRECT_PRESEAL_ROI",
+          "DIRECT_ITEM_FAV_CART_CNT",
+          "PLATFORM_SUBSIDY_AMT",
+          "SUBSIDY_GUIDE_PAY_AMT"
         ],
-        "description": "YD_WXYG_PALN的全部92个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。直接返回源数据，不进行小时差分或单位变换。推广比率以小数存储，0.061表示6.1%。",
+        "description": "ODS_TM_QZTG_PRODUCT_HOUR的全部102个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。直接返回源数据，不进行小时差分或单位变换。推广比率以小数存储，0.061表示6.1%。",
         "properties": {
           "ID": {
             "type": "string",
@@ -3101,7 +3111,7 @@
             "x-oracle-data-length": 200,
             "x-oracle-comment": "计划标签"
           },
-          "SUBJECT_NAME": {
+          "PRODUCT_NAME": {
             "type": "string",
             "nullable": false,
             "description": "主体(推广商品标题)",
@@ -3389,7 +3399,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "BOOST_CLICK": {
+          "PLATFORM_BOOST_CLICK_CNT": {
             "type": "string",
             "nullable": false,
             "description": "助推带动点击量,本批为空保留 以十进制字符串返回，保留数值精度。",
@@ -3449,7 +3459,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "SHOP_FAV_CNT": {
+          "FAV_SHOP_CNT": {
             "type": "string",
             "nullable": false,
             "description": "收藏店铺数 以十进制字符串返回，保留数值精度。",
@@ -3479,7 +3489,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "TOTAL_PRESEAL_CNT": {
+          "TOTAL_PRESALE_PAY_CNT": {
             "type": "string",
             "nullable": false,
             "description": "总预售成交笔数 以十进制字符串返回，保留数值精度。",
@@ -3489,7 +3499,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "TOTAL_PRESEAL_AMT": {
+          "TOTAL_PRESALE_PAY_AMT": {
             "type": "string",
             "nullable": false,
             "description": "总预售成交金额(元) 以十进制字符串返回，保留数值精度。",
@@ -3509,7 +3519,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "TOTAL_DEAL_CNT": {
+          "TOTAL_PAY_CNT": {
             "type": "string",
             "nullable": false,
             "description": "总成交笔数 以十进制字符串返回，保留数值精度。",
@@ -3519,7 +3529,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "TOTAL_DEAL_AMT": {
+          "TOTAL_PAY_AMT": {
             "type": "string",
             "nullable": false,
             "description": "总成交金额(元) 以十进制字符串返回，保留数值精度。",
@@ -3529,7 +3539,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "DIRECT_DEAL_CNT": {
+          "DIRECT_PAY_CNT": {
             "type": "string",
             "nullable": false,
             "description": "直接成交笔数 以十进制字符串返回，保留数值精度。",
@@ -3539,7 +3549,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "INDIRECT_DEAL_CNT": {
+          "INDIRECT_PAY_CNT": {
             "type": "string",
             "nullable": false,
             "description": "间接成交笔数 以十进制字符串返回，保留数值精度。",
@@ -3549,7 +3559,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "DIRECT_DEAL_AMT": {
+          "DIRECT_PAY_AMT": {
             "type": "string",
             "nullable": false,
             "description": "直接成交金额(元) 以十进制字符串返回，保留数值精度。",
@@ -3559,7 +3569,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "INDIRECT_DEAL_AMT": {
+          "INDIRECT_PAY_AMT": {
             "type": "string",
             "nullable": false,
             "description": "间接成交金额(元) 以十进制字符串返回，保留数值精度。",
@@ -3609,7 +3619,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "DIRECT_PRESEAL_AMT": {
+          "DIRECT_PRESALE_PAY_AMT": {
             "type": "string",
             "nullable": false,
             "description": "直接预售成交金额(元) 以十进制字符串返回，保留数值精度。",
@@ -3619,7 +3629,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "DIRECT_PRESEAL_CNT": {
+          "DIRECT_PRESALE_PAY_CNT": {
             "type": "string",
             "nullable": false,
             "description": "直接预售成交笔数 以十进制字符串返回，保留数值精度。",
@@ -3629,7 +3639,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 0
           },
-          "PRESEAL_ROI": {
+          "PRESALE_ROI": {
             "type": "string",
             "nullable": false,
             "description": "含预售投产比 以十进制字符串返回，保留数值精度。",
@@ -3659,7 +3669,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "TOTAL_DEAL_COST": {
+          "TOTAL_PAY_COST": {
             "type": "string",
             "nullable": false,
             "description": "总成交成本(元) 以十进制字符串返回，保留数值精度。",
@@ -3699,7 +3709,7 @@
             "x-oracle-precision": 18,
             "x-oracle-scale": 8
           },
-          "TOTAL_FAV_CNT": {
+          "FAV_ITEM_CNT": {
             "type": "string",
             "nullable": false,
             "description": "总收藏数 以十进制字符串返回，保留数值精度。",
@@ -3907,6 +3917,106 @@
             "x-oracle-comment": "该行最后修改时间,默认sysdate,merge时回写",
             "pattern": "^(?:\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})?$",
             "example": "2026-11-04 13:05:00"
+          },
+          "DIRECT_FAV_ITEM_CNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接收藏宝贝数。计数原值；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接收藏宝贝数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_NET_ACTUAL_ROI": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接净实际投产比。比值原值；不按百分数展示；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接净实际投产比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 4
+          },
+          "DIRECT_NET_DEAL_AMT": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接净成交金额。金额原值；沿用源口径；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接净成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 4
+          },
+          "DIRECT_NET_DEAL_AMT_RATIO": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接净成交金额占比。比例以小数存储；0.061表示6.1%；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接净成交金额占比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 4
+          },
+          "DIRECT_NET_DEAL_CNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接净成交笔数。笔；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接净成交笔数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "DIRECT_NET_PRESEAL_ROI": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接净含预售投产比。比值原值；不按百分数展示；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接净含预售投产比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 4
+          },
+          "DIRECT_PRESEAL_ROI": {
+            "type": "string",
+            "nullable": false,
+            "description": "直接含预售投产比。比值原值；不按百分数展示；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "直接含预售投产比",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 4
+          },
+          "DIRECT_ITEM_FAV_CART_CNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "宝贝直接收藏加购数。计数原值；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "宝贝直接收藏加购数",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0
+          },
+          "PLATFORM_SUBSIDY_AMT": {
+            "type": "string",
+            "nullable": false,
+            "description": "平台补贴金额。金额原值；沿用源口径；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "平台补贴金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
+          },
+          "SUBSIDY_GUIDE_PAY_AMT": {
+            "type": "string",
+            "nullable": false,
+            "description": "补贴引导成交金额。金额原值；沿用源口径；以十进制字符串返回，保留数值精度。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-data-length": 22,
+            "x-oracle-comment": "补贴引导成交金额",
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 2
           }
         }
       },
@@ -3967,7 +4077,7 @@
             "x-max-utf8-bytes": 32,
             "description": "商品ID(天猫item id,字符串型防精度丢失)；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过32。"
           },
-          "PRODUCT_CODE": {
+          "ITEM_NO": {
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
@@ -3981,7 +4091,7 @@
             "x-max-utf8-bytes": 64,
             "description": "类目,源表列:类目；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过64。"
           },
-          "ITEM_STATUS": {
+          "PRODUCT_STATUS": {
             "type": "string",
             "minLength": 1,
             "maxLength": 32,
@@ -4049,28 +4159,27 @@
           "PRODUCT_URL",
           "PIC_URL",
           "PRODUCT_ID",
-          "PRODUCT_CODE",
-          "ITEM_STATUS",
+          "PRODUCT_STATUS",
           "EXPORT_TIME",
           "PAY_AMT",
           "PAY_AMT_RATIO",
-          "PAY_CNT",
+          "PAY_ITEM_CNT",
           "PAY_CNT_RATIO",
           "PAY_BUYER_CNT",
           "PAY_BUYER_RATIO",
           "PAY_CONV_RATE",
           "PAY_CONV_RATIO",
-          "ADD_CART_CNT",
+          "CART_ITEM_CNT",
           "ADD_CART_RATIO",
-          "ADD_CART_BUYER_CNT",
+          "CART_USER_CNT",
           "ADD_CART_BUYER_RATIO",
-          "FAV_CNT",
+          "FAVORITE_CNT",
           "FAV_RATIO",
           "VISIT_ADD_CART_RATE",
           "VISIT_ADD_CART_RATIO",
           "VISIT_FAV_RATE",
           "VISIT_FAV_RATIO",
-          "UV_CNT",
+          "VISITOR_CNT",
           "UV_RATIO",
           "PV_CNT",
           "PV_RATIO",
@@ -4084,7 +4193,7 @@
           "CREATED_TIME",
           "MODIFIED_TIME"
         ],
-        "description": "YD_SYCM_PRODUCT的全部47个字段。每个字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。直接返回源数据，不进行小时差分或单位变换。生意参谋比率以百分数原值存储，4.32表示4.32%，-20.00表示-20%。",
+        "description": "ODS_TM_SYCM_PRODUCTORDER_HOUR的46个公开字段（不返回ITEM_NO）。每个公开字段均返回；数据库NULL统一返回空字符串，非NULL值全部为字符串。直接返回源数据，不进行小时差分或单位变换。生意参谋比率以百分数原值存储，4.32表示4.32%，-20.00表示-20%。",
         "properties": {
           "ID": {
             "type": "string",
@@ -4194,15 +4303,7 @@
             "x-oracle-comment": "商品ID(天猫item id,字符串型防精度丢失)",
             "example": "9007199254740993"
           },
-          "PRODUCT_CODE": {
-            "type": "string",
-            "nullable": false,
-            "description": "商品编码(幼岚内部款号,如C44H3049A)",
-            "x-oracle-data-type": "VARCHAR2",
-            "x-oracle-data-length": 64,
-            "x-oracle-comment": "商品编码(幼岚内部款号,如C44H3049A)"
-          },
-          "ITEM_STATUS": {
+          "PRODUCT_STATUS": {
             "type": "string",
             "nullable": false,
             "description": "商品状态(在售/已下架等)",
@@ -4240,7 +4341,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "PAY_CNT": {
+          "PAY_ITEM_CNT": {
             "type": "string",
             "nullable": false,
             "description": "支付件数 以十进制字符串返回，保留数值精度。",
@@ -4301,7 +4402,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "ADD_CART_CNT": {
+          "CART_ITEM_CNT": {
             "type": "string",
             "nullable": false,
             "description": "加购件数 以十进制字符串返回，保留数值精度。",
@@ -4321,7 +4422,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "ADD_CART_BUYER_CNT": {
+          "CART_USER_CNT": {
             "type": "string",
             "nullable": false,
             "description": "加购人数 以十进制字符串返回，保留数值精度。",
@@ -4341,7 +4442,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "FAV_CNT": {
+          "FAVORITE_CNT": {
             "type": "string",
             "nullable": false,
             "description": "收藏人数 以十进制字符串返回，保留数值精度。",
@@ -4401,7 +4502,7 @@
             "x-oracle-precision": 20,
             "x-oracle-scale": 8
           },
-          "UV_CNT": {
+          "VISITOR_CNT": {
             "type": "string",
             "nullable": false,
             "description": "商品访客数 以十进制字符串返回，保留数值精度。",

@@ -17,7 +17,7 @@ func TestQueryTmallBindsDimensionsAndPreservesPrecisionAndNulls(t *testing.T) {
 	values[0], values[1], values[3], values[19], values[34] = "9007199254740993123", "20261001", "000123", "123456789012.123456", "2026-10-02 09:10:11"
 	rows := &bojunQueryTestRows{columns: make([]string, 36), values: [][]driver.Value{values}}
 	adapter := newBojunQueryTestAdapter(t, func(ctx context.Context, statement string, args []driver.NamedValue) (driver.Rows, error) {
-		if ctx != t.Context() || !strings.Contains(statement, "FROM YL_DBS.ODS_TM_SYCM_PRODUCTORDER a") || !strings.Contains(statement, "a.PRODUCT_ID = :") || strings.Contains(statement, product) || strings.Contains(statement, "SELECT *") {
+		if ctx != t.Context() || !strings.Contains(statement, "FROM YL_DBS.ODS_TM_SYCM_PRODUCTORDER_DAY a") || !strings.Contains(statement, "a.PRODUCT_ID = :") || strings.Contains(statement, product) || strings.Contains(statement, "SELECT *") {
 			t.Fatalf("unexpected query: %s", statement)
 		}
 		found := false
@@ -102,8 +102,8 @@ func TestTmallQueriesUseDateIndexAndBindFiltersInOrder(t *testing.T) {
 		wantFilters []any
 		wantDates   []any
 	}{
-		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}, []any{"20251231", "20260101"}},
-		{TmallQztg, "ODS_TM_QZTG_PRODUCT", 90, map[string]string{"PLAN_ID": "001", "PRODUCT_TYPE": "商品"}, []any{"001", "商品"}, []any{"2025-12-31", "2026-01-01"}},
+		{TmallSycm, "ODS_TM_SYCM_PRODUCTORDER_DAY", 36, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01"}, []any{"A01", "001"}, []any{"20251231", "20260101"}},
+		{TmallQztg, "ODS_TM_QZTG_PRODUCT_DAY", 90, map[string]string{"PLAN_ID": "001", "PRODUCT_TYPE": "商品"}, []any{"001", "商品"}, []any{"2025-12-31", "2026-01-01"}},
 		{TmallTot, "ODS_TM_TOT_PRODUCT", 32, map[string]string{"ITEM_NO": "A01", "CATEGORY": "外套"}, []any{"外套", "A01"}, []any{"2025-12-31", "2026-01-01"}},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {

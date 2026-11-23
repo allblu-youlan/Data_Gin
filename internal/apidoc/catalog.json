@@ -17355,7 +17355,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",
@@ -17947,11 +17947,11 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",
-          "body": "源表：YL_DBS.ODS_TM_SYCM_PRODUCTORDER\n返回字段数：35"
+          "body": "源表：YL_DBS.ODS_TM_SYCM_PRODUCTORDER_DAY\n返回字段数：35"
         },
         {
           "title": "时间口径与查询规则",
@@ -18033,10 +18033,10 @@
               "location": "body"
             },
             {
-              "name": "PRODUCT_CODE",
+              "name": "ITEM_NO",
               "type": "string",
               "required": false,
-              "description": "去首尾空白后上限：64字节\n响应包含同名字段：是\n商品编码(幼岚内部款号,如C44H3049A)；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过64。",
+              "description": "去首尾空白后上限：64字节\n响应包含同名字段：否\n商品编码(幼岚内部款号,如C44H3049A)；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过64。仅请求可过滤，响应不返回ITEM_NO。",
               "nullable": false,
               "location": "body"
             },
@@ -18049,7 +18049,7 @@
               "location": "body"
             },
             {
-              "name": "ITEM_STATUS",
+              "name": "PRODUCT_STATUS",
               "type": "string",
               "required": false,
               "description": "去首尾空白后上限：32字节\n响应包含同名字段：是\n商品状态(在售/已下架等)；去除首尾空白后按等值精确匹配，非空且UTF-8字节数不得超过32。",
@@ -18100,7 +18100,7 @@
               "name": "items",
               "type": "object[]",
               "required": true,
-              "description": "当前页源表行；无结果为[]。每项完整47字段见下方示例和字典。",
+              "description": "当前页源表行；无结果为[]。每项完整46字段见下方示例和字典。",
               "nullable": false,
               "children": [
                 {
@@ -18195,14 +18195,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "PRODUCT_CODE",
-                  "type": "string",
-                  "required": true,
-                  "description": "Oracle源类型：VARCHAR2(64 字节)\n精确filters：是\n含义、关系：商品编码(幼岚内部款号,如C44H3049A) 内部款号与天猫 PRODUCT_ID 含义不同，不互换。\n单位/格式与使用说明：源字符串",
-                  "nullable": false
-                },
-                {
-                  "name": "ITEM_STATUS",
+                  "name": "PRODUCT_STATUS",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：VARCHAR2(32 字节)\n精确filters：是\n含义、关系：商品状态(在售/已下架等)\n单位/格式与使用说明：源字符串",
@@ -18230,7 +18223,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "PAY_CNT",
+                  "name": "PAY_ITEM_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付件数\n单位/格式与使用说明：件（源业务口径）",
@@ -18272,7 +18265,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "ADD_CART_CNT",
+                  "name": "CART_ITEM_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购件数\n单位/格式与使用说明：件（源业务口径）",
@@ -18286,7 +18279,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "ADD_CART_BUYER_CNT",
+                  "name": "CART_USER_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购人数\n单位/格式与使用说明：人（按源统计去重口径）；不保证跨行可累加",
@@ -18300,7 +18293,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "FAV_CNT",
+                  "name": "FAVORITE_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：收藏人数\n单位/格式与使用说明：人（按源统计去重口径）；不保证跨行可累加",
@@ -18342,7 +18335,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "UV_CNT",
+                  "name": "VISITOR_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：商品访客数\n单位/格式与使用说明：人（按源统计去重口径）；不保证跨行可累加",
@@ -18490,28 +18483,27 @@
               "PRODUCT_URL": "",
               "PIC_URL": "",
               "PRODUCT_ID": "9007199254740993",
-              "PRODUCT_CODE": "DEMO-SPU-001",
-              "ITEM_STATUS": "在售",
+              "PRODUCT_STATUS": "在售",
               "EXPORT_TIME": "2026-11-06 13:08:00",
               "PAY_AMT": "1280.50",
               "PAY_AMT_RATIO": "-20.00000000",
-              "PAY_CNT": "",
+              "PAY_ITEM_CNT": "",
               "PAY_CNT_RATIO": "",
               "PAY_BUYER_CNT": "",
               "PAY_BUYER_RATIO": "",
               "PAY_CONV_RATE": "4.32000000",
               "PAY_CONV_RATIO": "",
-              "ADD_CART_CNT": "",
+              "CART_ITEM_CNT": "",
               "ADD_CART_RATIO": "",
-              "ADD_CART_BUYER_CNT": "",
+              "CART_USER_CNT": "",
               "ADD_CART_BUYER_RATIO": "",
-              "FAV_CNT": "",
+              "FAVORITE_CNT": "",
               "FAV_RATIO": "",
               "VISIT_ADD_CART_RATE": "",
               "VISIT_ADD_CART_RATIO": "",
               "VISIT_FAV_RATE": "",
               "VISIT_FAV_RATIO": "",
-              "UV_CNT": "",
+              "VISITOR_CNT": "",
               "UV_RATIO": "",
               "PV_CNT": "",
               "PV_RATIO": "",
@@ -18618,11 +18610,11 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",
-          "body": "源表：YL_DBS.YD_SYCM_PRODUCT\n返回字段数：47"
+          "body": "源表：YL_DBS.ODS_TM_SYCM_PRODUCTORDER_HOUR\n返回字段数：46"
         },
         {
           "title": "时间口径与查询规则",
@@ -18630,7 +18622,7 @@
         },
         {
           "title": "字段口径与使用说明",
-          "body": "- PRODUCT_ID 为天猫商品ID，PRODUCT_CODE 为幼岚内部款号。\n- DATE_RANGE、DIMENSION_TYPE、DATA_POINT、SELECT_TYPE 表示源报表上下文。\n- 指标不代表单小时新增量；*_RATIO 为较昨日同时段的百分数原值。\n\n错误处理见天猫通用错误。"
+          "body": "- PRODUCT_ID 为天猫商品ID，ITEM_NO 为幼岚内部款号，仅支持精确筛选，响应不返回。\n- DATE_RANGE、DIMENSION_TYPE、DATA_POINT、SELECT_TYPE 表示源报表上下文。\n- 指标不代表单小时新增量；*_RATIO 为较昨日同时段的百分数原值。\n\n错误处理见天猫通用错误。"
         },
         {
           "title": "其他请求示例",
@@ -19690,11 +19682,11 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",
-          "body": "源表：YL_DBS.ODS_TM_QZTG_PRODUCT\n返回字段数：90"
+          "body": "源表：YL_DBS.ODS_TM_QZTG_PRODUCT_DAY\n返回字段数：90"
         },
         {
           "title": "时间口径与查询规则",
@@ -19843,7 +19835,7 @@
               "name": "items",
               "type": "object[]",
               "required": true,
-              "description": "当前页源表行；无结果为[]。每项完整92字段见下方示例和字典。",
+              "description": "当前页源表行；无结果为[]。每项完整102字段见下方示例和字典。",
               "nullable": false,
               "children": [
                 {
@@ -19903,7 +19895,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "SUBJECT_NAME",
+                  "name": "PRODUCT_NAME",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：VARCHAR2(500 字节)\n精确filters：否\n含义、关系：主体(推广商品标题)\n单位/格式与使用说明：源字符串",
@@ -20127,7 +20119,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "BOOST_CLICK",
+                  "name": "PLATFORM_BOOST_CLICK_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：助推带动点击量\n单位/格式与使用说明：计数原值；次数/个数及去重方式以该字段源口径为准",
@@ -20169,7 +20161,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "SHOP_FAV_CNT",
+                  "name": "FAV_SHOP_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：收藏店铺数\n单位/格式与使用说明：计数原值；次数/个数及去重方式以该字段源口径为准",
@@ -20190,14 +20182,14 @@
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_PRESEAL_CNT",
+                  "name": "TOTAL_PRESALE_PAY_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：总预售成交笔数\n单位/格式与使用说明：笔（源业务口径）",
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_PRESEAL_AMT",
+                  "name": "TOTAL_PRESALE_PAY_AMT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：总预售成交金额(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
@@ -20211,42 +20203,42 @@
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_DEAL_CNT",
+                  "name": "TOTAL_PAY_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：总成交笔数\n单位/格式与使用说明：笔（源业务口径）",
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_DEAL_AMT",
+                  "name": "TOTAL_PAY_AMT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：总成交金额(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
                   "nullable": false
                 },
                 {
-                  "name": "DIRECT_DEAL_CNT",
+                  "name": "DIRECT_PAY_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：直接成交笔数\n单位/格式与使用说明：笔（源业务口径）",
                   "nullable": false
                 },
                 {
-                  "name": "INDIRECT_DEAL_CNT",
+                  "name": "INDIRECT_PAY_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：间接成交笔数\n单位/格式与使用说明：笔（源业务口径）",
                   "nullable": false
                 },
                 {
-                  "name": "DIRECT_DEAL_AMT",
+                  "name": "DIRECT_PAY_AMT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：直接成交金额(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
                   "nullable": false
                 },
                 {
-                  "name": "INDIRECT_DEAL_AMT",
+                  "name": "INDIRECT_PAY_AMT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：间接成交金额(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
@@ -20281,21 +20273,21 @@
                   "nullable": false
                 },
                 {
-                  "name": "DIRECT_PRESEAL_AMT",
+                  "name": "DIRECT_PRESALE_PAY_AMT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：直接预售成交金额(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
                   "nullable": false
                 },
                 {
-                  "name": "DIRECT_PRESEAL_CNT",
+                  "name": "DIRECT_PRESALE_PAY_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：直接预售成交笔数\n单位/格式与使用说明：笔（源业务口径）",
                   "nullable": false
                 },
                 {
-                  "name": "PRESEAL_ROI",
+                  "name": "PRESALE_ROI",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示，不改变精度",
@@ -20316,7 +20308,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_DEAL_COST",
+                  "name": "TOTAL_PAY_COST",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：总成交成本(元)\n单位/格式与使用说明：元；十进制字符串，按原精度处理",
@@ -20344,7 +20336,7 @@
                   "nullable": false
                 },
                 {
-                  "name": "TOTAL_FAV_CNT",
+                  "name": "FAV_ITEM_CNT",
                   "type": "string",
                   "required": true,
                   "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：总收藏数\n单位/格式与使用说明：计数原值；次数/个数及去重方式以该字段源口径为准",
@@ -20489,6 +20481,76 @@
                   "required": true,
                   "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：该行最后修改时间。\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移",
                   "nullable": false
+                },
+                {
+                  "name": "DIRECT_FAV_ITEM_CNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：直接收藏宝贝数\n单位/格式与使用说明：计数原值；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_NET_ACTUAL_ROI",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净实际投产比\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_NET_DEAL_AMT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净成交金额\n单位/格式与使用说明：金额原值；沿用源口径；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_NET_DEAL_AMT_RATIO",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净成交金额占比\n单位/格式与使用说明：比例以小数存储；0.061表示6.1%；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_NET_DEAL_CNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：直接净成交笔数\n单位/格式与使用说明：笔；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_NET_PRESEAL_ROI",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接净含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_PRESEAL_ROI",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,4)\n精确filters：否\n含义、关系：直接含预售投产比\n单位/格式与使用说明：比值原值；不按百分数展示；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "DIRECT_ITEM_FAV_CART_CNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：宝贝直接收藏加购数\n单位/格式与使用说明：计数原值；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "PLATFORM_SUBSIDY_AMT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,2)\n精确filters：否\n含义、关系：平台补贴金额\n单位/格式与使用说明：金额原值；沿用源口径；十进制字符串，按原精度处理",
+                  "nullable": false
+                },
+                {
+                  "name": "SUBSIDY_GUIDE_PAY_AMT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,2)\n精确filters：否\n含义、关系：补贴引导成交金额\n单位/格式与使用说明：金额原值；沿用源口径；十进制字符串，按原精度处理",
+                  "nullable": false
                 }
               ]
             },
@@ -20543,7 +20605,7 @@
               "PLAN_GROUP": "",
               "PLAN_GROUP_ID": "",
               "PLAN_TAG": "",
-              "SUBJECT_NAME": "示例商品",
+              "PRODUCT_NAME": "示例商品",
               "PRODUCT_ID": "9007199254740993",
               "PRODUCT_URL": "",
               "MARKETING_RADAR": "",
@@ -20575,38 +20637,38 @@
               "AVG_CLICK_COST": "",
               "CPM": "",
               "BOOST_IMPRESSION": "",
-              "BOOST_CLICK": "",
+              "PLATFORM_BOOST_CLICK_CNT": "",
               "TOTAL_CART_CNT": "",
               "TOTAL_FAV_ITEM_CNT": "",
               "TOTAL_FAV_CART_COST": "",
               "DIRECT_CART_CNT": "",
               "INDIRECT_CART_CNT": "",
-              "SHOP_FAV_CNT": "",
+              "FAV_SHOP_CNT": "",
               "SHOP_FAV_COST": "",
               "TOTAL_FAV_CART_CNT": "",
-              "TOTAL_PRESEAL_CNT": "",
-              "TOTAL_PRESEAL_AMT": "",
+              "TOTAL_PRESALE_PAY_CNT": "",
+              "TOTAL_PRESALE_PAY_AMT": "",
               "CLICK_CONV_RATE": "",
-              "TOTAL_DEAL_CNT": "",
-              "TOTAL_DEAL_AMT": "",
-              "DIRECT_DEAL_CNT": "",
-              "INDIRECT_DEAL_CNT": "",
-              "DIRECT_DEAL_AMT": "",
-              "INDIRECT_DEAL_AMT": "",
+              "TOTAL_PAY_CNT": "",
+              "TOTAL_PAY_AMT": "",
+              "DIRECT_PAY_CNT": "",
+              "INDIRECT_PAY_CNT": "",
+              "DIRECT_PAY_AMT": "",
+              "INDIRECT_PAY_AMT": "",
               "NET_DEAL_AMT": "",
               "NET_DEAL_AMT_RATIO": "",
               "NET_DEAL_CNT": "",
               "NET_PRESEAL_ROI": "",
-              "DIRECT_PRESEAL_AMT": "",
-              "DIRECT_PRESEAL_CNT": "",
-              "PRESEAL_ROI": "",
+              "DIRECT_PRESALE_PAY_AMT": "",
+              "DIRECT_PRESALE_PAY_CNT": "",
+              "PRESALE_ROI": "",
               "NEW_CUSTOMER_AMT": "",
               "DIRECT_ROI": "",
-              "TOTAL_DEAL_COST": "",
+              "TOTAL_PAY_COST": "",
               "ADD_CART_RATE": "",
               "ITEM_FAV_CART_CNT": "",
               "ITEM_FAV_CART_COST": "",
-              "TOTAL_FAV_CNT": "",
+              "FAV_ITEM_CNT": "",
               "ITEM_FAV_COST": "",
               "ITEM_FAV_RATE": "",
               "ADD_CART_COST": "",
@@ -20626,7 +20688,17 @@
               "DOWNLOAD_TIME": "2026-11-06 13:12:00",
               "WRITE_TIME": "2026-11-06 13:20:00",
               "CREATE_TIME": "2026-11-06 13:20:00",
-              "MODIFIED": "2026-11-06 13:20:00"
+              "MODIFIED": "2026-11-06 13:20:00",
+              "DIRECT_FAV_ITEM_CNT": "",
+              "DIRECT_NET_ACTUAL_ROI": "",
+              "DIRECT_NET_DEAL_AMT": "",
+              "DIRECT_NET_DEAL_AMT_RATIO": "",
+              "DIRECT_NET_DEAL_CNT": "",
+              "DIRECT_NET_PRESEAL_ROI": "",
+              "DIRECT_PRESEAL_ROI": "",
+              "DIRECT_ITEM_FAV_CART_CNT": "",
+              "PLATFORM_SUBSIDY_AMT": "",
+              "SUBSIDY_GUIDE_PAY_AMT": ""
             }
           ],
           "pagination": {
@@ -20721,11 +20793,11 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",
-          "body": "源表：YL_DBS.YD_WXYG_PALN\n返回字段数：92"
+          "body": "源表：YL_DBS.ODS_TM_QZTG_PRODUCT_HOUR\n返回字段数：102"
         },
         {
           "title": "时间口径与查询规则",
@@ -21361,7 +21433,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；仅生意参谋日维度及幼岚投放合并日维度仍接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：47\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：92\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
         },
         {
           "title": "数据来源",

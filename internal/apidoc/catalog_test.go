@@ -21,7 +21,7 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 		t.Fatalf("unexpected reference: %s, %d operations", source.Title, len(source.Operations))
 	}
 	seen := map[string]bool{}
-	counts := map[string]int{"tmall-orders-realtime": 18, "tmall-sycm": 35, "tmall-sycm-hourly": 47, "tmall-qztg": 90, "tmall-qztg-hourly": 92, "tmall-tot": 31}
+	counts := map[string]int{"tmall-orders-realtime": 18, "tmall-sycm": 35, "tmall-sycm-hourly": 46, "tmall-qztg": 90, "tmall-qztg-hourly": 102, "tmall-tot": 31}
 	for _, operation := range source.Operations {
 		t.Run(operation.ID, func(t *testing.T) {
 			if seen[operation.ID] || model.OpenAPIPermissionParent(operation.Permission) == "" {
