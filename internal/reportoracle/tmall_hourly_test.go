@@ -11,7 +11,7 @@ import (
 )
 
 func TestNormalizeTmallHourlyQueryRequiresDataHour(t *testing.T) {
-	for _, dataset := range []TmallDataset{TmallQztgHourly, TmallSycmHourly} {
+	for _, dataset := range []TmallDataset{TmallQztgHourly, TmallSycmHourly, TmallSycmOverviewHourly} {
 		t.Run(string(dataset), func(t *testing.T) {
 			for _, batch := range []string{"202611041300", "202611040000", "202402292300", " 202611041300 "} {
 				t.Run(batch, func(t *testing.T) {
@@ -58,6 +58,7 @@ func TestTmallHourlyQueryValidatesDimensionsAndPagination(t *testing.T) {
 	}{
 		{TmallQztgHourly, map[string]string{"PRODUCT_ID": "001", "PLAN_ID": "002", "PLAN_GROUP_ID": "003", "STATUS": "正在推广"}},
 		{TmallSycmHourly, map[string]string{"PRODUCT_ID": "001", "ITEM_NO": "A01", "CATEGORY_NAME": "外套", "PRODUCT_STATUS": "在售"}},
+		{TmallSycmOverviewHourly, map[string]string{"SECTION_NAME": "首页", "MENU_NAME": "数据概览", "DATA_POINT": "实时", "DIMENSION_NAME": "本店", "DATE_RANGE": "2026-11-13"}},
 	} {
 		t.Run(string(test.dataset), func(t *testing.T) {
 			if _, err := NormalizeTmallQuery(test.dataset, TmallQuery{BatchNo: "202611041300", Filters: test.filters, PageSize: 100, Offset: 99900}); err != nil {

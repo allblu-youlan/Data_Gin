@@ -33,5 +33,6 @@ func registerOpenTmallRoutesWithLimiters(
 	group.POST("/qztg/query", middleware.RequirePermission(model.PermissionTmallQztgRead), userRouteLimiter, controller.QueryQztg)
 	group.POST("/tot/query", middleware.RequirePermission(model.PermissionTmallTotRead), userRouteLimiter, controller.QueryTot)
 	group.POST("/sycm/hourly/query", middleware.RequirePermission(model.PermissionTmallSycmRead), userRouteLimiter, controller.QuerySycmHourly)
+	group.POST("/sycm/overview/hourly/query", middleware.RequirePermission(model.PermissionTmallSycmRead), userRouteLimiter, controller.QuerySycmOverviewHourly)
 	group.POST("/qztg/hourly/query", middleware.RequirePermission(model.PermissionTmallQztgRead), userRouteLimiter, controller.QueryQztgHourly)
 }

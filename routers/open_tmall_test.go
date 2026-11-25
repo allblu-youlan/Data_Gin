@@ -44,6 +44,7 @@ func TestOpenTmallRoutesRequireTheirOwnPermission(t *testing.T) {
 		{"qztg", model.PermissionTmallQztgRead, reportoracle.TmallQztg},
 		{"tot", model.PermissionTmallTotRead, reportoracle.TmallTot},
 		{"sycm/hourly", model.PermissionTmallSycmRead, reportoracle.TmallDataset("sycm_hourly")},
+		{"sycm/overview/hourly", model.PermissionTmallSycmRead, reportoracle.TmallDataset("sycm_overview_hourly")},
 		{"qztg/hourly", model.PermissionTmallQztgRead, reportoracle.TmallDataset("qztg_hourly")},
 	} {
 		t.Run(route.path, func(t *testing.T) {
@@ -56,6 +57,7 @@ func TestOpenTmallRoutesRequireTheirOwnPermission(t *testing.T) {
 				{"missing token", "", nil, http.StatusUnauthorized, []string{"ip"}},
 				{"unrelated permission", bojunRouteTestToken, []string{model.PermissionBojunOrderRead}, http.StatusForbidden, []string{"ip", "auth", "permission:" + route.permission}},
 				{"matching permission", bojunRouteTestToken, []string{route.permission}, http.StatusOK, []string{"ip", "auth", "permission:" + route.permission, "user", "query:" + string(route.dataset)}},
+				{"module permission", bojunRouteTestToken, []string{model.PermissionTmallRead}, http.StatusOK, []string{"ip", "auth", "permission:" + route.permission, "user", "query:" + string(route.dataset)}},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					router, state := newTmallRouteTestRouter(t)

@@ -56,6 +56,11 @@ func (controller *OpenTmallController) QuerySycmHourly(c *gin.Context) {
 	controller.queryHourly(c, reportoracle.TmallSycmHourly)
 }
 
+// QuerySycmOverviewHourly 天猫生意参谋首页概况数据-小时维度查询。
+func (controller *OpenTmallController) QuerySycmOverviewHourly(c *gin.Context) {
+	controller.queryHourly(c, reportoracle.TmallSycmOverviewHourly)
+}
+
 func (controller *OpenTmallController) queryHourly(c *gin.Context, dataset reportoracle.TmallDataset) {
 	if c.ContentType() != "application/json" || c.Request.URL.RawQuery != "" || c.Request.URL.ForceQuery {
 		writeOpenTmallError(c, data_svc.ErrOpenTmallInvalidQuery)
