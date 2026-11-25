@@ -1,6 +1,6 @@
 {
   "title": "allblu开放接口文档",
-  "version": "2.1",
+  "version": "2.2",
   "operations": [
     {
       "description": "查询账号商场范围内已启用天气、状态有效、坐标已确认且有效的商场，按mallId升序。",
@@ -300,7 +300,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -1553,7 +1553,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -2190,7 +2190,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -2913,7 +2913,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -3645,7 +3645,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -4171,7 +4171,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -4748,7 +4748,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -5405,7 +5405,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -6482,7 +6482,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -7153,7 +7153,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -7726,7 +7726,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -8991,7 +8991,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -9640,7 +9640,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -10229,7 +10229,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -10898,7 +10898,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -11987,7 +11987,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -12670,7 +12670,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -13255,7 +13255,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -14019,7 +14019,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -14520,7 +14520,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -14737,7 +14737,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -14939,7 +14939,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -15221,7 +15221,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -15694,7 +15694,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -16041,7 +16041,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -16651,7 +16651,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -16890,7 +16890,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -17355,7 +17355,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -17379,7 +17379,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -17947,7 +17947,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -17971,7 +17971,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -18610,7 +18610,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -18634,7 +18634,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -18649,6 +18649,773 @@
       "method": "POST",
       "path": "/api/open/tmall/sycm/hourly/query",
       "title": "天猫生意参谋商品ID数据-小时维度查询",
+      "permission": "tmall.sycm.read",
+      "authentication": "请求头 token 填写唯一、完整的 dg_open_ 开放接口凭证；不加 Bearer 前缀。接口文档公开可读，业务调用仍需有效凭证及对应一级或二级权限。商场等数据范围继续生效。"
+    },
+    {
+      "description": "只读查询 YL_DBS.ODS_TM_SYCM_REALTIME_OVERVIEW。需要 tmall.sycm.read 权限，与生意参谋接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收 application/json 请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值，不接受 startDate/endDate。按 batchNo 精确匹配 BATCH_NO，复用天猫小时接口的 yyyyMMddHHmm 整点约定，分钟必须为00。导入程序须将 BATCH_NO 写为该格式；建表语句只定义导入批次号，不会自动生成小时编码。只返回指定批次源快照，不计算单小时增量、相邻批次差值或聚合。EXPORT_TIME 为导出时间，DOWNLOAD_TIME 为文件下载时间，均不替代批次筛选。所有百分比和较昨日同时段变化值以小数存储，0.0605表示6.05%，-0.2998表示-29.98%，接口不进行比率换算。 每页默认50、最多100，最多1000页；按ID升序分页，多读一条判断hasMore，不执行COUNT，查询超时10秒。",
+      "requestFields": [
+        {
+          "name": "token",
+          "type": "string",
+          "required": true,
+          "description": "有效开放账号token，需具备本节列出的权限。",
+          "nullable": false,
+          "location": "header"
+        },
+        {
+          "name": "Content-Type",
+          "type": "string",
+          "required": true,
+          "description": "application/json。",
+          "nullable": false,
+          "location": "header"
+        },
+        {
+          "name": "batchNo",
+          "type": "string",
+          "required": true,
+          "description": "必填小时批次号；yyyyMMddHHmm，合法日期小时且分钟固定00，例如202611251300。按BATCH_NO精确匹配；导入程序须按此约定填写，EXPORT_TIME、DOWNLOAD_TIME不参与小时筛选。",
+          "nullable": false,
+          "location": "body"
+        },
+        {
+          "name": "filters",
+          "type": "object / null",
+          "required": false,
+          "description": "可选精确筛选；省略、null或{}不增加条件；全部子字段见下表，多个条件AND。",
+          "nullable": true,
+          "location": "body",
+          "children": [
+            {
+              "name": "SECTION_NAME",
+              "type": "string",
+              "required": false,
+              "description": "栏目；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。",
+              "nullable": false,
+              "location": "body"
+            },
+            {
+              "name": "MENU_NAME",
+              "type": "string",
+              "required": false,
+              "description": "菜单；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。",
+              "nullable": false,
+              "location": "body"
+            },
+            {
+              "name": "DATA_POINT",
+              "type": "string",
+              "required": false,
+              "description": "数据点；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。",
+              "nullable": false,
+              "location": "body"
+            },
+            {
+              "name": "DIMENSION_NAME",
+              "type": "string",
+              "required": false,
+              "description": "维度；去除首尾空白后按等值精确匹配，非空且最多50个字符（Oracle CHAR语义）。",
+              "nullable": false,
+              "location": "body"
+            },
+            {
+              "name": "DATE_RANGE",
+              "type": "string",
+              "required": false,
+              "description": "日期范围；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。",
+              "nullable": false,
+              "location": "body"
+            }
+          ]
+        },
+        {
+          "name": "page",
+          "type": "integer / null",
+          "required": false,
+          "description": "默认1，1～1000；省略或null采用默认，0非法。",
+          "nullable": true,
+          "location": "body"
+        },
+        {
+          "name": "pageSize",
+          "type": "integer / null",
+          "required": false,
+          "description": "默认50，1～100；省略或null采用默认，0非法。",
+          "nullable": true,
+          "location": "body"
+        }
+      ],
+      "responseFields": [
+        {
+          "name": "code",
+          "type": "integer",
+          "required": true,
+          "description": "成功为0；必须同时检查HTTP状态。",
+          "nullable": false
+        },
+        {
+          "name": "msg",
+          "type": "string",
+          "required": true,
+          "description": "成功为“请求成功”。",
+          "nullable": false
+        },
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "description": "对象字段，展开查看完整定义。",
+          "children": [
+            {
+              "name": "items",
+              "type": "object[]",
+              "required": true,
+              "description": "当前页的首页概况源数据；无结果为[]。每项完整60字段见下方示例和字典。",
+              "nullable": false,
+              "children": [
+                {
+                  "name": "ID",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18)\n精确filters：否\n含义、关系：自增主键\n单位/格式与使用说明：内部自增行标识；十进制字符串，不代表业务唯一键；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "SECTION_NAME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(100 CHAR)\n精确filters：是\n含义、关系：栏目\n单位/格式与使用说明：源字符串；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "MENU_NAME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(100 CHAR)\n精确filters：是\n含义、关系：菜单\n单位/格式与使用说明：源字符串；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "DATA_POINT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(100 CHAR)\n精确filters：是\n含义、关系：数据点\n单位/格式与使用说明：源字符串；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "DIMENSION_NAME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(50 CHAR)\n精确filters：是\n含义、关系：维度\n单位/格式与使用说明：源字符串；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "DATE_RANGE",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(100 CHAR)\n精确filters：是\n含义、关系：日期范围\n单位/格式与使用说明：源字符串；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "EXPORT_TIME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：导出时间；精确到秒\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAYMENT_AMOUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：支付金额（本店）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAYMENT_AMOUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付金额较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAYMENT_AMOUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：支付金额（昨日）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "VISITOR_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：访客数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "VISITOR_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：访客数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "VISITOR_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：访客数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_BUYER_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付买家数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_BUYER_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付买家数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_BUYER_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付买家数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_CONVERSION_RATE",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付转化率（本店）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_CONVERSION_RATE_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付转化率较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAY_CONVERSION_RATE_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付转化率（昨日）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "REFUND_AMOUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：退款金额（本店）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "REFUND_AMOUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：退款金额较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "REFUND_AMOUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：退款金额（昨日）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "NET_PAYMENT_AMOUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：净支付金额（本店）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "NET_PAYMENT_AMOUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：净支付金额较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "NET_PAYMENT_AMOUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(20,2)\n精确filters：否\n含义、关系：净支付金额（昨日）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_USER_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购人数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_USER_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：加购人数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_USER_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购人数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAGE_VIEW_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：浏览量（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAGE_VIEW_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：浏览量较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAGE_VIEW_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：浏览量（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_SUBORDER_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付子订单数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_SUBORDER_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付子订单数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_SUBORDER_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付子订单数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_ITEM_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付件数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_ITEM_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：支付件数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "PAID_ITEM_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：支付件数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AVG_ORDER_VALUE",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER\n精确filters：否\n含义、关系：客单价（本店）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AVG_ORDER_VALUE_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：客单价较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AVG_ORDER_VALUE_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER\n精确filters：否\n含义、关系：客单价（昨日）\n单位/格式与使用说明：金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_ITEM_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购件数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_ITEM_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：加购件数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CART_ITEM_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：加购件数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AMOUNT_REFUND_RATE",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：金额退款率（本店）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AMOUNT_REFUND_RATE_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：金额退款率较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "AMOUNT_REFUND_RATE_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：金额退款率（昨日）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "ORDER_REFUND_RATE",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：订单退款率（本店）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "ORDER_REFUND_RATE_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：订单退款率较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "ORDER_REFUND_RATE_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：订单退款率（昨日）；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "FAVORITE_USER_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：商品收藏人数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "FAVORITE_USER_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：商品收藏人数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "FAVORITE_USER_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：商品收藏人数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "SHOP_CUSTOMER_COUNT",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：店铺客户数（本店）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "SHOP_CUSTOMER_COUNT_CHG",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,8)\n精确filters：否\n含义、关系：店铺客户数较昨日同时段；按小数存储，6.05%存为0.0605\n单位/格式与使用说明：小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "SHOP_CUSTOMER_COUNT_YDAY",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：NUMBER(18,0)\n精确filters：否\n含义、关系：店铺客户数（昨日）\n单位/格式与使用说明：计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "BATCH_NO",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：VARCHAR2(32)\n精确filters：否\n含义、关系：导入批次号，同一次导入使用同一批次号\n单位/格式与使用说明：yyyyMMddHHmm；沿用小时接口整点约定，分钟固定00，由导入程序填入；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "DOWNLOAD_TIME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：文件实际下载时间，由导入程序填入\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "WRITE_TIME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：写入时间，默认SYSDATE\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "CREATED_TIME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：该行首次入库时间，默认SYSDATE\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+                  "nullable": false
+                },
+                {
+                  "name": "MODIFIED_TIME",
+                  "type": "string",
+                  "required": true,
+                  "description": "Oracle源类型：DATE\n精确filters：否\n含义、关系：该行最后修改时间，插入默认SYSDATE，更新时由程序维护\n单位/格式与使用说明：YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+                  "nullable": false
+                }
+              ]
+            },
+            {
+              "name": "pagination",
+              "type": "object",
+              "required": true,
+              "description": "对象字段，展开查看完整定义。",
+              "children": [
+                {
+                  "name": "page",
+                  "type": "integer",
+                  "required": true,
+                  "description": "当前页码。",
+                  "nullable": false
+                },
+                {
+                  "name": "pageSize",
+                  "type": "integer",
+                  "required": true,
+                  "description": "当前每页上限，不代表实际返回行数。",
+                  "nullable": false
+                },
+                {
+                  "name": "hasMore",
+                  "type": "boolean",
+                  "required": true,
+                  "description": "是否读到超出本页的下一条；true时可继续下一页，最大1000页。",
+                  "nullable": false
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requestExample": {
+        "batchNo": "202611251300",
+        "page": 1,
+        "pageSize": 50
+      },
+      "responseExample": {
+        "code": 0,
+        "msg": "请求成功",
+        "data": {
+          "items": [
+            {
+              "ID": "900719925474099312",
+              "SECTION_NAME": "首页",
+              "MENU_NAME": "数据概览",
+              "DATA_POINT": "实时",
+              "DIMENSION_NAME": "本店",
+              "DATE_RANGE": "",
+              "EXPORT_TIME": "2026-11-25 13:12:00",
+              "PAYMENT_AMOUNT": "12345.67",
+              "PAYMENT_AMOUNT_CHG": "-0.29980000",
+              "PAYMENT_AMOUNT_YDAY": "12345.67",
+              "VISITOR_COUNT": "100",
+              "VISITOR_COUNT_CHG": "-0.29980000",
+              "VISITOR_COUNT_YDAY": "100",
+              "PAY_BUYER_COUNT": "100",
+              "PAY_BUYER_COUNT_CHG": "-0.29980000",
+              "PAY_BUYER_COUNT_YDAY": "100",
+              "PAY_CONVERSION_RATE": "0.06050000",
+              "PAY_CONVERSION_RATE_CHG": "-0.29980000",
+              "PAY_CONVERSION_RATE_YDAY": "0.06050000",
+              "REFUND_AMOUNT": "12345.67",
+              "REFUND_AMOUNT_CHG": "-0.29980000",
+              "REFUND_AMOUNT_YDAY": "12345.67",
+              "NET_PAYMENT_AMOUNT": "12345.67",
+              "NET_PAYMENT_AMOUNT_CHG": "-0.29980000",
+              "NET_PAYMENT_AMOUNT_YDAY": "12345.67",
+              "CART_USER_COUNT": "100",
+              "CART_USER_COUNT_CHG": "-0.29980000",
+              "CART_USER_COUNT_YDAY": "100",
+              "PAGE_VIEW_COUNT": "100",
+              "PAGE_VIEW_COUNT_CHG": "-0.29980000",
+              "PAGE_VIEW_COUNT_YDAY": "100",
+              "PAID_SUBORDER_COUNT": "100",
+              "PAID_SUBORDER_COUNT_CHG": "-0.29980000",
+              "PAID_SUBORDER_COUNT_YDAY": "100",
+              "PAID_ITEM_COUNT": "100",
+              "PAID_ITEM_COUNT_CHG": "-0.29980000",
+              "PAID_ITEM_COUNT_YDAY": "100",
+              "AVG_ORDER_VALUE": "123.4567890123456789",
+              "AVG_ORDER_VALUE_CHG": "-0.29980000",
+              "AVG_ORDER_VALUE_YDAY": "123.4567890123456789",
+              "CART_ITEM_COUNT": "100",
+              "CART_ITEM_COUNT_CHG": "-0.29980000",
+              "CART_ITEM_COUNT_YDAY": "100",
+              "AMOUNT_REFUND_RATE": "0.06050000",
+              "AMOUNT_REFUND_RATE_CHG": "-0.29980000",
+              "AMOUNT_REFUND_RATE_YDAY": "0.06050000",
+              "ORDER_REFUND_RATE": "0.06050000",
+              "ORDER_REFUND_RATE_CHG": "-0.29980000",
+              "ORDER_REFUND_RATE_YDAY": "0.06050000",
+              "FAVORITE_USER_COUNT": "100",
+              "FAVORITE_USER_COUNT_CHG": "-0.29980000",
+              "FAVORITE_USER_COUNT_YDAY": "100",
+              "SHOP_CUSTOMER_COUNT": "100",
+              "SHOP_CUSTOMER_COUNT_CHG": "-0.29980000",
+              "SHOP_CUSTOMER_COUNT_YDAY": "100",
+              "BATCH_NO": "202611251300",
+              "DOWNLOAD_TIME": "2026-11-25 13:12:00",
+              "WRITE_TIME": "2026-11-25 13:12:00",
+              "CREATED_TIME": "2026-11-25 13:12:00",
+              "MODIFIED_TIME": "2026-11-25 13:12:00"
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "pageSize": 50,
+            "hasMore": false
+          }
+        }
+      },
+      "errors": [
+        {
+          "status": 401,
+          "code": "100401",
+          "description": "身份凭证缺失或格式错误；缺少token请求头，重复头、前后空白、缺少dg_open_前缀或只传了Authorization。\n发送唯一完整token请求头；不能用管理台JWT、tokenPrefix或URL参数替代。"
+        },
+        {
+          "status": 401,
+          "code": "100401",
+          "description": "身份凭证无效或已过期；找不到有效开放凭证，凭证已重发/撤销、账号被停用，或账号类型不是开放账号。\n请管理员确认当前完整token与账号状态；不要自动调用JWT刷新接口。该文案不代表存在固定token有效期。"
+        },
+        {
+          "status": 403,
+          "code": "100403",
+          "description": "无权执行此操作；没有该路由对应权限，或权限已经到期。\n由管理员授予对应permission；数据范围错误还需检查商场授权。"
+        },
+        {
+          "status": 404,
+          "code": "100404",
+          "description": "参见各接口资源不存在文案；指定业务对象不存在，例如商品不存在。\n核对ID/编码；空列表本身通常是成功响应，不能直接等同404。"
+        },
+        {
+          "status": 422,
+          "code": "100422",
+          "description": "参见各接口“参数校验失败”文案；请求参数、JSON类型、日期、枚举、游标、分页、请求体大小等不符合接口约束。\n修改请求后再发；不对同一错误请求盲目重试。JSON格式错误通常也按422返回。"
+        },
+        {
+          "status": 429,
+          "code": "100429",
+          "description": "开放接口请求过于频繁；命中模块IP或用户/路由限流。\n遵循Retry-After秒数，降低并发；不同token属于同一用户时仍共享该用户额度。"
+        },
+        {
+          "status": 503,
+          "code": "100503",
+          "description": "认证服务暂时不可用 / 权限服务暂时不可用；身份或权限存储查询暂时失败。\n稍后有限退避重试；不要因此重发凭证或扩大权限。"
+        },
+        {
+          "status": 503,
+          "code": "100503",
+          "description": "数据库服务暂时不可用；全局数据库可用性检查未通过。\n遵循Retry-After（当前为1秒），有限重试，持续失败联系维护方。"
+        },
+        {
+          "status": 503,
+          "code": "100503",
+          "description": "限流服务暂时不可用；限流依赖暂时不可用。\n遵循Retry-After（当前为1秒），稍后重试。"
+        },
+        {
+          "status": 500,
+          "code": "100500",
+          "description": "参见各接口服务暂时不可用文案；未分类异常，或部分模块将查询/数据库故障映射为500。\n保留脱敏请求、时间与响应code；少量退避重试后联系维护方。"
+        },
+        {
+          "status": 401,
+          "code": "100401",
+          "description": "身份凭证缺失或格式错误等鉴权提示；缺少、无效、过期或类型不符合的开放账号token；检查 token 请求头和账号状态；不要把token放URL。"
+        },
+        {
+          "status": 403,
+          "code": "100403",
+          "description": "无权执行此操作 / 无权查询天猫数据；缺少本接口有效数据权限或服务层复核未通过；申请本节权限并确认未到期。"
+        },
+        {
+          "status": 422,
+          "code": "100422",
+          "description": "天猫查询参数校验失败；时间格式/范围、批次、分页、过滤条件或JSON结构不合法；按本节时间模式和白名单修正；错误不是“没有数据”。"
+        },
+        {
+          "status": 429,
+          "code": "100429",
+          "description": "开放接口请求过于频繁；命中模块IP或用户单路由限流；读取 Retry-After 等待后重试，避免并发突发。"
+        },
+        {
+          "status": 503,
+          "code": "100503",
+          "description": "天猫查询服务暂时不可用；认证/授权依赖、Oracle连接或查询失败/超时；有限退避重试；缩小时间窗口或过滤范围。"
+        },
+        {
+          "status": 500,
+          "code": "100500",
+          "description": "天猫查询服务暂时不可用；未分类内部异常；保存请求时间、路径、脱敏参数，交维护方定位。"
+        }
+      ],
+      "notes": [
+        {
+          "title": "天猫数据通用规则",
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
+        },
+        {
+          "title": "数据来源",
+          "body": "源表：YL_DBS.ODS_TM_SYCM_REALTIME_OVERVIEW\n返回字段数：60；字段类型及注释依据提供的建表语句。"
+        },
+        {
+          "title": "时间口径与查询规则",
+          "body": "按 batchNo 精确匹配 BATCH_NO，复用天猫小时接口的 yyyyMMddHHmm 整点约定，分钟必须为00。导入程序须将 BATCH_NO 写为该格式；建表语句只定义导入批次号，不会自动生成小时编码。只返回指定批次源快照，不计算单小时增量、相邻批次差值或聚合。EXPORT_TIME 为导出时间，DOWNLOAD_TIME 为文件下载时间，均不替代批次筛选。所有百分比和较昨日同时段变化值以小数存储，0.0605表示6.05%，-0.2998表示-29.98%，接口不进行比率换算。"
+        },
+        {
+          "title": "字段口径与使用说明",
+          "body": "SECTION_NAME、MENU_NAME、DATA_POINT、DIMENSION_NAME、DATE_RANGE 为可筛选的报表维度；筛选按字符数限制，DIMENSION_NAME 最多50字符，其余最多100字符。*_CHG 为较昨日同时段，*_YDAY 为昨日，直接返回源值。DATE_RANGE 为空时保留为空字符串。数值、金额和客单价均以字符串保留源精度。"
+        },
+        {
+          "title": "其他请求示例",
+          "body": "{\n  \"batchNo\": \"202611251300\",\n  \"page\": 1,\n  \"pageSize\": 50,\n  \"filters\": {\n    \"SECTION_NAME\": \"首页\",\n    \"MENU_NAME\": \"数据概览\"\n  }\n}"
+        }
+      ],
+      "id": "tmall-sycm-overview-hourly",
+      "method": "POST",
+      "path": "/api/open/tmall/sycm/overview/hourly/query",
+      "title": "天猫首页概况数据-小时维度查询",
       "permission": "tmall.sycm.read",
       "authentication": "请求头 token 填写唯一、完整的 dg_open_ 开放接口凭证；不加 Bearer 前缀。接口文档公开可读，业务调用仍需有效凭证及对应一级或二级权限。商场等数据范围继续生效。"
     },
@@ -19682,7 +20449,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -19706,7 +20473,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -20793,7 +21560,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -20817,7 +21584,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",
@@ -21433,7 +22200,7 @@
       "notes": [
         {
           "title": "天猫数据通用规则",
-          "body": "天猫数据\n\n本节为天猫六个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按 UTF-8 字节限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31"
+          "body": "天猫数据\n\n本节为天猫七个查询接口，使用开放账号 token 鉴权。\n\n- 所有成功响应 data 只含 items、pagination，不返回 columns，也不返回 total、totalItems、totalPages。空结果为 items: []。\n- 返回字段使用 Oracle 大写列名，值全部为string；ID、金额、数量、比率均不转换为 JSON number。源NULL统一返回空字符串，不等于数值零，前导零及高精度金额应保留。\n- 所有接口响应均不含 ITEM_NO；生意参谋日、小时维度及幼岚投放合并日维度接受 filters.ITEM_NO。订单实时接口还排除 ID、ETL_PLATFORM_JSON_ID；其余接口内部行 ID 按字典返回。\n- filters 可省略、为 null 或 {}；键必须是该接口列出的精确大写白名单，值必须为字符串且去首尾空白后非空，按字段声明的 UTF-8 字节或字符数限制长度。多个条件使用 AND 等值匹配，不支持模糊搜索、任意列或 SQL。这里没有通用 shopName、mallId 筛选。\n- 请求只使用 application/json 对象，最多1MiB；拒绝 URL 查询参数、未知JSON字段、多个JSON值、空请求体及根对象 null。订单、日维度、小时维度三种时间参数互不混用。\n- 默认 page=1、pageSize=50，范围分别为1～1000、1～100；省略或null采用默认值，0不合法。以 hasMore 判断是否还有下一页。第1000页仍有后续时须缩小时间窗口或增加筛选；下一页是新的查询，不是数据库快照。\n- 同一IP访问天猫模块在鉴权前受300次/分钟限制；鉴权授权后同一用户、同一路由30次/分钟。HTTP 429 时遵循 Retry-After。日/小时同数据集共用权限；订单另需 tmall.orders.read。\n接口名称：天猫订单商品明细表-实时维度查询；完整路径：POST /api/open/tmall/orders/realtime/query；权限：tmall.orders.read；返回字段数：18\n接口名称：天猫生意参谋商品ID数据-日维度查询；完整路径：POST /api/open/tmall/sycm/query；权限：tmall.sycm.read；返回字段数：35\n接口名称：天猫生意参谋商品ID数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/hourly/query；权限：tmall.sycm.read；返回字段数：46\n接口名称：天猫全站推广数据-日维度查询；完整路径：POST /api/open/tmall/qztg/query；权限：tmall.qztg.read；返回字段数：90\n接口名称：天猫全站推广数据-小时维度查询；完整路径：POST /api/open/tmall/qztg/hourly/query；权限：tmall.qztg.read；返回字段数：102\n接口名称：幼岚投放表基础资料合并-日维度查询；完整路径：POST /api/open/tmall/tot/query；权限：tmall.tot.read；返回字段数：31\n接口名称：天猫首页概况数据-小时维度查询；完整路径：POST /api/open/tmall/sycm/overview/hourly/query；权限：tmall.sycm.read；返回字段数：60"
         },
         {
           "title": "数据来源",
@@ -21457,7 +22224,7 @@
         },
         {
           "title": "请求、响应与分页",
-          "body": "请求、响应与分页\n\n- 本手册36个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫六个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
+          "body": "请求、响应与分页\n\n- 本手册37个开放查询接口全部使用POST；JSON字段区分业务含义和类型，数组不能写成逗号分隔字符串。查询条件放请求体；兼容天气路径中的 :id 是路径参数。\n- 按各接口参数表提供字段。大多数接口使用严格JSON解码，拒绝未知字段、多段JSON以及URL query；当前公共JSON请求体限制为1 MiB，超限通常转换为422。不要假定所有参数错误都返回400或413。\n- 日期与时间格式按字段定义处理：YYYY-MM-DD 表示日期，YYYY-MM-DD HH:mm:ss 表示本地或明确UTC语义的时间；天气asOf支持按timeZone解释的本地日期时间及兼容RFC3339，具体见参数表。不要统一增删 T、Z 或时区后缀。\n- 天猫、伯俊商品/库存及订单金额等很多字段使用JSON字符串保留编码或金额表示。以字段类型为准，不要将全部字符串数值化；这些字符串字段源值缺失时返回空字符串，不转换为数值0。\n- 响应不返回null；字符串和时间空值返回\"\"，数组返回[]，对象返回{}，数值返回0，布尔值返回false。字段省略规则保持不变，具体见字段字典。空数据通常是HTTP 200，不代表查询出错。\n\n统一外层响应\n字段：code；类型：integer；说明：成功为0。非0即业务失败，即使HTTP状态为200也要处理。\n字段：msg；类型：string；说明：中文说明，成功为“请求成功”。不要把完整中文文案当作唯一程序判断条件。\n字段：data；类型：object；说明：成功时为接口数据；错误时固定为空对象{}。\n\n{\n  \"code\": 0,\n  \"msg\": \"请求成功\",\n  \"data\": {\n    \"items\": [],\n    \"pagination\": {\n      \"page\": 1,\n      \"pageSize\": 50,\n      \"hasMore\": false\n    }\n  }\n}\n\n上例仅演示“页码 + hasMore”接口的空结果，不能套用于所有端点；各接口的data结构见逐项定义。\n\n分页方式速查\n接口：伯俊订单、订单明细；下一页方式：使用响应pagination.nextCursor；其余筛选保持一致；结束条件 / 注意：hasMore=false 停止。不要自行解析或修改游标。订单和明细的游标不可混用。\n接口：天气商场列表；下一页方式：将pagination.nextCursor 作为下一次 cursor；结束条件 / 注意：hasMore=false 停止；总数和页码只是本次返回信息。\n接口：天气历史/预报/预警/生活指数列表；下一页方式：将响应pagination.nextCursor 传入下一次 cursor；保留过滤条件及 pageSize；结束条件 / 注意：最后一页不返回nextCursor。响应page/totalPages是结果信息，不是请求参数；不要发送page字段。\n接口：伯俊店仓、实时库存、库存快照、完整商品资料；天猫七个查询接口；下一页方式：递增请求page；结束条件 / 注意：以pagination.hasMore 判断；这些接口不返回统一total。最大页数按各接口约束，不应一概认定1000。\n接口：商品单条查询、同步状态、当前天气/概览、单日汇总、营业金额；下一页方式：不适用；结束条件 / 注意：具体端点不提供分页。\n\n客户端判断示例\n\n下面只展示通用的响应判断方式，不自动重试，不把真实token写入源码。\n\nconst response = await fetch(`${baseUrl}/api/open/tmall/sycm/query`, {\n  method: \"POST\",\n  headers: { token: openApiToken, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ startDate: \"2026-10-01\", endDate: \"2026-10-31\", page: 1, pageSize: 50 })\n});\nconst body = await response.json(); // 非JSON/网络异常也需要单独捕获\nif (!response.ok || body.code !== 0) {\n  throw new Error(`HTTP ${response.status}; code=${body.code}; ${body.msg}`);\n}\nconst result = body.data;\n\n"
         },
         {
           "title": "字段类型、时间与金额规则",

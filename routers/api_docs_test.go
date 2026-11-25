@@ -56,8 +56,8 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 			}
 		}
 	}
-	if count != 9 || monitoringCount != 3 {
-		t.Fatalf("expected six Tmall and three monitoring APIs, got %d total and %d monitoring", count, monitoringCount)
+	if count != 10 || monitoringCount != 3 {
+		t.Fatalf("expected seven Tmall and three monitoring APIs, got %d total and %d monitoring", count, monitoringCount)
 	}
 	etag := response.Header().Get("ETag")
 	if etag == "" || response.Header().Get("Cache-Control") == "" {

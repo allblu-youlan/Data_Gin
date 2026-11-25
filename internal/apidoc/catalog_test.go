@@ -16,11 +16,11 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 	if err := json.Unmarshal(catalogJSON, &source); err != nil {
 		t.Fatal(err)
 	}
-	if source.Title != "allblu开放接口文档" || len(source.Operations) != 36 {
+	if source.Title != "allblu开放接口文档" || len(source.Operations) != 37 {
 		t.Fatalf("unexpected reference: %s, %d operations", source.Title, len(source.Operations))
 	}
 	seen := map[string]bool{}
-	counts := map[string]int{"tmall-orders-realtime": 18, "tmall-sycm": 35, "tmall-sycm-hourly": 46, "tmall-qztg": 90, "tmall-qztg-hourly": 102, "tmall-tot": 31}
+	counts := map[string]int{"tmall-orders-realtime": 18, "tmall-sycm": 35, "tmall-sycm-hourly": 46, "tmall-sycm-overview-hourly": 60, "tmall-qztg": 90, "tmall-qztg-hourly": 102, "tmall-tot": 31}
 	for _, operation := range source.Operations {
 		t.Run(operation.ID, func(t *testing.T) {
 			if seen[operation.ID] || model.OpenAPIPermissionParent(operation.Permission) == "" {
@@ -50,9 +50,9 @@ func TestCatalogIncludesCompleteReferenceFields(t *testing.T) {
 
 func TestBuildUsesRegisteredRoutesAndSharedPermissionHierarchy(t *testing.T) {
 	document, err := Build(map[string]bool{
-		"POST /api/open/tmall/qztg/hourly/query": true,
-		"GET /api/open/bojun/orders/query":       true,
-		"POST /api/unknown":                      true,
+		"POST /api/open/tmall/sycm/overview/hourly/query": true,
+		"GET /api/open/bojun/orders/query":                true,
+		"POST /api/unknown":                               true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +66,9 @@ func TestBuildUsesRegisteredRoutesAndSharedPermissionHierarchy(t *testing.T) {
 	}
 	if children[0].Operations[0].ParentPermission != model.PermissionTmallRead {
 		t.Fatal("missing inherited permission")
+	}
+	if children[0].Code != model.PermissionTmallSycmRead || children[0].Operations[0].ID != "tmall-sycm-overview-hourly" {
+		t.Fatalf("overview missing from sycm category: %+v", children)
 	}
 	empty, err := Build(nil)
 	if err != nil || empty.Groups == nil || len(empty.Groups) != 0 {
