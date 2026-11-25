@@ -47,9 +47,19 @@ function fieldText(fields: ApiField[]): string {
 export function filterApiGroups(groups: ApiGroup[], query: string): ApiGroup[] {
   const term = query.trim().toLocaleLowerCase()
   if (!term) return groups
-  return groups.map(group => ({ ...group, children: group.children.map(child => ({ ...child, operations: child.operations.filter(op =>
-    `${group.code} ${group.name} ${child.code} ${child.name} ${op.id} ${op.title} ${op.path} ${op.method} ${op.permission} ${op.parentPermission ?? ''} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`.toLocaleLowerCase().includes(term),
-  ) })).filter(child => child.operations.length > 0) })).filter(group => group.children.length > 0)
+  const search = (includeDetails: boolean) => groups.map(group => ({ ...group, children: group.children.map(child => ({
+    ...child,
+    operations: child.operations.filter(op => {
+      const reference = `${group.code} ${group.name} ${child.code} ${child.name} ${op.id} ${op.title} ${op.path} ${op.method} ${op.permission} ${op.parentPermission ?? ''}`
+      const text = includeDetails
+        ? `${reference} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`
+        : reference
+      return text.toLocaleLowerCase().includes(term)
+    }),
+  })).filter(child => child.operations.length > 0) })).filter(group => group.children.length > 0)
+  // Shared usage notes can mention other endpoints; prefer their own references.
+  const directMatches = search(false)
+  return directMatches.length ? directMatches : search(true)
 }
 
 export function buildCurl(operation: ApiOperation, baseURL: string): string {

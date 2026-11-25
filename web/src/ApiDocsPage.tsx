@@ -41,7 +41,7 @@ export default function ApiDocsPage() {
     <header className={styles.header}><a href="?view=api-docs" className={styles.brand}><BookOpen size={22} aria-hidden="true" /><strong>{title}</strong></a><span className={styles.headerMeta}>API REFERENCE <span>{document ? `v${document.version}` : '加载中'}</span></span></header>
     <div className={styles.layout}>
       <aside className={styles.sidebar} aria-label="接口目录">
-        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、路径、字段或权限码" aria-label="搜索接口、路径、字段或权限码" /></label>
+        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、字段等，如：首页概况" aria-label="搜索接口、路径、字段或权限码" /></label>
         <div className={styles.directoryTitle}>接口目录 <span>{count} 个接口</span></div>
         <nav>{groups.map(group => <section className={styles.navGroup} key={group.code}><h2>{group.name}</h2>{group.children.map(child => <details key={child.code} open><summary>{child.name}<span>{child.operations.length}</span></summary><div>{child.operations.map(op => <a key={op.id} href={`#${encodeURIComponent(op.id)}`} aria-current={current?.operation.id === op.id ? 'page' : undefined}><span className={styles.methodSmall}>{op.method}</span><span>{op.title}</span></a>)}</div></details>)}</section>)}</nav>
         {!count && document && <p className={styles.muted}>未找到匹配接口，试试字段名称、路径或权限码。</p>}
