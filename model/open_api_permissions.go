@@ -30,7 +30,7 @@ var openAPIPermissionGroups = []PermissionGroup{
 	{
 		Code: PermissionTmallRead, Name: "天猫", Description: "授权后可查询天猫下全部二级接口",
 		Children: []PermissionDefinition{
-			{Code: PermissionTmallSycmRead, Name: "天猫生意参谋查询", Description: "查询生意参谋商品订单数据"},
+			{Code: PermissionTmallSycmRead, Name: "天猫生意参谋查询", Description: "查询生意参谋商品订单与首页概况数据"},
 			{Code: PermissionTmallQztgRead, Name: "天猫全站推广查询", Description: "查询全站推广商品数据"},
 			{Code: PermissionTmallTotRead, Name: "天猫商品汇总查询", Description: "查询商品汇总数据"},
 			{Code: PermissionTmallOrdersRead, Name: "天猫订单商品明细查询", Description: "实时查询订单商品明细数据"},
