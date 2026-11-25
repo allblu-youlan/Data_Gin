@@ -40,6 +40,7 @@ func TestTmallDocumentationMatchesQueryColumns(t *testing.T) {
 	}{
 		{"tmall-sycm", "Sycm", reportoracle.TmallSycm},
 		{"tmall-sycm-hourly", "SycmHourly", reportoracle.TmallSycmHourly},
+		{"tmall-sycm-overview-hourly", "SycmOverviewHourly", reportoracle.TmallDataset("sycm_overview_hourly")},
 		{"tmall-qztg", "Qztg", reportoracle.TmallQztg},
 		{"tmall-qztg-hourly", "QztgHourly", reportoracle.TmallQztgHourly},
 	} {

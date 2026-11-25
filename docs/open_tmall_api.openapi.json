@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "天猫数据开放接口",
-    "version": "1.2.0",
-    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广两个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋比率以百分数原值存储（4.32表示4.32%）。返回字段保留 Oracle 原列名；所有字段值以字符串返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 统一返回空字符串。Oracle DATE 列非空时按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。所有接口成功响应data仅包含items和pagination；字段含义、Oracle类型等信息见本文档字段定义，不在响应中重复返回。小时接口BATCH_NO采用数据所属整点的业务定义。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。 所有天猫接口的items不返回ITEM_NO，原有ITEM_NO精确筛选继续支持。新增天猫订单商品明细实时查询，默认按created、可选modified查询半开时间区间，最多31天；仅返回指定18字段，不返回ID、ETL_PLATFORM_JSON_ID。"
+    "version": "1.3.0",
+    "description": "提供生意参谋、全站推广、商品汇总三个按日期范围查询接口，以及生意参谋商品ID、全站推广、首页概况三个按小时批次查询接口，均为只读分页查询。使用开放账号的 token 请求头认证，各数据集分别授权；小时接口复用对应数据集的权限。请求仅使用 JSON 对象，拒绝 URL 查询参数、未知字段和多个 JSON 值。原日期范围接口的 startDate/endDate 为 YYYY-MM-DD，包含起止两天，最多查询连续31天。小时接口仅按必填 batchNo 精确匹配 BATCH_NO，不接受 startDate/endDate；batchNo 为 yyyyMMddHHmm，分钟必须为00，日期和小时必须合法，例如202611041300表示数据所属2026-11-04 13:00整点，与下载、导出及写入时间无关。小时接口直接返回该批次源数据，不进行小时差分、聚合或比率换算；推广比率以小数存储（0.061表示6.1%），生意参谋商品ID小时表的比率以百分数原值存储（4.32表示4.32%），首页概况表的比率以小数存储（0.0605表示6.05%）。返回字段保留 Oracle 原列名；所有字段值以字符串返回，数值和ID不转换为 JSON number，避免精度损失或丢失前导零。数据库 NULL 统一返回空字符串。Oracle DATE 列非空时按 YYYY-MM-DD HH:mm:ss 返回，不添加数据库未提供的时区。所有接口成功响应data仅包含items和pagination；字段含义、Oracle类型等信息见本文档字段定义，不在响应中重复返回。小时接口BATCH_NO采用数据所属整点的业务定义。每页多读一条判断 hasMore，不执行 COUNT，不返回总条数或总页数。 所有天猫接口的items不返回ITEM_NO，原有ITEM_NO精确筛选继续支持。新增天猫订单商品明细实时查询，默认按created、可选modified查询半开时间区间，最多31天；仅返回指定18字段，不返回ID、ETL_PLATFORM_JSON_ID。"
   },
   "servers": [
     {
@@ -559,6 +559,154 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrdersQueryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidQuery"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/open/tmall/sycm/overview/hourly/query": {
+      "post": {
+        "tags": [
+          "天猫"
+        ],
+        "summary": "天猫首页概况数据-小时维度查询",
+        "operationId": "queryTmallSycmOverviewHourly",
+        "description": "只读查询 YL_DBS.ODS_TM_SYCM_REALTIME_OVERVIEW。需要 tmall.sycm.read 权限，与生意参谋接口共用授权。认证前模块IP限流300次/分钟，认证授权后用户单路由限流30次/分钟。仅接收 application/json 请求体（最大1MiB），拒绝URL查询参数、未知字段和多个JSON值，不接受 startDate/endDate。按 batchNo 精确匹配 BATCH_NO，复用天猫小时接口的 yyyyMMddHHmm 整点约定，分钟必须为00。导入程序须将 BATCH_NO 写为该格式；建表语句只定义导入批次号，不会自动生成小时编码。只返回指定批次源快照，不计算单小时增量、相邻批次差值或聚合。EXPORT_TIME 为导出时间，DOWNLOAD_TIME 为文件下载时间，均不替代批次筛选。所有百分比和较昨日同时段变化值以小数存储，0.0605表示6.05%，-0.2998表示-29.98%，接口不进行比率换算。 每页默认50、最多100，最多1000页；按ID升序分页，多读一条判断hasMore，不执行COUNT，查询超时10秒。",
+        "x-required-permission": "tmall.sycm.read",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SycmOverviewHourlyQueryRequest"
+              },
+              "examples": {
+                "hour": {
+                  "summary": "查询小时批次",
+                  "value": {
+                    "batchNo": "202611251300",
+                    "page": 1,
+                    "pageSize": 50
+                  }
+                },
+                "overview": {
+                  "summary": "按栏目和菜单精确筛选",
+                  "value": {
+                    "batchNo": "202611251300",
+                    "page": 1,
+                    "pageSize": 50,
+                    "filters": {
+                      "SECTION_NAME": "首页",
+                      "MENU_NAME": "数据概览"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "返回源表全部60字段；数值和ID均为字符串，源NULL返回空字符串，DATE格式YYYY-MM-DD HH:mm:ss；小数比例0.0605表示6.05%。无数据时items为[]。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SycmOverviewHourlyQueryResponse"
+                },
+                "example": {
+                  "code": 0,
+                  "msg": "请求成功",
+                  "data": {
+                    "items": [
+                      {
+                        "ID": "900719925474099312",
+                        "SECTION_NAME": "首页",
+                        "MENU_NAME": "数据概览",
+                        "DATA_POINT": "实时",
+                        "DIMENSION_NAME": "本店",
+                        "DATE_RANGE": "",
+                        "EXPORT_TIME": "2026-11-25 13:12:00",
+                        "PAYMENT_AMOUNT": "12345.67",
+                        "PAYMENT_AMOUNT_CHG": "-0.29980000",
+                        "PAYMENT_AMOUNT_YDAY": "12345.67",
+                        "VISITOR_COUNT": "100",
+                        "VISITOR_COUNT_CHG": "-0.29980000",
+                        "VISITOR_COUNT_YDAY": "100",
+                        "PAY_BUYER_COUNT": "100",
+                        "PAY_BUYER_COUNT_CHG": "-0.29980000",
+                        "PAY_BUYER_COUNT_YDAY": "100",
+                        "PAY_CONVERSION_RATE": "0.06050000",
+                        "PAY_CONVERSION_RATE_CHG": "-0.29980000",
+                        "PAY_CONVERSION_RATE_YDAY": "0.06050000",
+                        "REFUND_AMOUNT": "12345.67",
+                        "REFUND_AMOUNT_CHG": "-0.29980000",
+                        "REFUND_AMOUNT_YDAY": "12345.67",
+                        "NET_PAYMENT_AMOUNT": "12345.67",
+                        "NET_PAYMENT_AMOUNT_CHG": "-0.29980000",
+                        "NET_PAYMENT_AMOUNT_YDAY": "12345.67",
+                        "CART_USER_COUNT": "100",
+                        "CART_USER_COUNT_CHG": "-0.29980000",
+                        "CART_USER_COUNT_YDAY": "100",
+                        "PAGE_VIEW_COUNT": "100",
+                        "PAGE_VIEW_COUNT_CHG": "-0.29980000",
+                        "PAGE_VIEW_COUNT_YDAY": "100",
+                        "PAID_SUBORDER_COUNT": "100",
+                        "PAID_SUBORDER_COUNT_CHG": "-0.29980000",
+                        "PAID_SUBORDER_COUNT_YDAY": "100",
+                        "PAID_ITEM_COUNT": "100",
+                        "PAID_ITEM_COUNT_CHG": "-0.29980000",
+                        "PAID_ITEM_COUNT_YDAY": "100",
+                        "AVG_ORDER_VALUE": "123.4567890123456789",
+                        "AVG_ORDER_VALUE_CHG": "-0.29980000",
+                        "AVG_ORDER_VALUE_YDAY": "123.4567890123456789",
+                        "CART_ITEM_COUNT": "100",
+                        "CART_ITEM_COUNT_CHG": "-0.29980000",
+                        "CART_ITEM_COUNT_YDAY": "100",
+                        "AMOUNT_REFUND_RATE": "0.06050000",
+                        "AMOUNT_REFUND_RATE_CHG": "-0.29980000",
+                        "AMOUNT_REFUND_RATE_YDAY": "0.06050000",
+                        "ORDER_REFUND_RATE": "0.06050000",
+                        "ORDER_REFUND_RATE_CHG": "-0.29980000",
+                        "ORDER_REFUND_RATE_YDAY": "0.06050000",
+                        "FAVORITE_USER_COUNT": "100",
+                        "FAVORITE_USER_COUNT_CHG": "-0.29980000",
+                        "FAVORITE_USER_COUNT_YDAY": "100",
+                        "SHOP_CUSTOMER_COUNT": "100",
+                        "SHOP_CUSTOMER_COUNT_CHG": "-0.29980000",
+                        "SHOP_CUSTOMER_COUNT_YDAY": "100",
+                        "BATCH_NO": "202611251300",
+                        "DOWNLOAD_TIME": "2026-11-25 13:12:00",
+                        "WRITE_TIME": "2026-11-25 13:12:00",
+                        "CREATED_TIME": "2026-11-25 13:12:00",
+                        "MODIFIED_TIME": "2026-11-25 13:12:00"
+                      }
+                    ],
+                    "pagination": {
+                      "page": 1,
+                      "pageSize": 50,
+                      "hasMore": false
+                    }
+                  }
                 }
               }
             }
@@ -4976,6 +5124,838 @@
           },
           "data": {
             "$ref": "#/components/schemas/OrdersQueryData"
+          }
+        }
+      },
+      "SycmOverviewHourlyFilters": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "description": "可选精确匹配维度。键必须为以下大写Oracle原列名，值必须为字符串，多个条件按AND组合；不接受指标、任意SQL或通配符。BATCH_NO只能通过顶层batchNo筛选。省略或null表示不加维度筛选。",
+        "properties": {
+          "SECTION_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "栏目；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。"
+          },
+          "MENU_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "菜单；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。"
+          },
+          "DATA_POINT": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "数据点；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。"
+          },
+          "DIMENSION_NAME": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "维度；去除首尾空白后按等值精确匹配，非空且最多50个字符（Oracle CHAR语义）。"
+          },
+          "DATE_RANGE": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "日期范围；去除首尾空白后按等值精确匹配，非空且最多100个字符（Oracle CHAR语义）。"
+          }
+        }
+      },
+      "SycmOverviewHourlyQueryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchNo"
+        ],
+        "properties": {
+          "batchNo": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 12,
+            "pattern": "^(?!0000)[0-9]{4}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])([01][0-9]|2[0-3])00$",
+            "description": "必填小时批次号；yyyyMMddHHmm，合法日期小时且分钟固定00，例如202611251300。按BATCH_NO精确匹配；导入程序须按此约定填写，EXPORT_TIME、DOWNLOAD_TIME不参与小时筛选。",
+            "example": "202611251300"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/SycmOverviewHourlyFilters"
+          },
+          "page": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "页码，省略或null时为1。"
+          },
+          "pageSize": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "每页条数，省略或null时为50。"
+          }
+        },
+        "example": {
+          "batchNo": "202611251300",
+          "page": 1,
+          "pageSize": 50
+        },
+        "description": "查询数据所属的单个整点批次；不接受startDate/endDate或其他未声明字段。"
+      },
+      "SycmOverviewHourlyQueryData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/SycmOverviewHourlyRow"
+            },
+            "description": "该小时批次的本页数据；无数据时为[]。按ID升序排列。"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "SycmOverviewHourlyQueryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SycmOverviewHourlyQueryData"
+          }
+        }
+      },
+      "SycmOverviewHourlyRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ID",
+          "SECTION_NAME",
+          "MENU_NAME",
+          "DATA_POINT",
+          "DIMENSION_NAME",
+          "DATE_RANGE",
+          "EXPORT_TIME",
+          "PAYMENT_AMOUNT",
+          "PAYMENT_AMOUNT_CHG",
+          "PAYMENT_AMOUNT_YDAY",
+          "VISITOR_COUNT",
+          "VISITOR_COUNT_CHG",
+          "VISITOR_COUNT_YDAY",
+          "PAY_BUYER_COUNT",
+          "PAY_BUYER_COUNT_CHG",
+          "PAY_BUYER_COUNT_YDAY",
+          "PAY_CONVERSION_RATE",
+          "PAY_CONVERSION_RATE_CHG",
+          "PAY_CONVERSION_RATE_YDAY",
+          "REFUND_AMOUNT",
+          "REFUND_AMOUNT_CHG",
+          "REFUND_AMOUNT_YDAY",
+          "NET_PAYMENT_AMOUNT",
+          "NET_PAYMENT_AMOUNT_CHG",
+          "NET_PAYMENT_AMOUNT_YDAY",
+          "CART_USER_COUNT",
+          "CART_USER_COUNT_CHG",
+          "CART_USER_COUNT_YDAY",
+          "PAGE_VIEW_COUNT",
+          "PAGE_VIEW_COUNT_CHG",
+          "PAGE_VIEW_COUNT_YDAY",
+          "PAID_SUBORDER_COUNT",
+          "PAID_SUBORDER_COUNT_CHG",
+          "PAID_SUBORDER_COUNT_YDAY",
+          "PAID_ITEM_COUNT",
+          "PAID_ITEM_COUNT_CHG",
+          "PAID_ITEM_COUNT_YDAY",
+          "AVG_ORDER_VALUE",
+          "AVG_ORDER_VALUE_CHG",
+          "AVG_ORDER_VALUE_YDAY",
+          "CART_ITEM_COUNT",
+          "CART_ITEM_COUNT_CHG",
+          "CART_ITEM_COUNT_YDAY",
+          "AMOUNT_REFUND_RATE",
+          "AMOUNT_REFUND_RATE_CHG",
+          "AMOUNT_REFUND_RATE_YDAY",
+          "ORDER_REFUND_RATE",
+          "ORDER_REFUND_RATE_CHG",
+          "ORDER_REFUND_RATE_YDAY",
+          "FAVORITE_USER_COUNT",
+          "FAVORITE_USER_COUNT_CHG",
+          "FAVORITE_USER_COUNT_YDAY",
+          "SHOP_CUSTOMER_COUNT",
+          "SHOP_CUSTOMER_COUNT_CHG",
+          "SHOP_CUSTOMER_COUNT_YDAY",
+          "BATCH_NO",
+          "DOWNLOAD_TIME",
+          "WRITE_TIME",
+          "CREATED_TIME",
+          "MODIFIED_TIME"
+        ],
+        "description": "源表60个字段均返回，数值和ID为字符串，源NULL返回空字符串。按 batchNo 精确匹配 BATCH_NO，复用天猫小时接口的 yyyyMMddHHmm 整点约定，分钟必须为00。导入程序须将 BATCH_NO 写为该格式；建表语句只定义导入批次号，不会自动生成小时编码。只返回指定批次源快照，不计算单小时增量、相邻批次差值或聚合。EXPORT_TIME 为导出时间，DOWNLOAD_TIME 为文件下载时间，均不替代批次筛选。所有百分比和较昨日同时段变化值以小数存储，0.0605表示6.05%，-0.2998表示-29.98%，接口不进行比率换算。",
+        "properties": {
+          "ID": {
+            "type": "string",
+            "nullable": false,
+            "description": "自增主键；内部自增行标识；十进制字符串，不代表业务唯一键；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "自增主键",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "900719925474099312"
+          },
+          "SECTION_NAME": {
+            "type": "string",
+            "nullable": false,
+            "description": "栏目；源字符串；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "栏目",
+            "x-oracle-char-length": 100,
+            "x-oracle-length-semantics": "CHAR",
+            "example": "首页"
+          },
+          "MENU_NAME": {
+            "type": "string",
+            "nullable": false,
+            "description": "菜单；源字符串；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "菜单",
+            "x-oracle-char-length": 100,
+            "x-oracle-length-semantics": "CHAR",
+            "example": "数据概览"
+          },
+          "DATA_POINT": {
+            "type": "string",
+            "nullable": false,
+            "description": "数据点；源字符串；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "数据点",
+            "x-oracle-char-length": 100,
+            "x-oracle-length-semantics": "CHAR",
+            "example": "实时"
+          },
+          "DIMENSION_NAME": {
+            "type": "string",
+            "nullable": false,
+            "description": "维度；源字符串；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "维度",
+            "x-oracle-char-length": 50,
+            "x-oracle-length-semantics": "CHAR",
+            "example": "本店"
+          },
+          "DATE_RANGE": {
+            "type": "string",
+            "nullable": false,
+            "description": "日期范围；源字符串；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "日期范围",
+            "x-oracle-char-length": 100,
+            "x-oracle-length-semantics": "CHAR",
+            "example": ""
+          },
+          "EXPORT_TIME": {
+            "type": "string",
+            "nullable": false,
+            "description": "导出时间；精确到秒；YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-comment": "导出时间；精确到秒",
+            "x-oracle-data-length": 7,
+            "example": "2026-11-25 13:12:00"
+          },
+          "PAYMENT_AMOUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付金额（本店）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付金额（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "PAYMENT_AMOUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付金额较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付金额较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAYMENT_AMOUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付金额（昨日）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付金额（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "VISITOR_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "访客数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "访客数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "VISITOR_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "访客数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "访客数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "VISITOR_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "访客数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "访客数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAY_BUYER_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付买家数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付买家数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAY_BUYER_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付买家数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付买家数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAY_BUYER_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付买家数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付买家数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAY_CONVERSION_RATE": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付转化率（本店）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付转化率（本店）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "PAY_CONVERSION_RATE_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付转化率较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付转化率较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAY_CONVERSION_RATE_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付转化率（昨日）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付转化率（昨日）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "REFUND_AMOUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "退款金额（本店）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "退款金额（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "REFUND_AMOUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "退款金额较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "退款金额较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "REFUND_AMOUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "退款金额（昨日）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "退款金额（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "NET_PAYMENT_AMOUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "净支付金额（本店）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "净支付金额（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "NET_PAYMENT_AMOUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "净支付金额较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "净支付金额较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "NET_PAYMENT_AMOUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "净支付金额（昨日）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "净支付金额（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 20,
+            "x-oracle-scale": 2,
+            "example": "12345.67"
+          },
+          "CART_USER_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购人数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购人数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "CART_USER_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购人数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购人数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "CART_USER_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购人数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购人数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAGE_VIEW_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "浏览量（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "浏览量（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAGE_VIEW_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "浏览量较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "浏览量较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAGE_VIEW_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "浏览量（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "浏览量（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAID_SUBORDER_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付子订单数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付子订单数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAID_SUBORDER_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付子订单数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付子订单数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAID_SUBORDER_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付子订单数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付子订单数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAID_ITEM_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付件数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付件数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "PAID_ITEM_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付件数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付件数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "PAID_ITEM_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "支付件数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "支付件数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "AVG_ORDER_VALUE": {
+            "type": "string",
+            "nullable": false,
+            "description": "客单价（本店）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "客单价（本店）",
+            "x-oracle-data-length": 22,
+            "example": "123.4567890123456789"
+          },
+          "AVG_ORDER_VALUE_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "客单价较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "客单价较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "AVG_ORDER_VALUE_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "客单价（昨日）；金额/单价原值；十进制字符串，按源精度返回；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "客单价（昨日）",
+            "x-oracle-data-length": 22,
+            "example": "123.4567890123456789"
+          },
+          "CART_ITEM_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购件数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购件数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "CART_ITEM_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购件数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购件数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "CART_ITEM_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "加购件数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "加购件数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "AMOUNT_REFUND_RATE": {
+            "type": "string",
+            "nullable": false,
+            "description": "金额退款率（本店）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "金额退款率（本店）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "AMOUNT_REFUND_RATE_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "金额退款率较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "金额退款率较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "AMOUNT_REFUND_RATE_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "金额退款率（昨日）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "金额退款率（昨日）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "ORDER_REFUND_RATE": {
+            "type": "string",
+            "nullable": false,
+            "description": "订单退款率（本店）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "订单退款率（本店）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "ORDER_REFUND_RATE_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "订单退款率较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "订单退款率较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "ORDER_REFUND_RATE_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "订单退款率（昨日）；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "订单退款率（昨日）；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "0.06050000"
+          },
+          "FAVORITE_USER_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "商品收藏人数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "商品收藏人数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "FAVORITE_USER_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "商品收藏人数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "商品收藏人数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "FAVORITE_USER_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "商品收藏人数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "商品收藏人数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "SHOP_CUSTOMER_COUNT": {
+            "type": "string",
+            "nullable": false,
+            "description": "店铺客户数（本店）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "店铺客户数（本店）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "SHOP_CUSTOMER_COUNT_CHG": {
+            "type": "string",
+            "nullable": false,
+            "description": "店铺客户数较昨日同时段；按小数存储，6.05%存为0.0605；小数比例；0.0605表示6.05%，-0.2998表示-29.98%；按源值返回，不做换算；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "店铺客户数较昨日同时段；按小数存储，6.05%存为0.0605",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 8,
+            "example": "-0.29980000"
+          },
+          "SHOP_CUSTOMER_COUNT_YDAY": {
+            "type": "string",
+            "nullable": false,
+            "description": "店铺客户数（昨日）；计数原值；十进制字符串，统计范围沿用源数据；源NULL返回空字符串。",
+            "x-oracle-data-type": "NUMBER",
+            "x-oracle-comment": "店铺客户数（昨日）",
+            "x-oracle-data-length": 22,
+            "x-oracle-precision": 18,
+            "x-oracle-scale": 0,
+            "example": "100"
+          },
+          "BATCH_NO": {
+            "type": "string",
+            "nullable": false,
+            "description": "导入批次号，同一次导入使用同一批次号；yyyyMMddHHmm；沿用小时接口整点约定，分钟固定00，由导入程序填入；源NULL返回空字符串。",
+            "x-oracle-data-type": "VARCHAR2",
+            "x-oracle-comment": "导入批次号，同一次导入使用同一批次号",
+            "x-oracle-data-length": 32,
+            "example": "202611251300"
+          },
+          "DOWNLOAD_TIME": {
+            "type": "string",
+            "nullable": false,
+            "description": "文件实际下载时间，由导入程序填入；YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-comment": "文件实际下载时间，由导入程序填入",
+            "x-oracle-data-length": 7,
+            "example": "2026-11-25 13:12:00"
+          },
+          "WRITE_TIME": {
+            "type": "string",
+            "nullable": false,
+            "description": "写入时间，默认SYSDATE；YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-comment": "写入时间，默认SYSDATE",
+            "x-oracle-data-length": 7,
+            "example": "2026-11-25 13:12:00"
+          },
+          "CREATED_TIME": {
+            "type": "string",
+            "nullable": false,
+            "description": "该行首次入库时间，默认SYSDATE；YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-comment": "该行首次入库时间，默认SYSDATE",
+            "x-oracle-data-length": 7,
+            "example": "2026-11-25 13:12:00"
+          },
+          "MODIFIED_TIME": {
+            "type": "string",
+            "nullable": false,
+            "description": "该行最后修改时间，插入默认SYSDATE，更新时由程序维护；YYYY-MM-DD HH:mm:ss；数据库本地时间，不附时区偏移；源NULL返回空字符串。",
+            "x-oracle-data-type": "DATE",
+            "x-oracle-comment": "该行最后修改时间，插入默认SYSDATE，更新时由程序维护",
+            "x-oracle-data-length": 7,
+            "example": "2026-11-25 13:12:00"
           }
         }
       }

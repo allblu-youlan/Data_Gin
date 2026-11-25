@@ -59,7 +59,7 @@ func (service *OpenTmallQueryService) Query(ctx context.Context, actor uint, dat
 	}
 	permission := ""
 	switch dataset {
-	case reportoracle.TmallSycm, reportoracle.TmallSycmHourly:
+	case reportoracle.TmallSycm, reportoracle.TmallSycmHourly, reportoracle.TmallSycmOverviewHourly:
 		permission = model.PermissionTmallSycmRead
 	case reportoracle.TmallQztg, reportoracle.TmallQztgHourly:
 		permission = model.PermissionTmallQztgRead

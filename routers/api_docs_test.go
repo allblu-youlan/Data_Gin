@@ -76,8 +76,8 @@ func TestAPIDocsPublicWithoutDatabaseAndCacheable(t *testing.T) {
 			}
 		}
 	}
-	if count != 14 || monitoringCount != 3 || feishuAttendanceCount != 3 || youzanCount != 2 {
-		t.Fatalf("expected six Tmall, three monitoring, three Feishu attendance and two Youzan APIs, got %d total, %d monitoring, %d Feishu attendance and %d youzan", count, monitoringCount, feishuAttendanceCount, youzanCount)
+	if count != 15 || monitoringCount != 3 || feishuAttendanceCount != 3 || youzanCount != 2 {
+		t.Fatalf("expected seven Tmall, three monitoring, three Feishu attendance and two Youzan APIs, got %d total, %d monitoring, %d Feishu attendance and %d youzan", count, monitoringCount, feishuAttendanceCount, youzanCount)
 	}
 	etag := response.Header().Get("ETag")
 	if etag == "" || response.Header().Get("Cache-Control") == "" {

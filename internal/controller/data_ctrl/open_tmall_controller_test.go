@@ -175,6 +175,7 @@ func performOpenTmallControllerRequest(service OpenTmallQueryService, path, body
 	router.POST("/api/open/tmall/qztg/query", controller.QueryQztg)
 	router.POST("/api/open/tmall/tot/query", controller.QueryTot)
 	router.POST("/api/open/tmall/sycm/hourly/query", controller.QuerySycmHourly)
+	router.POST("/api/open/tmall/sycm/overview/hourly/query", controller.QuerySycmOverviewHourly)
 	router.POST("/api/open/tmall/qztg/hourly/query", controller.QueryQztgHourly)
 	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")

@@ -37,7 +37,7 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionBojunOrderRead, "查看伯俊订单", "订单", "通过开放接口查询伯俊订单", "MEDIUM", true, 300},
 	{model.PermissionBojunStoreRead, "查询伯俊店仓", "店仓", "通过开放接口查询伯俊店仓档案", "MEDIUM", true, 310},
 	{model.PermissionBojunStockRead, "查询伯俊实时库存", "库存", "通过开放接口按店仓和商品条码、款色或款号查询实时库存", "MEDIUM", true, 320},
-	{model.PermissionTmallSycmRead, "查询天猫生意参谋", "天猫", "通过开放接口查询天猫生意参谋商品订单数据", "MEDIUM", true, 330},
+	{model.PermissionTmallSycmRead, "查询天猫生意参谋", "天猫", "通过开放接口查询天猫生意参谋商品订单与首页概况数据", "MEDIUM", true, 330},
 	{model.PermissionTmallQztgRead, "查询天猫全站推广", "天猫", "通过开放接口查询天猫全站推广商品数据", "MEDIUM", true, 340},
 	{model.PermissionTmallTotRead, "查询天猫商品汇总", "天猫", "通过开放接口查询天猫商品汇总数据", "MEDIUM", true, 350},
 	{model.PermissionTmallOrdersRead, "天猫订单商品明细查询", "天猫", "通过开放接口实时查询天猫订单商品明细数据", "MEDIUM", true, 360},

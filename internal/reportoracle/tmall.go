@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/godror/godror"
 )
@@ -15,12 +16,13 @@ import (
 type TmallDataset string
 
 const (
-	TmallOrders     TmallDataset = "orders"
-	TmallSycm       TmallDataset = "sycm"
-	TmallQztg       TmallDataset = "qztg"
-	TmallTot        TmallDataset = "tot"
-	TmallQztgHourly TmallDataset = "qztg_hourly"
-	TmallSycmHourly TmallDataset = "sycm_hourly"
+	TmallOrders             TmallDataset = "orders"
+	TmallSycm               TmallDataset = "sycm"
+	TmallQztg               TmallDataset = "qztg"
+	TmallTot                TmallDataset = "tot"
+	TmallQztgHourly         TmallDataset = "qztg_hourly"
+	TmallSycmHourly         TmallDataset = "sycm_hourly"
+	TmallSycmOverviewHourly TmallDataset = "sycm_overview_hourly"
 )
 
 type TmallQuery struct {
@@ -46,6 +48,8 @@ type TmallColumn struct {
 	Length     int    `json:"length"`
 	Nullable   bool   `json:"nullable"`
 	Filterable bool   `json:"filterable"`
+	// CharacterLength enforces Oracle CHAR semantics in addition to the byte limit.
+	CharacterLength int `json:"-"`
 }
 
 type tmallTable struct {
@@ -75,7 +79,7 @@ func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, er
 		}
 	} else if query.StartTime != "" || query.EndTime != "" || query.TimeField != "" {
 		return TmallQuery{}, fmt.Errorf("time range is only supported for realtime orders")
-	} else if dataset == TmallQztgHourly || dataset == TmallSycmHourly {
+	} else if dataset == TmallQztgHourly || dataset == TmallSycmHourly || dataset == TmallSycmOverviewHourly {
 		if query.StartDate != "" || query.EndDate != "" {
 			return TmallQuery{}, fmt.Errorf("startDate and endDate are not supported for hourly tmall datasets")
 		}
@@ -99,14 +103,16 @@ func NormalizeTmallQuery(dataset TmallDataset, query TmallQuery) (TmallQuery, er
 	filters := make(map[string]string, len(query.Filters))
 	for name, value := range query.Filters {
 		maxLength := 0
+		maxCharacters := 0
 		for _, column := range table.columns {
 			if column.Name == name && column.Filterable {
 				maxLength = column.Length
+				maxCharacters = column.CharacterLength
 				break
 			}
 		}
 		value = strings.TrimSpace(value)
-		if maxLength == 0 || value == "" || len(value) > maxLength {
+		if maxLength == 0 || value == "" || len(value) > maxLength || (maxCharacters > 0 && utf8.RuneCountInString(value) > maxCharacters) {
 			return TmallQuery{}, fmt.Errorf("invalid tmall dimension filter %q", name)
 		}
 		if dataset == TmallOrders && name == "NUM_IID" {

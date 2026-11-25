@@ -60,7 +60,7 @@ export default function ApiDocsPage() {
     </header>
     <div className={styles.layout}>
       <aside id="api-directory" className={`${styles.sidebar} ${directoryOpen ? styles.directoryOpen : ''}`} aria-label="接口目录">
-        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、路径、字段或权限码" aria-label="搜索接口、路径、字段或权限码" /></label>
+        <label className={styles.search}><Search size={17} aria-hidden="true" /><input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)} placeholder="搜索接口、字段等，如：首页概况" aria-label="搜索接口、路径、字段或权限码" /></label>
         <div className={styles.directoryTitle}>接口目录 <span aria-live="polite">{count} 个接口</span></div>
         <nav>{groups.map(group => <section className={styles.navGroup} key={group.code}><h2>{group.name}</h2>{group.children.map(child => <details key={child.code} open><summary><ChevronRight size={14} aria-hidden="true" />{child.name}<span>{child.operations.length}</span></summary><div>{child.operations.map(op => <a key={op.id} href={`#${encodeURIComponent(op.id)}`} onClick={() => { setDirectoryOpen(false); if (window.matchMedia('(max-width: 760px)').matches) detailRef.current?.focus({ preventScroll: true }) }} aria-current={current?.operation.id === op.id ? 'page' : undefined}><span className={styles.methodSmall}>{op.method}</span><span>{op.title}</span></a>)}</div></details>)}</section>)}</nav>
         {!count && document && <p className={styles.muted}>未找到匹配接口，试试字段名称、路径或权限码。</p>}

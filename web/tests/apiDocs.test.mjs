@@ -129,6 +129,44 @@ const monitoringDocument = {
 }
 const operationIDs = groups => groups.flatMap(group => group.children.flatMap(child => child.operations.map(item => item.id)))
 const fieldAt = (fields, path) => path.reduce((field, name) => field.children.find(item => item.name === name), { children: fields })
+const tmallOperations = catalog.operations.filter(item => item.permission.startsWith('tmall.'))
+const tmallDocument = {
+  title: catalog.title,
+  version: catalog.version,
+  groups: [{ code: 'tmall.read', name: '天猫', children: [...new Set(tmallOperations.map(item => item.permission))].map(permission => ({
+    code: permission, name: permission, operations: tmallOperations.filter(item => item.permission === permission),
+  })) }],
+}
+
+test('locates the overview hourly contract before references in shared Tmall notes', () => {
+  const parsed = parseApiDocument({ code: 0, data: { document: tmallDocument } })
+  for (const query of ['首页概况', '/api/open/tmall/sycm/overview/hourly/query', ' TMALL-SYCM-OVERVIEW-HOURLY ']) {
+    assert.deepEqual(operationIDs(filterApiGroups(parsed.groups, query)), ['tmall-sycm-overview-hourly'])
+  }
+  assert.deepEqual(operationIDs(filterApiGroups(parsed.groups, ' TMALL.SYCM.READ ')), [
+    'tmall-sycm', 'tmall-sycm-hourly', 'tmall-sycm-overview-hourly',
+  ])
+  assert.equal(operationIDs(filterApiGroups(parsed.groups, '天猫')).length, 7)
+  assert.deepEqual(operationIDs(filterApiGroups(parsed.groups, 'PAYMENT_AMOUNT_CHG')), ['tmall-sycm-overview-hourly'])
+})
+
+test('renders overview examples with all 60 source fields and unchanged decimal values', () => {
+  const overview = tmallOperations.find(item => item.id === 'tmall-sycm-overview-hourly')
+  const curl = buildCurl(overview, 'https://api.example.com/')
+  assert.ok(curl.startsWith("curl --request POST 'https://api.example.com/api/open/tmall/sycm/overview/hourly/query'"))
+  assert.match(curl, /--header 'token: dg_open_REPLACE_WITH_YOUR_TOKEN'/)
+  assert.ok(curl.includes(`--data-raw '${JSON.stringify(overview.requestExample, null, 2)}'`))
+  assert.doesNotMatch(curl, /startDate|endDate|Bearer|Authorization/)
+  assert.match(overview.requestExample.batchNo, /^\d{10}00$/)
+  const items = fieldAt(overview.responseFields, ['data', 'items'])
+  const row = overview.responseExample.data.items[0]
+  assert.equal(items.children.length, 60)
+  assert.equal(Object.keys(row).length, 60)
+  assert.equal(row.PAY_CONVERSION_RATE, '0.06050000')
+  assert.equal(row.PAYMENT_AMOUNT_CHG, '-0.29980000')
+  assert.equal(row.AVG_ORDER_VALUE, '123.4567890123456789')
+  assert.equal(row.DATE_RANGE, '')
+})
 
 test('discovers attendance permissions, field search and executable examples from the backend catalog', () => {
   const operations = catalog.operations.filter(item => item.parentPermission === 'feishu_attendance.read')
