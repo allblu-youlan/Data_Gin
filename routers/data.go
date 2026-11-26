@@ -319,6 +319,7 @@ func registerReportCenterRoutes(api *gin.RouterGroup, enabled bool) {
 	if !enabled {
 		return
 	}
+	registerTableBoardRoutes(api)
 	registerReportRoutes(api, data_ctrl.NewReportController())
 	registerReportInputQueryRoutes(api, data_ctrl.NewReportInputQueryController())
 	registerReportDatasourceRoutes(api, data_ctrl.NewReportDatasourceController())

@@ -213,7 +213,11 @@ func (controller *MallController) ConfirmGeocode(c *gin.Context) {
 }
 
 func decodeMallJSON(c *gin.Context, destination interface{}) error {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxMallRequestBodyBytes)
+	return decodeLimitedJSON(c, destination, maxMallRequestBodyBytes)
+}
+
+func decodeLimitedJSON(c *gin.Context, destination interface{}, maxBytes int64) error {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
