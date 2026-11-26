@@ -151,7 +151,7 @@ function Directory({ groups, currentID, query, onNavigate, onClear }: { groups: 
       const operations = group.children.flatMap(child => child.operations)
       return <details className={styles.navGroup} key={group.code} open={operations.some(operation => operation.id === currentID) || Boolean(query.trim())}>
         <summary>{group.name}<ChevronRight size={15} aria-hidden="true" /></summary>
-        <ul>{operations.map(operation => <li key={operation.id}><a href={operationLink(operation.id)} title={operation.title} aria-current={currentID === operation.id ? 'page' : undefined} onClick={onNavigate}>{apiOperationLabel(operation)}</a></li>)}</ul>
+        <ul>{operations.map(operation => <li key={operation.id}><a href={operationLink(operation.id)} title={operation.title} aria-current={currentID === operation.id ? 'page' : undefined} onClick={onNavigate}>{operation.title}</a></li>)}</ul>
       </details>
     })}</nav>
     {!count && query.trim() && <div className={styles.noMatches}><p>没有匹配的接口</p><Button variant="ghost" onClick={onClear}>清除搜索</Button></div>}
