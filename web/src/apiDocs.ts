@@ -27,6 +27,39 @@ export type ApiOperation = {
 export type ApiGroup = { code: string; name: string; description?: string; children: { code: string; name: string; operations: ApiOperation[] }[] }
 export type ApiDocument = { title: string; version: string; description?: string; groups: ApiGroup[] }
 
+export function formatApiFieldType(type: string): string {
+  const value = type.trim()
+  const array = value.match(/^array<(.+)>$/i) ?? value.match(/^(.+)\[\]$/)
+  if (array) {
+    const itemType = formatApiFieldType(array[1])
+    return `${itemType.includes(' | ') ? `(${itemType})` : itemType}[]`
+  }
+  const alternatives = value.split(/\s*(?:\/|\|)\s*/)
+  if (alternatives.length > 1) return alternatives.map(formatApiFieldType).join(' | ')
+
+  const primitive = value.replace(/\([^)]*\)/g, '').replace(/\s+unsigned$/i, '').trim().toLowerCase()
+  if (/^(?:string|n?varchar2?|n?char|text|clob|date|datetime|timestamp)$/.test(primitive)) return 'string'
+  if (/^(?:integer|u?int\d*|bigint|smallint|tinyint)$/.test(primitive)) return 'integer'
+  if (/^(?:number|numeric|decimal|float\d*|double|real)$/.test(primitive)) return 'number'
+  if (/^(?:boolean|bool)$/.test(primitive)) return 'boolean'
+  if (primitive === 'object' || primitive === 'json' || /^[A-Z][A-Za-z0-9]*$/.test(value)) return 'object'
+  return primitive
+}
+
+export function formatApiFieldDescription(description: string): string {
+  return description.split('\n').map(line => {
+    const value = line.trim()
+    if (/^(?:Oracle源类型|数据库类型|SQL类型)[：:]/i.test(value)) return ''
+    if (value === '精确filters：是') return '精确筛选：支持'
+    if (value === '精确filters：否') return '精确筛选：不支持'
+    const meaning = value.replace(/^(?:含义、关系|单位\/格式与使用说明|空值 \/ 可选性)[：:]\s*/, '')
+      .replace(/源数据库NULL时返回/g, '为空时返回')
+    if (/^(?:(?:字段必返|必返|开放接口必返)，)?不为 null$/.test(meaning)) return ''
+    if (meaning === '源字符串' || meaning === '标识字符串') return ''
+    return meaning
+  }).filter(Boolean).join('\n')
+}
+
 export function buildApiDocsLink(permission = ''): string {
   const query = new URLSearchParams({ view: 'api-docs' })
   if (permission.trim()) query.set('permission', permission.trim())

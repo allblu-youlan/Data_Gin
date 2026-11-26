@@ -1,7 +1,40 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseApiDocument, filterApiGroups, buildCurl, buildApiDocsLink } from '../.test-dist/apiDocs.js'
+import { parseApiDocument, filterApiGroups, buildCurl, buildApiDocsLink, formatApiFieldType, formatApiFieldDescription } from '../.test-dist/apiDocs.js'
+
+test('shows public JSON types without database widths or named object schemas', () => {
+  const cases = [
+    ['VARCHAR2(32 字节)', 'string'],
+    ['decimal(18, 2)', 'number'],
+    ['NUMBER(38,18)', 'number'],
+    ['bigint unsigned', 'integer'],
+    ['integer(int64)', 'integer'],
+    ['datetime', 'string'],
+    ['boolean', 'boolean'],
+    ['WeatherMeta', 'object'],
+    ['QualityWarning[]', 'object[]'],
+    ['string[]', 'string[]'],
+    ['array<object>', 'object[]'],
+    ['array<string / integer>', '(string | integer)[]'],
+    ['integer / null', 'integer | null'],
+    ['object / null', 'object | null'],
+  ]
+  for (const [source, expected] of cases) assert.equal(formatApiFieldType(source), expected, source)
+})
+
+test('removes storage metadata while retaining field meaning, filtering and units', () => {
+  const description = 'Oracle源类型：NUMBER(18,2)\n精确filters：否\n含义、关系：商品价格；按源值返回。\n单位/格式与使用说明：人民币元，不换算'
+  assert.equal(formatApiFieldDescription(description), '精确筛选：不支持\n商品价格；按源值返回。\n人民币元，不换算')
+  assert.equal(formatApiFieldDescription('Oracle源类型：VARCHAR2(32 字节)\n精确filters：是\n含义、关系：主订单编号，不可单独去重。\n单位/格式与使用说明：标识字符串'), '精确筛选：支持\n主订单编号，不可单独去重。')
+})
+
+test('keeps missing-value and date semantics without repeating field-presence metadata', () => {
+  assert.equal(formatApiFieldDescription('空值 / 可选性：字段必返，不为 null\n开始时间，YYYY-MM-DD HH:mm:ss'), '开始时间，YYYY-MM-DD HH:mm:ss')
+  assert.equal(formatApiFieldDescription('空值 / 可选性：源数据库NULL时返回空字符串\n店仓名称'), '为空时返回空字符串\n店仓名称')
+  assert.equal(formatApiFieldDescription('空值 / 可选性：值缺失时省略字段，不返回 null\n生效时间'), '值缺失时省略字段，不返回 null\n生效时间')
+  assert.equal(formatApiFieldDescription('访客数，跨小时不去重。'), '访客数，跨小时不去重。')
+})
 
 const operation = { id: 'orders', method: 'POST', path: '/api/open/orders/query', title: '订单查询', description: '分页查询订单', permission: 'orders.read', authentication: 'token 请求头', requestFields: [], responseFields: [{ name: 'data', type: 'object', required: true, description: '结果', children: [{ name: 'externalOrderNo', type: 'string', required: true, description: '外部订单号' }] }], requestExample: { note: "customer's order" }, responseExample: { code: 0 }, errors: [] }
 const document = { title: '接口文档', version: '1', groups: [{ code: 'commerce', name: '业务平台', children: [{ code: 'orders', name: '订单', operations: [operation] }] }] }
