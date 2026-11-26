@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Copy, KeyRound, M
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Badge } from './components/ui/badge'
+import ApiDocsExportMenu from './ApiDocsExportMenu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './components/ui/table'
 import { apiURL } from './apiURL'
 import { buildCurl, filterApiGroups, formatApiFieldDescription, formatApiFieldType, parseApiDocument, type ApiDocument, type ApiField, type ApiOperation } from './apiDocs'
@@ -67,7 +68,7 @@ export default function ApiDocsPage() {
     <a className={styles.skip} href="#api-detail" onClick={event => { event.preventDefault(); mainRef.current?.focus() }}>跳到文档内容</a>
     <header className={styles.header}>
       <a href="?view=api-docs" className={styles.brand}><BookOpen size={21} aria-hidden="true" /><strong>allblu</strong><span>开放接口文档</span></a>
-      <div className={styles.headerMeta}><span>API Reference</span>{document && <Badge variant="outline">v{document.version}</Badge>}<Button variant="ghost" size="icon" className={styles.menuButton} aria-label={menuOpen ? '关闭接口目录' : '打开接口目录'} aria-expanded={menuOpen} aria-controls="api-directory" onClick={() => setMenuOpen(value => !value)}>{menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</Button></div>
+      <div className={styles.headerMeta}><span>API Reference</span>{document && <Badge variant="outline">v{document.version}</Badge>}<ApiDocsExportMenu document={document} currentOperationId={isAuth ? undefined : current?.operation.id} baseURL={new URL(baseURL || '/', window.location.origin).href} disabled={Boolean(error)} /><Button variant="ghost" size="icon" className={styles.menuButton} aria-label={menuOpen ? '关闭接口目录' : '打开接口目录'} aria-expanded={menuOpen} aria-controls="api-directory" onClick={() => setMenuOpen(value => !value)}>{menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</Button></div>
     </header>
     <div className={styles.layout}>
       <aside id="api-directory" className={`${styles.sidebar} ${menuOpen ? styles.sidebarOpen : ''}`} aria-label="接口目录">

@@ -113,6 +113,7 @@
 .feedback p { color: var(--color-text-secondary); margin-bottom: 24px; }
 .skip { position: fixed; left: 16px; top: -100px; background: var(--color-canvas); color: var(--color-text); padding: 10px; z-index: 10; }
 .skip:focus { top: 8px; }
+@media (max-width: 480px) { .headerMeta>[data-slot='badge'] { display: none; } }
 @media (min-width: 1600px) { .main { padding-left: 48px; padding-right: 48px; } .operationGrid { gap: 48px; } }
 @media (max-width: 1199px) { .layout { grid-template-columns: 240px minmax(0, 1fr); } .main { padding: 26px; } .operationGrid { grid-template-columns: minmax(0, 1fr); } .examplesInner { position: static; max-height: none; } }
 @media (max-width: 767px) {
