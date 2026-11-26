@@ -1,0 +1,9 @@
+.root { position: relative; display: inline-flex; }
+.menu { z-index: var(--layer-overlay); min-width: 176px; max-width: calc(100vw - 24px); padding: 4px; background: var(--color-canvas); color: var(--color-text); border: 1px solid var(--color-border-strong); border-radius: var(--radius-panel); font: 14px/1.5 var(--font-sans); }
+.item { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--radius-control); cursor: pointer; user-select: none; touch-action: manipulation; }
+.item[data-highlighted] { background: var(--color-surface-hover); outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.item[data-disabled] { color: var(--color-text-disabled); cursor: not-allowed; }
+.indicator { width: 16px; margin-right: 8px; display: inline-flex; align-items: center; }
+.separator { height: 1px; margin: 4px 0; background: var(--color-border); }
+.feedback:not(:empty) { position: absolute; top: calc(100% + 8px); right: 0; width: max-content; max-width: calc(100vw - 32px); padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-canvas); color: var(--color-text); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 899px) { .label { display: none; } .root>button { width: 44px; min-height: 44px; padding: 0; } }
