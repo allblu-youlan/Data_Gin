@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseApiDocument, filterApiGroups, buildCurl, buildApiDocsLink, formatApiFieldType, formatApiFieldDescription } from '../.test-dist/apiDocs.js'
+import { parseApiDocument, filterApiGroups, buildCurl, buildApiDocsLink, formatApiFieldType, formatApiFieldDescription, buildApiMarkdown, apiMarkdownFilename } from '../.test-dist/apiDocs.js'
 
 test('shows public JSON types without database widths or named object schemas', () => {
   const cases = [
@@ -152,4 +152,93 @@ test('retains nested monitoring field units, coverage and partial-result example
   assert.match(fieldAt(areas.responseFields, ['data', 'items', 'avgStayTime']).description, /秒/)
   assert.match(fieldAt(areas.responseFields, ['data', 'items', 'stayRate']).description, /0\.25表示25%/)
   assert.equal(areas.responseExample.data.hasData, true)
+})
+
+const exportOperation = {
+  ...operation,
+  path: '/api/open/orders/:id',
+  parentPermission: 'commerce.read',
+  requestFields: [
+    { name: 'TOKEN', type: 'string', required: true, location: 'header', description: '公共凭证' },
+    { name: 'Content-Type', type: 'string', required: true, location: 'header', description: 'application/json' },
+    { name: 'X-Trace', type: 'string', required: false, location: 'header', description: '跟踪标识' },
+    { name: 'id', type: 'integer(int64)', required: true, nullable: false, location: 'path', description: '订单编号', example: 12 },
+    { name: 'keyword', type: 'string', required: false, nullable: true, location: 'query', description: 'A | B\r\n筛选值 < 10', example: 'red bag' },
+    { name: 'token', type: 'string', required: false, location: 'body', description: '业务令牌字段，非请求头' },
+  ],
+  responseFields: [{ name: 'data', type: 'object', required: true, description: '结果', children: [{ name: 'items', type: 'object[]', required: true, description: '订单项', children: [{ name: 'amount', type: 'decimal(18, 2)', required: true, nullable: false, description: 'Oracle源类型：NUMBER(18,2)\n含义、关系：实付金额\n单位/格式与使用说明：元' }] }] }],
+  errors: [{ status: 422, code: 'A|B', description: '请求失败\n请修正参数' }],
+  notes: [{ title: '金额与 <范围>', body: '完整补充说明。\n\n- 金额按元返回。\n- 不做汇率换算。' }],
+}
+const exportDocument = { ...document, groups: [{ ...document.groups[0], children: [{ ...document.groups[0].children[0], operations: [exportOperation, { ...operation, id: 'refunds', title: '退款查询', path: '/api/open/refunds/query' }] }] }, { code: 'weather', name: '天气服务', children: [{ code: 'current', name: '当前天气', operations: [{ ...operation, id: 'weather', title: '天气查询', path: '/api/open/weather/query' }] }] }] }
+
+test('exports all groups with one shared authorization section and complete operation examples', () => {
+  const markdown = buildApiMarkdown(exportDocument, 'https://api.example.com/')
+  assert.equal(markdown.split('## 授权说明').length - 1, 1)
+  assert.ok(markdown.includes('token: dg_open_REPLACE_WITH_YOUR_TOKEN'))
+  for (const heading of ['## 业务平台', '### 订单', '#### 订单查询', '#### 退款查询', '## 天气服务', '### 当前天气', '#### 天气查询']) assert.ok(markdown.includes(heading), heading)
+  assert.ok(markdown.includes('orders.read'))
+  assert.ok(markdown.includes('commerce.read'))
+  assert.ok(markdown.includes(buildCurl(exportOperation, 'https://api.example.com/')))
+  assert.ok(markdown.includes(JSON.stringify(exportOperation.requestExample, null, 2)))
+  assert.ok(markdown.includes(JSON.stringify(exportOperation.responseExample, null, 2)))
+  assert.ok(markdown.includes(exportOperation.notes[0].body))
+})
+
+test('exports complete field paths and preserves input locations and nullability', () => {
+  const markdown = buildApiMarkdown(exportDocument, 'https://api.example.com', 'orders')
+  assert.ok(markdown.includes('| 字段 | 类型 | 含义 |'))
+  assert.ok(markdown.includes('| data.items[].amount | number | 实付金额<br>元 |'))
+  assert.ok(markdown.includes('| id | integer | 必填 · path 参数。订单编号 |'))
+  assert.ok(markdown.includes('| keyword | string \\| null | query 参数。A \\| B<br>筛选值 &lt; 10 |'))
+  assert.ok(markdown.includes('| X-Trace | string | header 参数。跟踪标识 |'))
+  assert.ok(markdown.includes('| token | string | 业务令牌字段，非请求头 |'))
+  assert.doesNotMatch(markdown, /\| TOKEN \||\| Content-Type \||Oracle源类型|NUMBER\(18,2\)/)
+  assert.ok(markdown.includes('| 422 | A\\|B | 请求失败<br>请修正参数 |'))
+  assert.ok(markdown.includes('<summary>金额与 &lt;范围&gt;</summary>'))
+})
+
+test('keeps optional response semantics and omits request JSON when there is no request body', () => {
+  const noBody = { ...operation, method: 'GET', requestExample: {}, responseFields: [{ name: 'discount', type: 'number / null', required: false, nullable: true, description: '优惠金额' }] }
+  const noBodyDocument = { ...document, groups: [{ ...document.groups[0], children: [{ ...document.groups[0].children[0], operations: [noBody] }] }] }
+  const markdown = buildApiMarkdown(noBodyDocument, 'https://api.example.com')
+  assert.doesNotMatch(markdown, /##### 请求 JSON|--data-raw/)
+  assert.ok(markdown.includes('| discount | number \\| null | 可能省略。优惠金额 |'))
+  assert.ok(markdown.includes('##### cURL 示例'))
+  assert.ok(markdown.includes('##### 响应 JSON'))
+})
+
+test('exports only the requested operation and rejects unknown IDs', () => {
+  const markdown = buildApiMarkdown(exportDocument, 'https://api.example.com', 'orders')
+  assert.ok(markdown.includes('#### 订单查询'))
+  assert.doesNotMatch(markdown, /退款查询|天气服务|天气查询/)
+  assert.equal(markdown.split('## 授权说明').length - 1, 1)
+  assert.throws(() => buildApiMarkdown(exportDocument, '', 'missing'), /接口不存在/)
+  assert.throws(() => buildApiMarkdown(exportDocument, '', ''), /接口不存在/)
+  assert.equal(exportDocument.groups[0].children[0].operations.length, 2)
+})
+
+test('names full and single Markdown downloads without filesystem separators', () => {
+  assert.equal(apiMarkdownFilename(document), '接口文档-v1.md')
+  assert.equal(apiMarkdownFilename(document, 'orders'), '接口文档-orders-v1.md')
+  assert.doesNotMatch(apiMarkdownFilename({ ...document, title: '开放/接口:文档?', version: '2/1' }), /[\\/:*?"<>|]/)
+  assert.throws(() => apiMarkdownFilename(document, 'missing'), /接口不存在/)
+})
+
+test('exports the entire real catalog without truncating deeply nested fields or notes', () => {
+  const fullDocument = { title: catalog.title, version: catalog.version, groups: [{ code: 'all', name: '全部接口', children: [{ code: 'catalog', name: '公开目录', operations: catalog.operations }] }] }
+  const markdown = buildApiMarkdown(fullDocument, 'https://api.example.com')
+  assert.equal((markdown.match(/^#### /gm) ?? []).length, catalog.operations.length)
+  assert.equal((markdown.match(/^##### 请求参数$/gm) ?? []).length, catalog.operations.length)
+  assert.equal((markdown.match(/^##### 响应字段$/gm) ?? []).length, catalog.operations.length)
+  const fieldCount = fields => fields.reduce((total, field) => total + 1 + fieldCount(field.children ?? []), 0)
+  const responseTables = [...markdown.matchAll(/##### 响应字段\n\n([\s\S]*?)\n\n##### 响应 JSON/g)]
+  assert.equal(responseTables.reduce((total, match) => total + match[1].split('\n').length - 2, 0), catalog.operations.reduce((total, item) => total + fieldCount(item.responseFields), 0))
+  for (const item of catalog.operations) {
+    assert.ok(markdown.includes(item.path), item.id)
+    assert.ok(markdown.includes(JSON.stringify(item.responseExample, null, 2)), item.id)
+    for (const note of item.notes ?? []) assert.ok(markdown.includes(note.body), `${item.id}: ${note.title}`)
+  }
+  assert.ok(markdown.includes('data.items[].avgVisitDuration'))
+  assert.ok(markdown.includes('data.items[].captureRate'))
 })
