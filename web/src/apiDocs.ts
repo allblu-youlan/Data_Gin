@@ -189,11 +189,11 @@ function fieldText(fields: ApiField[]): string {
   return fields.map(field => `${field.name} ${field.type} ${field.description} ${fieldText(field.children ?? [])}`).join(' ')
 }
 
-export function filterApiGroups(groups: ApiGroup[], query: string): ApiGroup[] {
+export function filterApiGroups(groups: ApiGroup[], query: string, displayText?: (operation: ApiOperation) => string): ApiGroup[] {
   const term = query.trim().toLocaleLowerCase()
   if (!term) return groups
   return groups.map(group => ({ ...group, children: group.children.map(child => ({ ...child, operations: child.operations.filter(op =>
-    `${group.code} ${group.name} ${child.code} ${child.name} ${op.id} ${op.title} ${op.path} ${op.method} ${op.permission} ${op.parentPermission ?? ''} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`.toLocaleLowerCase().includes(term),
+    `${group.code} ${group.name} ${child.code} ${child.name} ${op.id} ${op.title} ${displayText?.(op) ?? ''} ${op.path} ${op.method} ${op.permission} ${op.parentPermission ?? ''} ${op.description} ${(op.notes ?? []).map(note => `${note.title} ${note.body}`).join(' ')} ${fieldText(op.requestFields)} ${fieldText(op.responseFields)}`.toLocaleLowerCase().includes(term),
   ) })).filter(child => child.operations.length > 0) })).filter(group => group.children.length > 0)
 }
 
