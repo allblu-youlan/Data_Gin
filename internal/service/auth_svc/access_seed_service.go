@@ -60,6 +60,7 @@ var accessPermissionSeeds = []permissionSeed{
 	{model.PermissionReportManage, "管理报表", "报表中心", "维护数据源、过程形参、字段表头、权限和发布版本", "HIGH", false, 710},
 	{model.PermissionReportExecute, "运行报表", "报表中心", "使用已发布契约执行报表存储过程", "MEDIUM", false, 720},
 	{model.PermissionReportExport, "导出报表", "报表中心", "生成并下载已授权报表 Excel", "HIGH", false, 730},
+	{model.PermissionTableBoardUse, "使用表格看板", "报表中心", "直接读取已启用 Oracle 连接中的表数据，配置个人看板并导出", "HIGH", false, 740},
 	{model.PermissionOfficeMessageRead, "查看办公消息", "办公消息推送", "查看消息、推送目标和推送记录", "LOW", false, 800},
 	{model.PermissionOfficeMessageManage, "管理办公消息", "办公消息推送", "维护编辑消息、Oracle 过程和飞书推送目标", "HIGH", false, 810},
 	{model.PermissionOfficeMessagePush, "执行办公消息推送", "办公消息推送", "触发 Oracle 导出并通过飞书自建机器人发送", "HIGH", false, 820},
@@ -185,7 +186,7 @@ func defaultRoleIncludesPermission(roleCode string, permission model.Permission)
 	case model.RoleCodeSuperAdmin, model.RoleCodeAdmin:
 		return true
 	case model.RoleCodeOperator:
-		return permission.Module != "系统管理" && permission.Code != model.PermissionWeatherRawRead && !isOfficeMentionPermission(permission.Code)
+		return permission.Module != "系统管理" && permission.Code != model.PermissionTableBoardUse && permission.Code != model.PermissionWeatherRawRead && !isOfficeMentionPermission(permission.Code)
 	case model.RoleCodeViewer:
 		switch permission.Code {
 		case model.PermissionBusinessOverviewRead, model.PermissionMallRead, model.PermissionWeatherRead, model.PermissionSourceRead, model.PermissionPipelineRead, model.PermissionDeliveryRead, model.PermissionDataRead, model.PermissionExcelRead, model.PermissionReportRead, model.PermissionOfficeMessageRead:

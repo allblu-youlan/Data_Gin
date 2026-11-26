@@ -164,7 +164,12 @@ func applySupplementalSchemaMigrations(db *gorm.DB) error {
 	if err := db.AutoMigrate(&model.TableBoard{}); err != nil {
 		return fmt.Errorf("migrate table boards: %w", err)
 	}
-	return db.Create(&schemaMigrationRecord{Version: version, AppliedAt: time.Now().UTC()}).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := auth_svc.SyncTableBoardPermission(tx.Statement.Context, tx); err != nil {
+			return err
+		}
+		return tx.Create(&schemaMigrationRecord{Version: version, AppliedAt: time.Now().UTC()}).Error
+	})
 }
 
 func finalizeOfficeMessageMigration(db *gorm.DB) error {

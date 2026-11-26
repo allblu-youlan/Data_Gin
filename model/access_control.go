@@ -43,6 +43,7 @@ const (
 	PermissionReportRead           = "report.read"
 	PermissionReportManage         = "report.manage"
 	PermissionReportExecute        = "report.execute"
+	PermissionTableBoardUse        = "table_board.use"
 	PermissionReportExport         = "report.export"
 	PermissionOfficeMessageRead    = "office_message.read"
 	PermissionOfficeMessageManage  = "office_message.manage"
