@@ -112,7 +112,7 @@ func ApplySchemaMigrations() (resultErr error) {
 	}
 	if currentApplied {
 		console.Info("database schema is current: %s", schemaMigrationVersion)
-		return applyOpenMonitoringPermissionMigration(db)
+		return applySupplementalSchemaMigrations(db)
 	}
 	baselineVersion, baselineApplied, err := appliedSchemaMigrationBaseline(
 		db,
@@ -147,7 +147,24 @@ func ApplySchemaMigrations() (resultErr error) {
 	if err := db.Create(&marker).Error; err != nil {
 		return fmt.Errorf("write schema migration marker: %w", err)
 	}
-	return applyOpenMonitoringPermissionMigration(db)
+	return applySupplementalSchemaMigrations(db)
+}
+
+// The caller holds the schema migration lock. Later additions can upgrade
+// installations already on the baseline without altering unrelated tables.
+func applySupplementalSchemaMigrations(db *gorm.DB) error {
+	if err := applyOpenMonitoringPermissionMigration(db); err != nil {
+		return err
+	}
+	const version = "2026-11-26-table-boards-v1"
+	applied, err := schemaMigrationApplied(db, version)
+	if err != nil || applied {
+		return err
+	}
+	if err := db.AutoMigrate(&model.TableBoard{}); err != nil {
+		return fmt.Errorf("migrate table boards: %w", err)
+	}
+	return db.Create(&schemaMigrationRecord{Version: version, AppliedAt: time.Now().UTC()}).Error
 }
 
 func finalizeOfficeMessageMigration(db *gorm.DB) error {
