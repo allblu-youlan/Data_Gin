@@ -4,10 +4,12 @@ import { columnName, parseClipboardTable } from './clipboard'
 import { maxColumns, maxRows, maxTextLength } from './grid'
 import type { ReportCenterClient } from "../reportCenter/api"
 import { FormulaEditor } from "./FormulaEditor"
-import type { Metric, BoardCell, BoardSection, BoardSource, BoardValues } from './types'
+import type { DisplayCell, Metric, BoardCell, BoardSection, BoardSource, BoardValues } from './types'
 import styles from './BoardCanvas.module.css'
 
 type CellEditorProps = {
+  result?: DisplayCell
+  asOf?: string
   client: ReportCenterClient
   metrics: Metric[]
   onManage: () => void
@@ -21,7 +23,7 @@ type CellEditorProps = {
   onClose: () => void
 }
 
-export function CellEditor({ client, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
+export function CellEditor({ client, result, asOf, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
   const cell = section.cells[row][column]
   const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'formula'>(cell.kind)
   const [text, setText] = useState(cell.kind === 'text' ? cell.text : '')
@@ -74,6 +76,10 @@ export function CellEditor({ client, metrics, onBatch, onManage, section, row, c
   return <Drawer open title={`编辑单元格 ${address}`} description={section.title} onClose={onClose} initialFocusRef={cell.kind === 'text' ? textInput : sourceSelect}
     footer={<><Button onClick={onClose}>取消</Button>{mode !== 'formula' && <Button variant="primary" onClick={apply}>应用</Button>}</>}>
     <div className={styles.editor}>
+      {result && <div className={styles.preview}><strong>当前画面 · {result.display}</strong>
+        {result.message && <span>{result.message}</span>}
+        <small>计算截至 {asOf}{result.start && ' · 统计期间 ' + result.start + ' 至 ' + result.end}{cell.kind === 'formula' && result.matched !== undefined && ' · 匹配 ' + result.matched + ' 条'}</small>
+      </div>}
       <div className={styles.segment} role="group" aria-label="单元格内容类型">
         {(['text', 'formula', 'field', 'paste'] as const).map(key => <button type="button" key={key} aria-pressed={mode === key}
           onClick={() => { setMode(key); setError('') }}>{{ text: '固定文本', formula:'指标公式', field: '数据字段', paste: '粘贴表格' }[key]}</button>)}

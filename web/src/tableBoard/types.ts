@@ -33,7 +33,7 @@ export type BoardSection = { id: string; title: string; cells: BoardCell[][] }
 export type BoardLayout = { sources: BoardSource[]; metrics?: Metric[]; sections: BoardSection[]; foreground: string; background: string }
 export type BoardValues = Record<string, Record<string, string | null>[]>
 export type TableBoard = { id: number; revision: number; name: string; layout: BoardLayout }
-export type CellResult = { status: 'ok' | 'error' | 'null'; value: string | null; message?: string; start?: string; end?: string; matched?: number }
+export type CellResult = { display?: string; status: 'ok' | 'error' | 'null'; value: string | null; message?: string; start?: string; end?: string; matched?: number }
 export type DisplayCell = CellResult & { sectionId: string; address: string; display: string }
 export type Snapshot = { revision: number; asOf: string; calculationId: string; cells: DisplayCell[] }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Maximize2, Minimize2, Plus, RefreshCw, Save } from 'lucide-react'
 import { Button, Dialog } from '../ui'
 import type { ReportCenterClient } from '../reportCenter/api'
+import { snapshotValues } from './formula'
 import { BoardCanvas } from './BoardCanvas'
 import { BoardRequestError, boardRequest, saveDownload } from './api'
 import { newBoard, type BoardLayout, type Snapshot, type TableBoard } from './types'
@@ -157,7 +158,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
       if (e instanceof BoardRequestError && [401,403,409,410].includes(e.status)) { cancelCalculation(); setSnapshot(null) }
     }
   }
-  const display = useMemo(() => new Map(snapshot?.cells.map(c => [c.sectionId + '/' + c.address, c])), [snapshot])
+  const display = useMemo(() => snapshotValues(saved?.layout,draft.layout,snapshot), [saved,draft.layout,snapshot])
   return <main className={large ? styles.largeScreen : styles.workspace} aria-label="表格看板">
     <header className={styles.pageHeader}><div><h2>{large ? draft.name : '表格看板'}</h2>
       <span className={styles.hint}>{dirty ? '有未保存更改' : saved ? '已保存 · 版本 ' + saved.revision : '新建草稿'}</span></div>
@@ -183,9 +184,9 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     </div>}
     {error && <div role="alert" className={styles.error}>{error} <Button onClick={() => { setError(''); setListRevision(v => v + 1); if (saved && !dirty) void refresh(saved) }}>重试</Button></div>}
     {conflict && <div role="alert">打开时为版本 {draft.revision}，服务器版本{remoteRevision ?? '已变化'}。<Button disabled={busy} onClick={() => void save(true)}>复制为新看板</Button><Button disabled={busy} onClick={() => void open(draft.id)}>重新载入</Button></div>}
-    <div className={styles.statusLine}><span>{dirty ? '草稿待保存并计算' : snapshot ? '计算截至 ' + snapshot.asOf : refreshing ? '正在计算…' : '尚未计算'}</span>
+    <div className={styles.statusLine}><span>{dirty ? '草稿待保存并计算' + (snapshot ? ' · 上轮计算截至 ' + snapshot.asOf : '') : snapshot ? '计算截至 ' + snapshot.asOf : refreshing ? '正在计算…' : '尚未计算'}</span>
       {large && <label><input type="checkbox" checked={timed} onChange={e => setTimed(e.target.checked)}/>每 60 秒刷新</label>}</div>
-    <fieldset className={styles.boardFieldset} disabled={busy}><BoardCanvas client={client} key={draft.id} layout={draft.layout} onChange={(layout: BoardLayout) => edit({...draft, layout})} editing={!large} values={{}} display={dirty ? undefined : display} /></fieldset>
+    <fieldset className={styles.boardFieldset} disabled={busy}><BoardCanvas client={client} key={draft.id} layout={draft.layout} onChange={(layout: BoardLayout) => edit({...draft, layout})} editing={!large} values={{}} asOf={snapshot?.asOf} display={display} /></fieldset>
     {leave && <Dialog open title="有未保存更改" onClose={()=>setLeave(null)}
       footer={<><Button disabled={busy} onClick={()=>setLeave(null)}>留在编辑页</Button><Button disabled={busy} onClick={()=>{setLeave(null);leave.discard()}}>放弃这次修改</Button><Button variant="primary" disabled={busy || !draft.name.trim()} onClick={async()=>{if(await save()){setLeave(null);leave.enter()}else setLeave(null)}}>保存并继续</Button></>}>
       <p>看板「{draft.name}」的草稿尚未保存。</p>

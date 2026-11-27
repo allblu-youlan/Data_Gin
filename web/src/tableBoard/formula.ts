@@ -1,6 +1,6 @@
 import { columnName } from './clipboard.js'
 import { checkGridSize, gridWidth } from './grid.js'
-import type { BoardCell, BoardLayout, BoardSection, Formula, Mapping, Metric, Period } from './types'
+import type { BoardCell, BoardLayout, BoardSection, DisplayCell, Snapshot, Formula, Mapping, Metric, Period } from './types'
 
 export const periods: Record<Period, string> = { TODAY: '今日累计', MONTH_TO_DATE: '本月累计', YEAR_TO_DATE: '今年累计', LAST_MONTH: '上月全月' }
 export const aggregates = { SUM: '金额求和', AVG: '平均值', COUNT: '记录计数', COUNT_DISTINCT: '订单号去重计数' }
@@ -43,4 +43,23 @@ export function matrix(layout: BoardLayout, section: BoardSection, row: number, 
     })
   })
   return changes
+}
+
+
+export function snapshotValues(saved: BoardLayout | undefined, draft: BoardLayout, snapshot: Snapshot | null) {
+  const values = new Map<string, DisplayCell>()
+  if (!snapshot || !saved) return values
+  for (const cell of snapshot.cells) values.set(cell.sectionId + '/' + cell.address, cell)
+  if (saved === draft) return values
+  const savedSections = new Map(saved.sections.map(s => [s.id,s]))
+  const changedMetrics = new Set((draft.metrics ?? []).filter(m => !(saved.metrics ?? []).includes(m)).map(m=>m.id))
+  const changedSources = new Set(draft.sources.filter(s => !saved.sources.includes(s)).map(s=>s.id))
+  for (const section of draft.sections) {
+    const original = savedSections.get(section.id)
+    section.cells.forEach((line,r) => line.forEach((cell,c) => {
+      if (cell !== original?.cells[r]?.[c] || (cell.kind === 'formula' && changedMetrics.has(cell.metricId)) ||
+        (cell.kind === 'field' && changedSources.has(cell.sourceId))) values.delete(section.id + '/' + addressOf(r,c))
+    }))
+  }
+  return values
 }

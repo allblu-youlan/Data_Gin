@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard } from '../.test-dist/tableBoard/types.js'
-import { differences, connectedMapping, matrix, newMetric, metricReferences } from '../.test-dist/tableBoard/formula.js'
+import { differences, connectedMapping, matrix, newMetric, metricReferences, snapshotValues } from '../.test-dist/tableBoard/formula.js'
 
 test('单格仅保存归期差异，恢复继承后差异消失', () => {
   const base = { ...newMetric(), timeField: 'PAID_AT', valueField: 'PAID_AMOUNT' }
@@ -19,4 +19,19 @@ test('矩阵先预览、默认跳过已有内容并保留门店前导零', () =>
   assert.deepEqual(section.cells[2][1], {kind:'text',text:'保留'})
   assert.throws(() => matrix(layout, section, 99, 1, metric, 'STORE', ['a','b'], ['TODAY'], false, false))
   assert.deepEqual(metricReferences(layout, metric.id), [])
+})
+
+
+test('单格草稿隐藏变更格的旧值，其他格保留上一轮时间和结果', () => {
+  const original = newBoard().layout
+  const metric = newMetric()
+  original.metrics = [metric]
+  const f = {kind:'formula', metricId:metric.id, period:'MONTH_TO_DATE'}
+  original.sections[0].cells[1][1] = f
+  original.sections[0].cells[1][2] = f
+  const snapshot = {cells:['B2','C2'].map(address=>({sectionId:'first',address,display:'12,400.00'}))}
+  const draft = {...original,sections:original.sections.map(section=>({...section,
+    cells:section.cells.map((line,r)=>line.map((cell,c)=>r===1 && c===2 ? {...f,overrides:{timeField:'CREATED_AT'}} : cell))}))}
+  assert.deepEqual([...snapshotValues(original,draft,snapshot).keys()], ['first/B2'])
+  assert.equal(snapshotValues(original,{...draft,metrics:[{...metric,timeField:'CREATED_AT'}]},snapshot).size,0)
 })

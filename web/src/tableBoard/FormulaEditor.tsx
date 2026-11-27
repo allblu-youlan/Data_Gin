@@ -12,7 +12,7 @@ import styles from './BoardCanvas.module.css'
 
 type Props = {client: ReportCenterClient; metrics: Metric[]; initial?:Formula; address:string; onApply:(cell:Formula)=>void; onManage:()=>void}
 type Preview = {asOf:string;before:CellResult;after:CellResult}
-function resultText(r: CellResult) { return r.status === 'ok' ? r.value : r.status === 'null' ? '— / 数据缺失' : r.message || '读取失败' }
+function resultText(r: CellResult) { return r.status === 'ok' ? r.display || r.value : r.status === 'null' ? '— / 数据缺失' : r.message || '读取失败' }
 export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:Props) {
   const [cell,setCell] = useState<Formula>(initial ?? {kind:'formula',metricId:metrics[0]?.id ?? '',period:'MONTH_TO_DATE',format:'money_2'})
   const [mapping,setMapping] = useState(false)

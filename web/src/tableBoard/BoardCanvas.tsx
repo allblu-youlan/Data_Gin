@@ -5,6 +5,7 @@ import controls from '../ui/Controls/Controls.module.css'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { MetricManager } from './MetricManager'
 import { MatrixEditor } from './MatrixEditor'
+import { addressOf } from './formula'
 import { CellEditor } from './CellEditor'
 import { SectionEditor } from './SectionEditor'
 import { SectionGrid } from './SectionGrid'
@@ -13,10 +14,10 @@ import { gridWidth, maxSections, writeBlock } from './grid'
 import type { BoardCell, BoardLayout, BoardSection, BoardValues, DisplayCell } from './types'
 import styles from './BoardCanvas.module.css'
 
-type Props = { client: ReportCenterClient; display?: Map<string, DisplayCell>; layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
+type Props = { asOf?: string; client: ReportCenterClient; display?: Map<string, DisplayCell>; layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
 type Cursor = { id: string; row: number; column: number }
 
-export function BoardCanvas({ client, layout, onChange, values, display, editing }: Props) {
+export function BoardCanvas({ client, asOf, layout, onChange, values, display, editing }: Props) {
   const [single, setSingle] = useState(false)
   const [activeId, setActiveId] = useState('')
   const [cursor, setCursor] = useState<Cursor | null>(null)
@@ -112,7 +113,7 @@ export function BoardCanvas({ client, layout, onChange, values, display, editing
           onEdit={(row, column) => { setActiveId(section.id); setCursor({ id: section.id, row, column }) }} />
       </section>
     })}</div>
-    {editing && !manage && !batch && cursor && current && <CellEditor client={client} metrics={layout.metrics ?? []} onManage={()=>setManage(true)} onBatch={()=>setBatch(true)} key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
+    {editing && !manage && !batch && cursor && current && <CellEditor result={display?.get(cursor.id + '/' + addressOf(cursor.row,cursor.column))} asOf={asOf} client={client} metrics={layout.metrics ?? []} onManage={()=>setManage(true)} onBatch={()=>setBatch(true)} key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
       sources={layout.sources} values={values} row={cursor.row} column={cursor.column} onClose={() => setCursor(null)}
       onWrite={block => write(current, cursor.row, cursor.column, block)} />}
     {editing && manage && <MetricManager layout={layout} client={client} onClose={()=>setManage(false)} onSave={m=>{
