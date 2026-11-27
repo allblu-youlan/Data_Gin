@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/internal/reportoracle"
-	"gin-biz-web-api/internal/reportrepo"
-	"gin-biz-web-api/internal/reportsecret"
+
 	"gin-biz-web-api/internal/tableboard"
 	"github.com/godror/godror"
 )
@@ -19,49 +18,36 @@ var ErrBoardSourceInvalid = errors.New("看板来源配置无效")
 
 // QueryBoardSource reads once per configured dataset, independent of the number
 // of cells that reference it. It shares the report workers' cross-replica budget.
-func QueryBoardSource(ctx context.Context, source tableboard.Source) ([]map[string]*string, error) {
+func QueryBoardSource(ctx context.Context, actor uint, source tableboard.Source) ([]map[string]*string, error) {
 	if err := source.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrBoardSourceInvalid, err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
-	defer cancel()
-	repo := reportrepo.New()
-	ds, err := repo.GetReportDatasource(ctx, source.DatasourceID)
+	var result []map[string]*string
+	err := withBoardConnection(ctx, source.DatasourceID, func(ctx context.Context, conn *reportoracle.Adapter) error {
+		var err error
+		result, err = queryBoardDetail(ctx, conn, actor, source)
+		return err
+	})
+	return result, err
+}
+
+func detailPlan(ctx context.Context, conn *reportoracle.Adapter, actor uint, source tableboard.Source) (string, []any, error) {
+	m := tableboard.Metric{DatasourceID: source.DatasourceID, Owner: source.Owner, TableName: source.TableName}
+	rel, err := resolveBoardRelation(ctx, conn, actor, m, source.Fields, nil, true)
 	if err != nil {
-		return nil, classifyReportDatasourceStoreError(err)
+		return "", nil, err
 	}
-	if !ds.Enabled {
-		return nil, fmt.Errorf("%w: 连接已停用", ErrBoardSourceInvalid)
-	}
-	if ds.QueryTimeoutSeconds > 0 {
-		var stop context.CancelFunc
-		ctx, stop = context.WithTimeout(ctx, time.Duration(ds.QueryTimeoutSeconds)*time.Second)
-		defer stop()
-	}
-	release, err := repo.AcquireSelectDatasourceSlot(ctx, ds.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	password, err := (reportsecret.EnvironmentKeyring{}).Decrypt(ds.CredentialKeyVersion, ds.PasswordCiphertext)
-	if err != nil {
-		return nil, ErrReportDatasourceCredentialUnavailable
-	}
-	conn, done, err := acquireSelectOracle(ctx, *ds, password)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrReportDatasourceOracleUnavailable, err)
-	}
-	defer done()
-	ref := reportoracle.ResultTableRef{Owner: source.Owner, Name: source.TableName}
-	schema, err := conn.InspectResultTable(ctx, ref)
+	query, err := boardSelectFrom(source, rel.schema, rel.from)
+	return query, rel.args, err
+}
+
+func queryBoardDetail(ctx context.Context, conn *reportoracle.Adapter, actor uint, source tableboard.Source) ([]map[string]*string, error) {
+	statement, args, err := detailPlan(ctx, conn, actor, source)
 	if err != nil {
 		return nil, err
 	}
-	statement, err := boardSelect(source, schema)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := conn.QuerySelect(ctx, statement, sql.Named("board_limit", source.Limit), godror.NumberAsString())
+	args = append(args, sql.Named("board_limit", source.Limit), godror.NumberAsString())
+	rows, err := conn.QuerySelect(ctx, statement, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +90,9 @@ func QueryBoardSource(ctx context.Context, source tableboard.Source) ([]map[stri
 }
 
 func boardSelect(source tableboard.Source, schema []reportoracle.ResultColumn) (string, error) {
+	return boardSelectFrom(source, schema, `"`+source.Owner+`"."`+source.TableName+`"`)
+}
+func boardSelectFrom(source tableboard.Source, schema []reportoracle.ResultColumn, from string) (string, error) {
 	if err := source.Validate(); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrBoardSourceInvalid, err)
 	}
@@ -131,5 +120,5 @@ func boardSelect(source tableboard.Source, schema []reportoracle.ResultColumn) (
 			ordering = append(ordering, fields[i])
 		}
 	}
-	return `SELECT * FROM (SELECT ` + strings.Join(fields, ", ") + ` FROM "` + ref.Owner + `"."` + ref.Name + `" ORDER BY ` + strings.Join(ordering, ", ") + `) WHERE ROWNUM <= :board_limit`, nil
+	return `SELECT * FROM (SELECT ` + strings.Join(fields, ", ") + ` FROM ` + from + ` ORDER BY ` + strings.Join(ordering, ", ") + `) WHERE ROWNUM <= :board_limit`, nil
 }

@@ -7,6 +7,7 @@ import (
 	"gin-biz-web-api/internal/reportrepo"
 	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/internal/tableboard"
+	"gin-biz-web-api/pkg/auth"
 	"gin-biz-web-api/pkg/errcode"
 	"gin-biz-web-api/pkg/responses"
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ func QueryTableBoardSource(c *gin.Context) {
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, "数据源配置格式不正确")
 		return
 	}
-	rows, err := data_svc.QueryBoardSource(c.Request.Context(), source)
+	rows, err := data_svc.QueryBoardSource(c.Request.Context(), auth.CurrentUserID(c), source)
 	if err != nil {
 		_ = c.Error(err).SetType(gin.ErrorTypePrivate)
 		switch {
