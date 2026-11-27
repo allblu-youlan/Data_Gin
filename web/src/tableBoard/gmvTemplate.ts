@@ -67,6 +67,9 @@ function headerLabels(date:string) {
 }
 
 export function updateReportDate(layout:BoardLayout, reportDate:string):BoardLayout {
+  if (!reportDate && layout.sections.some(section=>section.id===templateSectionId)) {
+    throw new Error('总 GMV 模板需要报告日期，已保留原日期。')
+  }
   const next={...layout,reportDate:reportDate || undefined}
   if (!reportDate) return next
   const headers=headerLabels(reportDate)

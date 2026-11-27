@@ -40,3 +40,13 @@ test('接入历史数据时绑定上一年同报告周的累计和周销',()=>{
   assert.equal(at(next,'D',6).text,'Q1')
   assert.equal(at(layout,'D',6).text,'Q4')
 })
+
+
+test('模板拒绝空报告日期，普通看板仍支持恢复服务端当前时间',()=>{
+  const {layout}=buildGmvTemplate(source,'2026-11-15')
+  assert.throws(()=>updateReportDate(layout,''),/需要报告日期/)
+  assert.equal(layout.reportDate,'2026-11-15')
+  assert.equal(at(layout,'A',2).text,'2026-11-15')
+  const ordinary={...layout,sections:layout.sections.map(s=>({...s,id:'first'}))}
+  assert.equal(updateReportDate(ordinary,'').reportDate,undefined)
+})

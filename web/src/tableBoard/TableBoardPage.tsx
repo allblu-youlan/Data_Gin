@@ -3,7 +3,7 @@ import { Download, Maximize2, Minimize2, Plus, RefreshCw, Save } from 'lucide-re
 import { Button, Dialog } from '../ui'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { GmvTemplateEditor } from './GmvTemplateEditor'
-import { updateReportDate } from './gmvTemplate'
+import { templateSectionId, updateReportDate } from './gmvTemplate'
 import { snapshotValues } from './formula'
 import { BoardCanvas } from './BoardCanvas'
 import { BoardRequestError, boardRequest, saveDownload } from './api'
@@ -18,6 +18,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
   const [draft, setDraft] = useState<TableBoard>(newBoard)
   const [saved, setSaved] = useState<TableBoard | null>(null)
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
+  const [dateError,setDateError]=useState('')
   const [template,setTemplate]=useState(false)
   const [busy, setBusy] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -29,6 +30,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
   const [listRevision, setListRevision] = useState(0)
   const [leave,setLeave] = useState<{enter:()=>void; discard:()=>void} | null>(null)
   const [remoteRevision,setRemoteRevision] = useState<number | null>(null)
+  const dateRequired=draft.layout.sections.some(section=>section.id===templateSectionId)
   const dirty = edited
   const generation = useRef(0)
   const calculation = useRef<AbortController | null>(null)
@@ -101,6 +103,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     return ()=>ac.abort()
   },[client,conflict,draft.id])
   function accept(board: TableBoard) {
+    setDateError('')
     cancelCalculation()
     setSaved(board); setDraft(board); setEdited(false); setError(''); setConflict(false); setSnapshot(null)
     void refresh(board)
@@ -111,6 +114,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     else next()
   }
   async function loadBoard(id: number) {
+    setDateError('')
     const sequence = ++generation.current
     cancelCalculation()
     setBusy(true); setError('')
@@ -183,7 +187,14 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
       </div>
     </header>
     {!large && <div className={styles.actions}><label>看板名称 <input maxLength={100} value={draft.name} disabled={busy} onChange={e => edit({...draft, name:e.target.value})}/></label>
-      <label>报告日期 <input type="date" value={draft.layout.reportDate ?? ''} disabled={busy} onChange={e => edit({...draft,layout:updateReportDate(draft.layout,e.target.value)})} /></label>
+      <label>报告日期 <input type="date" required={dateRequired} aria-describedby={dateError ? 'board-date-error' : undefined}
+        value={draft.layout.reportDate ?? ''} disabled={busy} onChange={e=>{
+          try {
+            const layout=updateReportDate(draft.layout,e.target.value)
+            edit({...draft,layout});setDateError('')
+          } catch (reason) {setDateError(errorText(reason))}
+        }}/></label>
+      {dateError && <small role="alert" id="board-date-error" className={styles.error}>{dateError}</small>}
       <Button variant="primary" disabled={busy || !draft.name.trim()} onClick={() => void save()}><Save/>保存看板</Button>
       {draft.id > 0 && <Button disabled={busy} onClick={() => void remove()}>删除看板</Button>}
     </div>}
@@ -197,7 +208,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
       const enter=()=>{
         generation.current++
         cancelCalculation();setSaved(null);setSnapshot(null);setConflict(false);setError('')
-        setDraft(board);setEdited(true)
+        setDraft(board);setEdited(true);setDateError('')
       }
       if (dirty) setLeave({enter,discard:enter})
       else enter()
