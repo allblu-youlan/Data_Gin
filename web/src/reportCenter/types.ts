@@ -526,6 +526,7 @@ export type BojunTableConfig = {
   requiredFilterColumns?: string[]
 }
 export type BojunTable = {
+  owner?: string
   config?: BojunTableConfig
   id: number
   bojunTableId: string

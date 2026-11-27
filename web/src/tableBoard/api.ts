@@ -6,7 +6,7 @@ export class BoardRequestError extends Error {
 }
 
 export async function boardRequest<T>(client: ReportCenterClient, path: string, method: HTTPMethod = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const reply = await client('/v1/table-boards' + path, { method, body, signal, showResult: false, silentLoading: true, acceptSafeErrorMessage: true })
+  const reply = await client('/v1/table-boards' + path, { method, body, signal, timeoutMs: 65000, showResult: false, silentLoading: true, acceptSafeErrorMessage: true })
   if (!reply.ok) throw new BoardRequestError(reply.status, reply.error?.message || '请求失败，请重试。')
   const data = reply.data as { data?: T }
   if (!data || data.data === undefined) throw new Error('看板接口返回的数据格式无效。')

@@ -1,11 +1,17 @@
 import { useRef, useState } from 'react'
-import { Button, Dialog } from '../ui'
+import { Button, Drawer } from '../ui'
 import { columnName, parseClipboardTable } from './clipboard'
 import { maxColumns, maxRows, maxTextLength } from './grid'
-import type { BoardCell, BoardSection, BoardSource, BoardValues } from './types'
+import type { ReportCenterClient } from "../reportCenter/api"
+import { FormulaEditor } from "./FormulaEditor"
+import type { Metric, BoardCell, BoardSection, BoardSource, BoardValues } from './types'
 import styles from './BoardCanvas.module.css'
 
 type CellEditorProps = {
+  client: ReportCenterClient
+  metrics: Metric[]
+  onManage: () => void
+  onBatch: () => void
   section: BoardSection
   row: number
   column: number
@@ -15,9 +21,9 @@ type CellEditorProps = {
   onClose: () => void
 }
 
-export function CellEditor({ section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
+export function CellEditor({ client, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
   const cell = section.cells[row][column]
-  const [mode, setMode] = useState<'field' | 'text' | 'paste'>(cell.kind === 'formula' ? 'text' : cell.kind)
+  const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'formula'>(cell.kind)
   const [text, setText] = useState(cell.kind === 'text' ? cell.text : '')
   const [paste, setPaste] = useState('')
   const [sourceId, setSourceId] = useState(cell.kind === 'field' ? cell.sourceId : sources[0]?.id ?? '')
@@ -65,13 +71,15 @@ export function CellEditor({ section, row, column, sources, values, onWrite, onC
     }
   }
 
-  return <Dialog open title={`编辑单元格 ${address}`} description={section.title} onClose={onClose} initialFocusRef={cell.kind === 'text' ? textInput : sourceSelect}
-    footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={apply}>应用</Button></>}>
+  return <Drawer open title={`编辑单元格 ${address}`} description={section.title} onClose={onClose} initialFocusRef={cell.kind === 'text' ? textInput : sourceSelect}
+    footer={<><Button onClick={onClose}>取消</Button>{mode !== 'formula' && <Button variant="primary" onClick={apply}>应用</Button>}</>}>
     <div className={styles.editor}>
       <div className={styles.segment} role="group" aria-label="单元格内容类型">
-        {(['text', 'field', 'paste'] as const).map(key => <button type="button" key={key} aria-pressed={mode === key}
-          onClick={() => { setMode(key); setError('') }}>{{ text: '固定文本', field: '数据字段', paste: '粘贴表格' }[key]}</button>)}
+        {(['text', 'formula', 'field', 'paste'] as const).map(key => <button type="button" key={key} aria-pressed={mode === key}
+          onClick={() => { setMode(key); setError('') }}>{{ text: '固定文本', formula:'指标公式', field: '数据字段', paste: '粘贴表格' }[key]}</button>)}
       </div>
+      {mode === 'formula' && <FormulaEditor client={client} metrics={metrics} initial={cell.kind === 'formula' ? cell : undefined} address={address} onApply={f=>{onWrite([[f]]);onClose()}} onManage={onManage}/>}
+      <Button onClick={onBatch}>批量配置 · 门店 × 期间</Button>
       {mode === 'text' && <label>单元格内容<textarea ref={textInput} rows={4} value={text} maxLength={maxTextLength}
         onPaste={event => {
           const copied = event.clipboardData.getData('text/plain')
@@ -111,5 +119,5 @@ export function CellEditor({ section, row, column, sources, values, onWrite, onC
       </> : <p className={styles.hint}>请先在看板中添加数据源，再选择字段。</p>)}
       {error && <p className={styles.error} role="alert">{error}</p>}
     </div>
-  </Dialog>
+  </Drawer>
 }

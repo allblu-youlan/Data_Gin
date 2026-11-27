@@ -2,6 +2,9 @@ import { useRef, useState, type CSSProperties } from 'react'
 import { ArrowDown, ArrowUp, Bookmark, GalleryVerticalEnd, PanelTop, Plus, Settings2 } from 'lucide-react'
 import { Button } from '../ui'
 import controls from '../ui/Controls/Controls.module.css'
+import type { ReportCenterClient } from '../reportCenter/api'
+import { MetricManager } from './MetricManager'
+import { MatrixEditor } from './MatrixEditor'
 import { CellEditor } from './CellEditor'
 import { SectionEditor } from './SectionEditor'
 import { SectionGrid } from './SectionGrid'
@@ -10,14 +13,17 @@ import { gridWidth, maxSections, writeBlock } from './grid'
 import type { BoardCell, BoardLayout, BoardSection, BoardValues, DisplayCell } from './types'
 import styles from './BoardCanvas.module.css'
 
-type Props = { display?: Map<string, DisplayCell>; layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
+type Props = { client: ReportCenterClient; display?: Map<string, DisplayCell>; layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
 type Cursor = { id: string; row: number; column: number }
 
-export function BoardCanvas({ layout, onChange, values, display, editing }: Props) {
+export function BoardCanvas({ client, layout, onChange, values, display, editing }: Props) {
   const [single, setSingle] = useState(false)
   const [activeId, setActiveId] = useState('')
   const [cursor, setCursor] = useState<Cursor | null>(null)
   const [sectionDraft, setSectionDraft] = useState<{ id?: string } | null>(null)
+  const [manage,setManage] = useState(false)
+  const [batch,setBatch] = useState(false)
+  const [undo,setUndo] = useState<{previous:BoardSection;applied:BoardSection} | null>(null)
   const [error, setError] = useState('')
   const nodes = useRef(new Map<string, HTMLElement>())
   const active = layout.sections.find(section => section.id === activeId) ?? layout.sections[0]
@@ -58,6 +64,8 @@ export function BoardCanvas({ layout, onChange, values, display, editing }: Prop
         <button type="button" aria-pressed={single} onClick={() => setSingle(true)}><PanelTop />单块展示</button>
       </div>
       {editing && <div className={styles.palette}>
+        <Button onClick={()=>setManage(true)}>指标管理</Button>
+        {undo && layout.sections.includes(undo.applied) && <Button onClick={()=>{replace(undo.previous);setUndo(null)}}>撤销批量填充</Button>}
         <label>文字<input type="color" value={layout.foreground} onChange={event => onChange({ ...layout, foreground: event.target.value })} /></label>
         <label>底色<input type="color" value={layout.background} onChange={event => onChange({ ...layout, background: event.target.value })} /></label>
         <Button onClick={() => onChange({ ...layout, foreground: '#171717', background: '#ffffff' })}>恢复黑白</Button>
@@ -87,9 +95,14 @@ export function BoardCanvas({ layout, onChange, values, display, editing }: Prop
           onEdit={(row, column) => { setActiveId(section.id); setCursor({ id: section.id, row, column }) }} />
       </section>
     })}</div>
-    {editing && cursor && current && <CellEditor key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
+    {editing && !manage && !batch && cursor && current && <CellEditor client={client} metrics={layout.metrics ?? []} onManage={()=>setManage(true)} onBatch={()=>setBatch(true)} key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
       sources={layout.sources} values={values} row={cursor.row} column={cursor.column} onClose={() => setCursor(null)}
       onWrite={block => write(current, cursor.row, cursor.column, block)} />}
+    {editing && manage && <MetricManager layout={layout} client={client} onClose={()=>setManage(false)} onSave={m=>{
+      const metrics=layout.metrics ?? []
+      onChange({...layout,metrics:metrics.some(item=>item.id===m.id) ? metrics.map(item=>item.id===m.id ? m : item) : [...metrics,m]})
+    }}/>}
+    {editing && batch && cursor && current && <MatrixEditor client={client} layout={layout} section={current} row={cursor.row} column={cursor.column} onClose={()=>{setBatch(false);setCursor(null)}} onSave={section=>{setUndo({previous:current,applied:section});replace(section)}}/>}
     {editing && sectionDraft && <SectionEditor layout={layout} section={layout.sections.find(item => item.id === sectionDraft.id)}
       onClose={() => setSectionDraft(null)} onRemove={() => onChange({ ...layout, sections: layout.sections.filter(section => section.id !== sectionDraft.id) })}
       onSave={section => {

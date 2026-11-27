@@ -153,3 +153,16 @@
 .actions select, .actions input { max-width: 18em; }
 .statusLine { color: var(--color-text-secondary); font-size: 13px; }
 .boardFieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.formula { display: grid; gap: 16px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.conditions, .choices { border: 1px solid var(--color-border); min-width: 0; padding: 10px; }
+.choices, .choices label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.choices label { flex-direction: row; }
+.choices input { width: auto; }
+.filterRow { display: grid; grid-template-columns: minmax(0, 2fr) 5em minmax(0, 1fr) auto; gap: 4px; margin-bottom: 6px; }
+.editor select, .editor input, .formula select { min-width: 0; max-width: 100%; }
+.mappingSummary { margin: 0; display: grid; font-size: 14px; }
+.mappingSummary > div { display: grid; grid-template-columns: 6em minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.mappingSummary dd { margin: 0; overflow-wrap: anywhere; }
+.mappingSummary small { color: var(--color-text-secondary); }
+.preview { padding: 12px; display: grid; gap: 10px; border: 1px solid var(--color-border); background: var(--color-surface-subtle); }
+.preview ul { max-height: 16em; overflow-y: auto; margin: 0; padding-left: 1.4em; }

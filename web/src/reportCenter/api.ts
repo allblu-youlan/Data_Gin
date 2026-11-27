@@ -13,6 +13,7 @@ export type ReportCenterClient = (path: string, options?: {
   signal?: AbortSignal
   showResult?: boolean
   silentLoading?: boolean
+  timeoutMs?: number
   acceptSafeErrorMessage?: boolean
 }) => Promise<ClientResponse>
 
@@ -757,6 +758,7 @@ function parseReportResultTableColumn(value: unknown): ReportResultTableColumn {
     name,
     position,
     oracleType,
+    ...(value.description ? { description: publicString(value.description, 512) } : {}),
     dataLength: nullableInteger(value.dataLength),
     precision: nullableInteger(value.precision),
     scale: nullableInteger(value.scale),

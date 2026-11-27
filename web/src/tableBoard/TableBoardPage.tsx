@@ -158,6 +158,6 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     {conflict && <div role="alert">打开时为版本 {draft.revision}，服务器版本已变化。<Button disabled={busy} onClick={() => void save(true)}>复制为新看板</Button><Button disabled={busy} onClick={() => void open(draft.id)}>重新载入</Button></div>}
     <div className={styles.statusLine}><span>{dirty ? '草稿待保存并计算' : snapshot ? '计算截至 ' + snapshot.asOf : refreshing ? '正在计算…' : '尚未计算'}</span>
       {large && <label><input type="checkbox" checked={timed} onChange={e => setTimed(e.target.checked)}/>每 60 秒刷新</label>}</div>
-    <fieldset className={styles.boardFieldset} disabled={busy}><BoardCanvas key={draft.id} layout={draft.layout} onChange={(layout: BoardLayout) => edit({...draft, layout})} editing={!large} values={{}} display={dirty ? undefined : display} /></fieldset>
+    <fieldset className={styles.boardFieldset} disabled={busy}><BoardCanvas client={client} key={draft.id} layout={draft.layout} onChange={(layout: BoardLayout) => edit({...draft, layout})} editing={!large} values={{}} display={dirty ? undefined : display} /></fieldset>
   </main>
 }
