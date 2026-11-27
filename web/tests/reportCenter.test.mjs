@@ -834,6 +834,10 @@ test('result table metadata parsers and requests enforce the Oracle table contra
     { name: 'ID', position: 2, oracleType: 'NUMBER', dataLength: 22, precision: 18, scale: 0, nullable: false },
     { name: 'AMOUNT', position: 3, oracleType: 'NUMBER', dataLength: 22, precision: 18, scale: 2, nullable: true },
   ]
+  assert.deepEqual(parseReportResultTablePage({ data: { items: [], hasMore: true, nextAfter: 'after-managed-tables' } }), {
+    items: [], hasMore: true, nextAfter: 'after-managed-tables',
+  })
+  assert.throws(() => parseReportResultTablePage({ data: { items: [], hasMore: true, nextAfter: '' } }))
   assert.equal(parseReportResultTablePage({ data: { items: [table], hasMore: true, nextAfter: 'opaque' } }).items[0].qualifiedName, table.qualifiedName)
   assert.equal(parseReportResultTableSchema({ data: { table, columns } }).columns[2].precision, 18)
   assert.throws(() => parseReportResultTableSchema({ data: { table, columns: [columns[1], columns[0], columns[2]] } }), /column order/)

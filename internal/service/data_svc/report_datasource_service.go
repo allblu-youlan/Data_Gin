@@ -35,6 +35,7 @@ const (
 var reportDatasourceCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{2,63}$`)
 
 type reportDatasourceStore interface {
+	ManagedResultTableRefs(context.Context, uint, []reportoracle.ResultTableRef) (map[reportoracle.ResultTableRef]bool, error)
 	ListReportDatasources(context.Context) ([]model.ReportDatasource, error)
 	GetReportDatasource(context.Context, uint) (*model.ReportDatasource, error)
 	CreateReportDatasource(context.Context, uint, *model.ReportDatasource) error
@@ -138,13 +139,14 @@ type ReportResultTablePageDTO struct {
 }
 
 type ReportResultTableColumnDTO struct {
-	Name       string `json:"name"`
-	Position   int    `json:"position"`
-	OracleType string `json:"oracleType"`
-	DataLength int64  `json:"dataLength"`
-	Precision  *int64 `json:"precision"`
-	Scale      *int64 `json:"scale"`
-	Nullable   bool   `json:"nullable"`
+	Description string `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Position    int    `json:"position"`
+	OracleType  string `json:"oracleType"`
+	DataLength  int64  `json:"dataLength"`
+	Precision   *int64 `json:"precision"`
+	Scale       *int64 `json:"scale"`
+	Nullable    bool   `json:"nullable"`
 }
 
 type ReportResultTableSchemaDTO struct {
@@ -477,8 +479,19 @@ func (service *ReportDatasourceService) ListResultTables(ctx context.Context, ac
 	if hasMore {
 		tables = tables[:query.Limit]
 	}
+	refs := make([]reportoracle.ResultTableRef, 0, len(tables))
+	for _, table := range tables {
+		refs = append(refs, table.ResultTableRef)
+	}
+	managed, err := service.store.ManagedResultTableRefs(ctx, datasourceID, refs)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]ReportResultTableSummaryDTO, 0, len(tables))
 	for _, table := range tables {
+		if managed[table.ResultTableRef] {
+			continue
+		}
 		items = append(items, resultTableSummaryDTO(table.ResultTableRef, table.ColumnCount))
 	}
 	nextAfter := ""
@@ -502,6 +515,13 @@ func (service *ReportDatasourceService) GetResultTableSchema(ctx context.Context
 	}
 	defer cancel()
 	defer connection.Close()
+	managed, err := service.store.ManagedResultTableRefs(ctx, datasourceID, []reportoracle.ResultTableRef{normalized})
+	if err != nil {
+		return nil, err
+	}
+	if managed[normalized] {
+		return nil, fmt.Errorf("%w: 请通过伯俊目录选择受管表", ErrReportDatasourceInvalid)
+	}
 	columns, err := connection.InspectResultTable(queryCtx, normalized)
 	if err != nil {
 		if errors.Is(err, reportoracle.ErrMetadataMismatch) {
@@ -512,7 +532,7 @@ func (service *ReportDatasourceService) GetResultTableSchema(ctx context.Context
 	items := make([]ReportResultTableColumnDTO, 0, len(columns))
 	for _, column := range columns {
 		items = append(items, ReportResultTableColumnDTO{
-			Name: column.Name, Position: column.Position, OracleType: column.DataType,
+			Name: column.Name, Description: column.Comment, Position: column.Position, OracleType: column.DataType,
 			DataLength: column.DataLength, Precision: column.DataPrecision, Scale: column.DataScale,
 			Nullable: column.Nullable,
 		})

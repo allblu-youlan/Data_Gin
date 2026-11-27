@@ -13,6 +13,7 @@ export type ReportCenterClient = (path: string, options?: {
   signal?: AbortSignal
   showResult?: boolean
   silentLoading?: boolean
+  timeoutMs?: number
   acceptSafeErrorMessage?: boolean
 }) => Promise<ClientResponse>
 
@@ -336,7 +337,7 @@ export function parseReportResultTablePage(payload: unknown): ReportResultTableP
   if (!Array.isArray(data.items) || typeof data.hasMore !== 'boolean') throw new Error('invalid result table page')
   const items = data.items.map(parseReportResultTableSummary)
   const nextAfter = publicString(data.nextAfter, 1024)
-  if (data.hasMore && (!items.length || !nextAfter)) throw new Error('invalid result table cursor')
+  if (data.hasMore && !nextAfter) throw new Error('invalid result table cursor')
   return { items, hasMore: data.hasMore, nextAfter }
 }
 
@@ -757,6 +758,7 @@ function parseReportResultTableColumn(value: unknown): ReportResultTableColumn {
     name,
     position,
     oracleType,
+    ...(value.description ? { description: publicString(value.description, 512) } : {}),
     dataLength: nullableInteger(value.dataLength),
     precision: nullableInteger(value.precision),
     scale: nullableInteger(value.scale),

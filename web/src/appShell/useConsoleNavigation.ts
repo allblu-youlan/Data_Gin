@@ -62,11 +62,28 @@ export function useConsoleNavigation(sessionState: ConsoleSessionState, permissi
     return () => mobileViewport.removeEventListener('change', syncAccessibility)
   }, [mobileNavOpen, sessionState])
 
+  const activeRequest = useRef(requestedNav)
+  activeRequest.current = requestedNav
+  const navigate = useCallback((key: NavKey) => {
+    const enter = () => {
+      activeRequest.current = key
+      window.location.hash = key
+      setRequestedNav(key)
+      setMobileNavOpen(false)
+    }
+    const leaving = key !== activeRequest.current
+    const event = new CustomEvent('console-before-navigate', { cancelable: true, detail: { enter } })
+    if (leaving && !window.dispatchEvent(event)) {
+      if (navFromHash() !== activeRequest.current) history.replaceState(history.state, '', '#' + activeRequest.current)
+      return
+    }
+    enter()
+  }, [])
   useEffect(() => {
-    const handleHashChange = () => setRequestedNav(navFromHash())
+    const handleHashChange = () => navigate(navFromHash())
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [])
+  }, [navigate])
 
   const accessibleNav = sessionState === 'authenticated' ? accessibleNavFromHash(permissions, `#${requestedNav}`) : requestedNav
   const activeNav = accessibleNav ?? requestedNav
@@ -76,12 +93,6 @@ export function useConsoleNavigation(sessionState: ConsoleSessionState, permissi
     window.location.hash = accessibleNav
     setRequestedNav(accessibleNav)
   }, [accessibleNav, requestedNav, sessionState])
-
-  const navigate = useCallback((key: NavKey) => {
-    window.location.hash = key
-    setRequestedNav(key)
-    setMobileNavOpen(false)
-  }, [])
 
   return { activeNav, mobileNavOpen, mobileNavRef, mobileNavTriggerRef, navigate, setMobileNavOpen }
 }

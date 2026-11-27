@@ -90,8 +90,8 @@ func TestAllWriteRoutesHaveAuthenticatedPOSTAliases(t *testing.T) {
 			}
 		})
 	}
-	if writeCount != 47 {
-		t.Fatalf("registered write route count = %d, want 47", writeCount)
+	if writeCount != 49 {
+		t.Fatalf("registered write route count = %d, want 49", writeCount)
 	}
 }
 

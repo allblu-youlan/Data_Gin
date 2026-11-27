@@ -1,0 +1,172 @@
+.canvas {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  align-content: start;
+}
+.tools, .palette, .sectionActions, .sectionTitle, .segment, .tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.tools, .sectionTitle { justify-content: space-between; flex-wrap: wrap; }
+.segment {
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-subtle);
+}
+.segment button {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.segment button[aria-pressed='true'] {
+  background: var(--color-canvas);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+  box-shadow: var(--shadow-panel);
+}
+.palette { gap: var(--space-3); flex-wrap: wrap; }
+.palette label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.palette input[type='color'] {
+  width: 32px;
+  min-height: 30px;
+  height: 30px;
+  padding: 2px;
+  background: var(--color-canvas);
+  cursor: pointer;
+}
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  max-width: 100%;
+  overflow-x: auto;
+  border-block: 1px solid var(--color-border);
+  padding: var(--space-2) 0;
+  background: var(--color-canvas);
+}
+.tabs button { flex: none; white-space: nowrap; max-width: 22rem; overflow: hidden; }
+.tabs button[aria-current='location'] {
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+.tabs button[aria-current='location'] svg { fill: currentColor; }
+.stack { display: grid; gap: var(--space-6); min-width: 0; }
+.section {
+  min-width: 0;
+  background: var(--board-paper);
+  color: var(--board-ink);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  scroll-margin-top: 64px;
+}
+.sectionTitle {
+  background: var(--board-ink);
+  color: var(--board-paper);
+  min-height: 54px;
+  padding: 10px var(--space-4);
+  gap: var(--space-3);
+}
+.sectionTitle h3 {
+  margin: 0;
+  font-size: clamp(1rem, 1.6vw, 1.375rem);
+  font-weight: 600;
+  word-break: break-word;
+}
+.sectionActions { flex-wrap: wrap; gap: var(--space-1); }
+.sectionActions button { padding: var(--space-1) var(--space-2); min-height: 30px; }
+.size { font: 12px/1.5 var(--font-mono); margin-right: var(--space-2); }
+.tableScroll { max-width: 100%; overflow-x: auto; }
+.grid { width: 100%; border-spacing: 0; color: var(--board-ink); }
+.grid td, .grid th {
+  border-right: 1px solid color-mix(in srgb, var(--board-ink) 19%, var(--board-paper));
+  border-bottom: 1px solid color-mix(in srgb, var(--board-ink) 19%, var(--board-paper));
+}
+.grid th {
+  height: 25px;
+  font: 11px/1.4 var(--font-mono);
+  background: color-mix(in srgb, var(--board-ink) 6%, var(--board-paper));
+  text-align: center;
+}
+.grid tbody th, .grid thead th:first-child { width: 40px; min-width: 32px; }
+.grid td { padding: 0; vertical-align: middle; min-width: 96px; }
+.grid tr > :last-child { border-right: 0; }
+.grid tbody tr:last-child > * { border-bottom: 0; }
+.value, .cell {
+  display: block;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  font-size: clamp(.9rem, 1.2vw, 1.2rem);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.grid .cell {
+  display: flex;
+  width: 100%;
+  min-width: 96px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.grid .cell:hover, .grid .cell:focus-visible {
+  color: var(--board-ink);
+  background: color-mix(in srgb, var(--board-ink) 8%, var(--board-paper));
+}
+.grid .cell:focus-visible { outline: 2px solid var(--board-ink); outline-offset: -2px; }
+.grid .cell svg { width: 12px; height: 12px; }
+.editor { display: grid; gap: var(--space-4); }
+.editor label { display: grid; gap: var(--space-1); }
+.inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.fillOptions, .fillOptions label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.fillOptions { justify-content: space-between; }
+.error, .hint { margin: 0; font-size: 13px; }
+.error { color: var(--color-danger); }
+.hint { color: var(--color-text-secondary); }
+@media (max-width: 600px) {
+  .stack { gap: var(--space-4); }
+  .sectionTitle { align-items: flex-start; flex-direction: column; padding: var(--space-3); }
+  .tools { align-items: flex-start; gap: var(--space-3); }
+  .palette { gap: var(--space-2); }
+}
+.workspace, .largeScreen { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.largeScreen { position: fixed; inset: 0; z-index: 100; overflow: auto; padding: clamp(12px, 3vw, 44px); background: var(--color-canvas); }
+.pageHeader, .actions, .statusLine { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pageHeader, .statusLine { justify-content: space-between; }
+.pageHeader h2 { margin: 0; }
+.actions select, .actions input { max-width: 18em; }
+.statusLine { color: var(--color-text-secondary); font-size: 13px; }
+.boardFieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.formula { display: grid; gap: 16px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.conditions, .choices { border: 1px solid var(--color-border); min-width: 0; padding: 10px; }
+.choices, .choices label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.choices label { flex-direction: row; }
+.choices input { width: auto; }
+.filterRow { display: grid; grid-template-columns: minmax(0, 2fr) 5em minmax(0, 1fr) auto; gap: 4px; margin-bottom: 6px; }
+.editor select, .editor input, .formula select { min-width: 0; max-width: 100%; }
+.mappingSummary { margin: 0; display: grid; font-size: 14px; }
+.mappingSummary > div { display: grid; grid-template-columns: 6em minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.mappingSummary dd { margin: 0; overflow-wrap: anywhere; }
+.mappingSummary small { color: var(--color-text-secondary); }
+.preview { padding: 12px; display: grid; gap: 10px; border: 1px solid var(--color-border); background: var(--color-surface-subtle); }
+.preview ul { max-height: 16em; overflow-y: auto; margin: 0; padding-left: 1.4em; }
+.grid td[data-range] {
+  box-shadow: inset 0 0 0 1px var(--board-ink);
+  background: color-mix(in srgb, var(--board-ink) 10%, var(--board-paper));
+}

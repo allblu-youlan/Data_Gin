@@ -59,6 +59,7 @@ export type NavKey =
   | 'report_configuration'
   | 'report_query'
   | 'report_exports'
+  | 'table_board'
   | 'office_messages'
   | 'office_push'
   | 'table_email_notifications'
@@ -108,6 +109,7 @@ export const navGroups: NavGroup[] = [
     label: '报表中心',
     items: [
       { key: 'report_query', label: '报表中心', description: '选择已授权报表并下载', icon: <Search aria-hidden="true" /> },
+      { key: 'table_board', label: '表格看板', description: '按指标公式配置单元格、刷新并导出', icon: <FileSpreadsheet aria-hidden="true" /> },
       { key: 'report_exports', label: '下载记录', description: 'Excel 生成与下载状态', icon: <Download aria-hidden="true" /> },
     ],
   },
@@ -172,7 +174,7 @@ const navKeys = navItems.map((item) => item.key)
 const compactWorkspaceKeys = new Set<NavKey>([
   'access_management', 'sources', 'receive', 'pull_records', 'backfill', 'youzan_distribution', 'rules', 'processed',
   'methods', 'destinations', 'tasks', 'push_policy', 'overview', 'etl_monitor', 'runs', 'delivery_logs', 'step_runs', 'business_overview', 'sales_summary', 'store_info',
-  'mall_weather', 'passenger_flow', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'excel_jobs',
+  'mall_weather', 'passenger_flow', 'report_catalog', 'report_configuration', 'report_query', 'report_exports', 'table_board', 'excel_jobs',
   'excel_schemes', 'excel_write', 'excel_export', 'excel_oracle_import', 'excel_procedure', 'excel_workflow',
   'office_messages', 'office_push', 'table_email_notifications',
   'mention_chats', 'mention_recipients', 'mention_reports', 'mention_jobs', 'mention_status',

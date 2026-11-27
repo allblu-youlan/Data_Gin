@@ -135,6 +135,7 @@ export type ReportResultTablePage = {
 }
 
 export type ReportResultTableColumn = {
+  description?: string
   name: string
   position: number
   oracleType: string
@@ -525,6 +526,7 @@ export type BojunTableConfig = {
   requiredFilterColumns?: string[]
 }
 export type BojunTable = {
+  owner?: string
   config?: BojunTableConfig
   id: number
   bojunTableId: string
