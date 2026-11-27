@@ -12,7 +12,7 @@ import (
 type BoardExportSheet struct {
 	Title   string                 `json:"title"`
 	Rows    [][]string             `json:"rows"`
-	Numbers map[string]boardNumber `json:"-"`
+	Numbers map[string]boardNumber `json:"numbers,omitempty"`
 }
 type BoardExport struct {
 	Foreground string             `json:"foreground"`
