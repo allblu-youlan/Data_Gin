@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/providerhttp"
 	"gin-biz-web-api/pkg/shanghaimall"
 )
 
@@ -49,7 +50,7 @@ func TestBojunLoginCircuitDefersWithoutHTTPRequestOrStatusWrites(t *testing.T) {
 	setupBojunKerryLoginTestConfig(t, server.URL)
 	store, logs, runs := &fakeBojunSyncUpdater{}, &fakeDeliveryLogCreator{}, &fakeBojunPipelineRunRecorder{}
 	service := &BojunOrderPushService{retailOrderDAO: store, logDAO: logs, pipelineRunDAO: runs,
-		loginCircuit: &fakeBojunLoginCircuit{wait: 30 * time.Second}}
+		loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": &fakeBojunLoginCircuit{wait: 30 * time.Second}}}
 	result := service.PushNewOrder(t.Context(), &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1}, StoreCode: "ABCN001A004", DocNo: "COOLDOWN-1", BillDate: 20261106})
 	var deferred *bojunLoginDeferredError
 	if !errors.As(result.Error, &deferred) || !deferred.TaskDeferred() || deferred.RetryDelay() < 30*time.Second || result.Success || result.Skipped {
@@ -99,7 +100,7 @@ func TestBojunLoginCircuitReportsOnlyRealLoginFailures(t *testing.T) {
 			defer server.Close()
 			setupBojunKerryLoginTestConfig(t, server.URL)
 			circuit := &fakeBojunLoginCircuit{allowed: true}
-			service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuit: circuit}
+			service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": circuit}}
 			result := service.PushNewOrder(t.Context(), &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1}, StoreCode: "ABCN001A004", DocNo: "REPORT-1", BillDate: 20261106})
 			if result.Success != test.wantPushSuccess || circuit.failures != test.wantFailure || circuit.successes != test.wantSuccess || circuit.rateLimits != test.wantRateLimit {
 				t.Fatalf("result=%+v circuit=%+v", result, circuit)
@@ -127,7 +128,7 @@ func TestBojunLoginCircuitReportErrorDoesNotReplaySuccessfulSales(t *testing.T) 
 	defer server.Close()
 	setupBojunKerryLoginTestConfig(t, server.URL)
 	circuit := &fakeBojunLoginCircuit{allowed: true, reportErr: errors.New("redis unavailable")}
-	service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuit: circuit}
+	service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": circuit}}
 	result := service.PushNewOrder(t.Context(), &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1}, StoreCode: "ABCN001A004", DocNo: "SUCCESS-1", BillDate: 20261106})
 	if !result.Success || result.Error != nil || !result.SyncStatusSaved || salesCalls != 1 || circuit.successes != 1 {
 		t.Fatalf("result=%+v sales=%d circuit=%+v", result, salesCalls, circuit)
@@ -136,7 +137,7 @@ func TestBojunLoginCircuitReportErrorDoesNotReplaySuccessfulSales(t *testing.T) 
 
 func TestBojunLoginCircuitRedisFailureIsNotDeferral(t *testing.T) {
 	cause := errors.New("redis unavailable")
-	service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuit: &fakeBojunLoginCircuit{allowErr: cause}}
+	service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{}, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": &fakeBojunLoginCircuit{allowErr: cause}}}
 	result := service.PushNewOrder(t.Context(), &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1}, StoreCode: "ABCN001A004", DocNo: "REDIS-1", BillDate: 20261106})
 	var deferred *bojunLoginDeferredError
 	if !errors.Is(result.Error, cause) || errors.As(result.Error, &deferred) {
@@ -152,7 +153,7 @@ func TestBojunLoginCircuitPreservesFailedCooldownWrite(t *testing.T) {
 	setupBojunKerryLoginTestConfig(t, server.URL)
 	cause := errors.New("redis cooldown write failed")
 	service := &BojunOrderPushService{retailOrderDAO: &fakeBojunSyncUpdater{}, logDAO: &fakeDeliveryLogCreator{},
-		pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuit: &fakeBojunLoginCircuit{allowed: true, reportErr: cause}}
+		pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": &fakeBojunLoginCircuit{allowed: true, reportErr: cause}}}
 	result := service.PushNewOrder(t.Context(), &model.BojunRetailOrder{BaseModel: model.BaseModel{ID: 1}, StoreCode: "ABCN001A004", DocNo: "FAILED-STATE-1", BillDate: 20261106})
 	if result.Success || !errors.Is(result.Error, cause) || shanghaimall.IsRetryableLoginFailure(result.Error) {
 		t.Fatalf("cooldown persistence failure was hidden: %+v", result)

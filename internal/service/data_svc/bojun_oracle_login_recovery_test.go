@@ -16,6 +16,7 @@ import (
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/providerhttp"
 	"gin-biz-web-api/pkg/shanghaimall"
 )
 
@@ -293,7 +294,7 @@ func TestBojunOracleHTTPLoginCooldownContinuesOtherStoreAcrossPages(t *testing.T
 	gate := &bojunRecoveryGate{}
 	logs := &fakeDeliveryLogCreator{}
 	service.pushService = &BojunOrderPushService{
-		retailOrderDAO: store, logDAO: logs, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuit: gate,
+		retailOrderDAO: store, logDAO: logs, pipelineRunDAO: &fakeBojunPipelineRunRecorder{}, loginCircuits: map[string]providerhttp.ProviderCircuitBreaker{"jialicheng": gate},
 	}
 
 	result, err := service.SyncIncremental(t.Context())

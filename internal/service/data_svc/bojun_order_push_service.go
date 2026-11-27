@@ -42,7 +42,7 @@ type BojunOrderPushService struct {
 	retailOrderDAO  bojunRetailOrderSyncUpdater
 	logDAO          deliveryLogCreator
 	pipelineRunDAO  pipelineRunRecorder
-	loginCircuit    providerhttp.ProviderCircuitBreaker
+	loginCircuits   map[string]providerhttp.ProviderCircuitBreaker
 	loginCircuitErr error
 }
 
