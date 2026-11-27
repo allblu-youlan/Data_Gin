@@ -40,3 +40,24 @@ func TestExpressionRejectsInvalidReferencesAndUnsupportedSyntax(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossCellIFErrorCatchesArithmeticButPreservesSourceFailure(t *testing.T) {
+	s := Section{Cells: [][]Cell{{{Kind: "expression", Expression: "=C1/0"}, {Kind: "expression", Expression: `=IFERROR(A1,"-")`}, {Kind: "field"}}}}
+	plan, err := CompileExpressions(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(source ExpressionValue) map[Position]ExpressionValue {
+		return plan.Evaluate(func(Position) ExpressionValue { return source })
+	}
+	cells := run(ExpressionValue{Status: "ok", Value: "1"})
+	if cells[Position{0, 0}].Status != "error" || cells[Position{0, 1}] != (ExpressionValue{Status: "ok", Value: "-"}) {
+		t.Fatal(cells)
+	}
+	for _, source := range []ExpressionValue{{Status: "error", Message: "读取失败"}, {Status: "error", Message: "权限撤销"}, {Status: "null", Message: "金额缺失"}} {
+		cells = run(source)
+		if cells[Position{0, 0}] != source || cells[Position{0, 1}] != source {
+			t.Fatal(cells)
+		}
+	}
+}

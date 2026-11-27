@@ -386,9 +386,7 @@ func (plan Expressions) Evaluate(read func(Position) ExpressionValue) map[Positi
 			v = n.eval(get)
 		}
 		result[pos] = v.value()
-		if v.err != nil {
-			v = operand{unavailable: result[pos]}
-		}
+		// Preserve the underlying error class across cell references.
 		cache[pos] = v
 	}
 	return result
