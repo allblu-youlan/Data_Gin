@@ -14,7 +14,7 @@ type Props = {
   editing: boolean
   onEdit: (row: number, column: number) => void
   onPaste: (row: number, column: number, text: string, token?: string) => void
-  onCopy: (block: BoardCell[][]) => string
+  onCopy: (block: BoardCell[][], row:number, column:number) => string
   onChangePeriods: (top:number,left:number,bottom:number,right:number,period:Period) => void
 }
 
@@ -33,7 +33,7 @@ export function SectionGrid({ section, values, display, editing, onEdit, onPaste
   const range = section.cells.slice(top,bottom+1).map(line=>line.slice(left,right+1))
   function copy(event:ClipboardEvent<HTMLButtonElement>) {
     event.preventDefault()
-    event.clipboardData.setData('application/x-table-board',onCopy(range))
+    event.clipboardData.setData('application/x-table-board',onCopy(range,top,left))
     const text=range.map((line,r)=>line.map((cell,c)=>{
       const result=display?.get(section.id+'/'+addressOf(top+r,left+c))
       const content=cell.kind==='text' ? cell.text : result?.display ?? ''

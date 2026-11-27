@@ -10,7 +10,7 @@ import { CellEditor } from './CellEditor'
 import { SectionEditor } from './SectionEditor'
 import { SectionGrid } from './SectionGrid'
 import { parseClipboardTable } from './clipboard'
-import { gridWidth, maxSections, writeBlock } from './grid'
+import { gridWidth, maxSections, pasteRange, writeBlock, type CopiedRange } from './grid'
 import type { BoardCell, BoardLayout, BoardSection, BoardValues, DisplayCell } from './types'
 import styles from './BoardCanvas.module.css'
 
@@ -26,7 +26,7 @@ export function BoardCanvas({ client, asOf, layout, onChange, values, display, e
   const [batch,setBatch] = useState(false)
   const [undo,setUndo] = useState<{previous:BoardSection;applied:BoardSection} | null>(null)
   const [error, setError] = useState('')
-  const copiedBlock = useRef<{token:string;cells:BoardCell[][]} | null>(null)
+  const copiedBlock = useRef<(CopiedRange & {token:string}) | null>(null)
   const nodes = useRef(new Map<string, HTMLElement>())
   const active = layout.sections.find(section => section.id === activeId) ?? layout.sections[0]
   const current = layout.sections.find(section => section.id === cursor?.id)
@@ -52,7 +52,8 @@ export function BoardCanvas({ client, asOf, layout, onChange, values, display, e
   function paste(section: BoardSection, row: number, column: number, text: string, token?: string) {
     try {
       if (token && copiedBlock.current?.token === token) {
-        write(section,row,column,copiedBlock.current.cells)
+        replace(pasteRange(layout,section,row,column,copiedBlock.current))
+        setError('')
         return
       }
       if (!text) return
@@ -99,9 +100,9 @@ export function BoardCanvas({ client, asOf, layout, onChange, values, display, e
         </header>
         <SectionGrid display={display} editing={editing} section={section} values={values}
           onPaste={(r, c, text, token) => paste(section, r, c, text, token)}
-          onCopy={cells=>{
+          onCopy={(cells,row,column)=>{
             const token=globalThis.crypto?.randomUUID?.() ?? String(Date.now())
-            copiedBlock.current={token,cells}
+            copiedBlock.current={token,cells,row,column}
             return token
           }}
           onChangePeriods={(top,left,bottom,right,period)=>{
