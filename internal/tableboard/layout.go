@@ -14,6 +14,7 @@ import (
 )
 
 type Layout struct {
+	ReportDate string    `json:"reportDate,omitempty"`
 	Metrics    []Metric  `json:"metrics,omitempty"`
 	Sources    []Source  `json:"sources"`
 	Sections   []Section `json:"sections"`
@@ -39,16 +40,17 @@ type Section struct {
 }
 
 type Cell struct {
-	MetricID  string                     `json:"metricId,omitempty"`
-	Period    string                     `json:"period,omitempty"`
-	Filters   []Filter                   `json:"filters,omitempty"`
-	Format    string                     `json:"format,omitempty"`
-	Overrides map[string]json.RawMessage `json:"overrides,omitempty"`
-	Kind      string                     `json:"kind"`
-	Text      string                     `json:"text"`
-	SourceID  string                     `json:"sourceId,omitempty"`
-	Field     string                     `json:"field,omitempty"`
-	Row       int                        `json:"row"`
+	YearOffset int                        `json:"yearOffset,omitempty"`
+	MetricID   string                     `json:"metricId,omitempty"`
+	Period     string                     `json:"period,omitempty"`
+	Filters    []Filter                   `json:"filters,omitempty"`
+	Format     string                     `json:"format,omitempty"`
+	Overrides  map[string]json.RawMessage `json:"overrides,omitempty"`
+	Kind       string                     `json:"kind"`
+	Text       string                     `json:"text"`
+	SourceID   string                     `json:"sourceId,omitempty"`
+	Field      string                     `json:"field,omitempty"`
+	Row        int                        `json:"row"`
 }
 
 var (
@@ -88,6 +90,9 @@ func (s Source) Validate() error {
 }
 
 func (l Layout) Validate() error {
+	if err := ValidateReportDate(l.ReportDate); err != nil {
+		return err
+	}
 	if !color.MatchString(l.Foreground) || !color.MatchString(l.Background) {
 		return errors.New("颜色需要使用六位十六进制色值")
 	}

@@ -18,6 +18,8 @@ import (
 type aggregateRequest struct {
 	metric      tableboard.Metric
 	period      string
+	reportDate  string
+	yearOffset  int
 	filters     []tableboard.Filter
 	groupField  string
 	groupValues []string
@@ -204,7 +206,7 @@ func boardGroupKey(value, typ string) string {
 	return value
 }
 func (r aggregateRequest) execute(ctx context.Context, actor uint, asOf time.Time) (map[string]BoardCellResult, error) {
-	start, end, err := r.metric.Bounds(r.period, asOf)
+	start, end, err := r.metric.ReportBounds(r.period, asOf, r.reportDate, r.yearOffset)
 	if err != nil {
 		return nil, err
 	}

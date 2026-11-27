@@ -114,7 +114,7 @@ func TestMySQLBoardAggregateAcceptance(t *testing.T) {
 		if r.metric.DatasourceID == 2 {
 			return nil, errors.New("offline")
 		}
-		start, end, e := r.metric.Bounds(r.period, asOf)
+		start, end, e := r.metric.ReportBounds(r.period, asOf, r.reportDate, r.yearOffset)
 		if e != nil {
 			return nil, e
 		}
