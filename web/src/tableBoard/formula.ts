@@ -4,6 +4,11 @@ import type { BoardCell, BoardLayout, BoardSection, DisplayCell, Snapshot, Formu
 
 export const periods: Record<Period, string> = { TODAY: '今日累计', MONTH_TO_DATE: '本月累计', YEAR_TO_DATE: '今年累计', LAST_MONTH: '上月全月' }
 export const aggregates = { SUM: '金额求和', AVG: '平均值', COUNT: '记录计数', COUNT_DISTINCT: '订单号去重计数' }
+export const formats: Record<string,string> = { money_2: '金额 · 两位小数', integer: '整数', number: '原始数值' }
+export function metricFormat(metric: Metric) {
+  if (metric.format) return metric.format
+  return metric.aggregate === 'COUNT' || metric.aggregate === 'COUNT_DISTINCT' ? 'integer' : 'money_2'
+}
 export const addressOf = (r: number, c: number) => columnName(c) + (r + 1)
 export function newMetric(): Metric {
   return { id: 'metric-' + (globalThis.crypto?.randomUUID?.() ?? Date.now()), name: 'GMV', aggregate: 'SUM', datasourceId: 0, owner: '', tableName: '', valueField: '', timeField: '', timezone: 'Asia/Shanghai' }

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard } from '../.test-dist/tableBoard/types.js'
-import { differences, connectedMapping, matrix, newMetric, metricReferences, snapshotValues } from '../.test-dist/tableBoard/formula.js'
+import { differences, connectedMapping, matrix, newMetric, metricReferences, metricFormat, snapshotValues } from '../.test-dist/tableBoard/formula.js'
 
 test('单格仅保存归期差异，恢复继承后差异消失', () => {
   const base = { ...newMetric(), timeField: 'PAID_AT', valueField: 'PAID_AMOUNT' }
@@ -34,4 +34,17 @@ test('单格草稿隐藏变更格的旧值，其他格保留上一轮时间和�
     cells:section.cells.map((line,r)=>line.map((cell,c)=>r===1 && c===2 ? {...f,overrides:{timeField:'CREATED_AT'}} : cell))}))}
   assert.deepEqual([...snapshotValues(original,draft,snapshot).keys()], ['first/B2'])
   assert.equal(snapshotValues(original,{...draft,metrics:[{...metric,timeField:'CREATED_AT'}]},snapshot).size,0)
+})
+
+
+test('矩阵公式继承指标格式，金额默认两位，计数默认整数', () => {
+  const board = newBoard()
+  const metric = newMetric()
+  assert.equal(metricFormat(metric), 'money_2')
+  assert.equal(metricFormat({...metric,aggregate:'AVG'}), 'money_2')
+  assert.equal(metricFormat({...metric,aggregate:'COUNT_DISTINCT'}), 'integer')
+  const shared = {...metric,aggregate:'COUNT',format:'number'}
+  const [entry] = matrix(board.layout,board.layout.sections[0],1,1,shared,'STORE',['0007'],['TODAY'],false,false)
+  assert.equal(entry.cell.format, undefined)
+  assert.equal(metricFormat(shared), 'number')
 })

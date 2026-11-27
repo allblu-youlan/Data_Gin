@@ -4,7 +4,7 @@ import { useReportDatasources } from '../reportCenter/useReportDatasources'
 import { Button } from '../ui'
 import { MappingEditor } from './MappingEditor'
 import { DimensionPicker } from './DimensionPicker'
-import { aggregates, differences, periods, validMapping } from './formula'
+import { aggregates, differences, formats, metricFormat, periods, validMapping } from './formula'
 import { boardRequest } from './api'
 import type { CellResult, Formula, Mapping, Metric, Period } from './types'
 import styles from './BoardCanvas.module.css'
@@ -13,7 +13,7 @@ type Props = {client: ReportCenterClient; metrics: Metric[]; initial?:Formula; a
 type Preview = {asOf:string;before:CellResult;after:CellResult}
 function resultText(r: CellResult) { return r.status === 'ok' ? r.display || r.value : r.status === 'null' ? '— / 数据缺失' : r.message || '读取失败' }
 export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:Props) {
-  const [cell,setCell] = useState<Formula>(initial ?? {kind:'formula',metricId:metrics[0]?.id ?? '',period:'MONTH_TO_DATE',format:'money_2'})
+  const [cell,setCell] = useState<Formula>(initial ?? {kind:'formula',metricId:metrics[0]?.id ?? '',period:'MONTH_TO_DATE'})
   const [mapping,setMapping] = useState(false)
   const [preview,setPreview] = useState<{key:string;result:Preview} | null>(null)
   const [error,setError] = useState('')
@@ -64,8 +64,9 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
     }}>{metrics.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
       <label>统计期间<select value={cell.period} onChange={e=>change({...cell,period:e.target.value as Period})}>
         {Object.entries(periods).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-      <label>展示格式<select value={cell.format ?? 'number'} onChange={e=>change({...cell,format:e.target.value})}>
-        <option value="money_2">金额 · 两位小数</option><option value="integer">整数</option><option value="number">原始数值</option></select></label></div>
+      <label>展示格式<select value={cell.format ?? ''} onChange={e=>change({...cell,format:e.target.value || undefined})}>
+        <option value="">继承指标 · {formats[metricFormat(base)]}</option>
+        {Object.entries(formats).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label></div>
     <DimensionPicker client={client} metric={effective} field={field} values={cell.filters?.filter(f=>f.field===field).map(f=>f.value) ?? []}
       onChange={v=>change({...cell,filters:v.length ? [{field,op:'EQ',value:v[0]}] : undefined})}/>
     <dl className={styles.mappingSummary}>
