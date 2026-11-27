@@ -254,6 +254,14 @@ func TestReportDatasourceServiceListsVisibleResultTablesWithOpaqueCursor(t *test
 	if connection.resultTableQuery.Owner != "report" || connection.resultTableQuery.Search != "result" || connection.resultTableQuery.Limit != 3 || !connection.closed {
 		t.Fatalf("metadata query = %+v closed=%t", connection.resultTableQuery, connection.closed)
 	}
+	store.managed = map[reportoracle.ResultTableRef]bool{refs[0]: true, refs[1]: true}
+	filtered, err := service.ListResultTables(t.Context(), 7, 4, ReportResultTableCatalogQuery{Limit: 2})
+	if err != nil || len(filtered.Items) != 0 || filtered.NextAfter != page.NextAfter {
+		t.Fatalf("filtered page: %#v, %v", filtered, err)
+	}
+	if _, err := service.GetResultTableSchema(t.Context(), 7, 4, refs[0]); !errors.Is(err, ErrReportDatasourceInvalid) {
+		t.Fatalf("expected managed schema rejection, got %v", err)
+	}
 	if _, err := service.ListResultTables(t.Context(), 7, 4, ReportResultTableCatalogQuery{After: "not-base64***", Limit: 2}); !errors.Is(err, ErrReportDatasourceInvalid) {
 		t.Fatalf("invalid cursor error = %v", err)
 	}
@@ -404,7 +412,12 @@ func TestReportDatasourceServiceAcceptsJSONInputWithErrorOutput(t *testing.T) {
 	}
 }
 
+func (store *fakeReportDatasourceStore) ManagedResultTableRefs(context.Context, uint, []reportoracle.ResultTableRef) (map[reportoracle.ResultTableRef]bool, error) {
+	return store.managed, nil
+}
+
 type fakeReportDatasourceStore struct {
+	managed    map[reportoracle.ResultTableRef]bool
 	item       model.ReportDatasource
 	created    *model.ReportDatasource
 	updated    *model.ReportDatasource

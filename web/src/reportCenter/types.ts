@@ -135,6 +135,7 @@ export type ReportResultTablePage = {
 }
 
 export type ReportResultTableColumn = {
+  description?: string
   name: string
   position: number
   oracleType: string

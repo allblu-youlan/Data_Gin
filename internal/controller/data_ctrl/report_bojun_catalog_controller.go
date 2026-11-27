@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -93,11 +94,25 @@ func (h *ReportBojunCatalogController) List(c *gin.Context) {
 		writeBojunError(c, e)
 		return
 	}
+	availableOnly := c.Query("availableOnly") == "true"
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	v, e := h.service.List(c.Request.Context(), ds, c.Query("search"), c.Query("status"), c.Query("after"), limit, c.Query("availableOnly") == "true")
 	if e != nil {
 		writeBojunError(c, e)
 		return
+	}
+	if availableOnly {
+		actor := auth.CurrentUserID(c)
+		tables := v.Items[:0]
+		for _, table := range v.Items {
+			if !canSelectBojunTable(table, actor) {
+				continue
+			}
+			table.Columns = nil // load approved columns on demand
+			table.Config.DataScope.UserValues = nil
+			tables = append(tables, table)
+		}
+		v.Items = tables
 	}
 	responses.New(c).ToResponse(v)
 }
@@ -132,6 +147,11 @@ func (h *ReportBojunCatalogController) Reference(c *gin.Context) {
 	}
 	responses.New(c).ToResponse(v)
 }
+func canSelectBojunTable(t data_svc.BojunTableDTO, actor uint) bool {
+	scope := t.Config.DataScope
+	return t.Enabled && (scope.Mode == "GLOBAL_APPROVED" || scope.Mode == "SCOPE_COLUMN" && len(scope.UserValues[strconv.FormatUint(uint64(actor), 10)]) > 0)
+}
+
 func (h *ReportBojunCatalogController) Columns(c *gin.Context) {
 	ds, id, e := bojunIDs(c)
 	if e != nil {
@@ -141,6 +161,11 @@ func (h *ReportBojunCatalogController) Columns(c *gin.Context) {
 	t, e := h.service.Get(c.Request.Context(), ds, id, false)
 	if e != nil {
 		writeBojunError(c, e)
+		return
+	}
+	selectableOnly := c.Query("selectableOnly") == "true"
+	if selectableOnly && (!canSelectBojunTable(t, auth.CurrentUserID(c)) || t.ValidationStatus != "VALID") {
+		responses.New(c).ToSafeErrorResponse(errcode.Forbidden, "当前账号无法选择此表的字段")
 		return
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
@@ -164,7 +189,7 @@ func (h *ReportBojunCatalogController) Columns(c *gin.Context) {
 		if after != "" && columnID <= afterID {
 			continue
 		}
-		if c.Query("selectableOnly") == "true" && !col.IsSelectable {
+		if selectableOnly && (!col.IsPhysical || !col.IsSelectable || t.Config.SelectableColumns != nil && !slices.Contains(*t.Config.SelectableColumns, col.ID)) {
 			continue
 		}
 		if search != "" && !strings.Contains(strings.ToUpper(col.Name+col.DBName+col.Description), search) {
