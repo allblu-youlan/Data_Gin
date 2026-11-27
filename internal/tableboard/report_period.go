@@ -15,7 +15,17 @@ func ValidateReportDate(date string) error {
 	}
 	return nil
 }
-func validPeriod(period string) bool {
+
+const PeriodFilterOnly = "FILTER_ONLY"
+
+func validPeriod(period string, yearOffset int) bool {
+	if period == PeriodFilterOnly {
+		return yearOffset == 0
+	}
+	if yearOffset != 0 && yearOffset != -1 {
+		return false
+	}
+
 	switch period {
 	case "TODAY", "WEEK_TO_DATE", "MONTH_TO_DATE", "QUARTER_TO_DATE", "YEAR_TO_DATE", "LAST_MONTH", "REPORT_WEEK", "YEAR_TO_WEEK":
 		return true
@@ -38,11 +48,14 @@ func reportWeekNumber(day time.Time) int {
 }
 
 func (m Metric) ReportBounds(period string, asOf time.Time, reportDate string, yearOffset int) (time.Time, time.Time, error) {
-	if !validPeriod(period) || yearOffset != 0 && yearOffset != -1 {
+	if !validPeriod(period, yearOffset) {
 		return time.Time{}, time.Time{}, errors.New("统计期间或年度偏移无效")
 	}
 	if err := ValidateReportDate(reportDate); err != nil {
 		return time.Time{}, time.Time{}, err
+	}
+	if period == PeriodFilterOnly {
+		return time.Time{}, time.Time{}, nil
 	}
 	zone := m.Timezone
 	if zone == "" {

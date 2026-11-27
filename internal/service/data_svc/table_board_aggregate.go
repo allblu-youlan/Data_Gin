@@ -26,7 +26,10 @@ type aggregateRequest struct {
 }
 
 func (r aggregateRequest) restrictionFields() []string {
-	fields := []string{r.metric.TimeField}
+	var fields []string
+	if r.period != tableboard.PeriodFilterOnly {
+		fields = append(fields, r.metric.TimeField)
+	}
 	for _, f := range r.metric.Filters {
 		fields = append(fields, f.Field)
 	}
@@ -138,7 +141,9 @@ func compileBoardAggregate(r aggregateRequest, rel boardRelation, start, end tim
 	if err != nil {
 		return "", nil, err
 	}
-	addBoardTime(&p, m, rel, start, end)
+	if r.period != tableboard.PeriodFilterOnly {
+		addBoardTime(&p, m, rel, start, end)
+	}
 	agg := "COUNT(*)"
 	switch m.Aggregate {
 	case "SUM", "AVG":
@@ -254,7 +259,11 @@ func (r aggregateRequest) execute(ctx context.Context, actor uint, asOf time.Tim
 }
 func readBoardAggregate(rows *sql.Rows, r aggregateRequest, rel boardRelation, start, end time.Time) (map[string]BoardCellResult, error) {
 	zero := "0"
-	base := BoardCellResult{Status: "ok", Value: &zero, Start: start.Format(time.RFC3339Nano), End: end.Format(time.RFC3339Nano)}
+	base := BoardCellResult{Status: "ok", Value: &zero}
+	if r.period != tableboard.PeriodFilterOnly {
+		base.Start = start.Format(time.RFC3339Nano)
+		base.End = end.Format(time.RFC3339Nano)
+	}
 	out := map[string]BoardCellResult{}
 	var err error
 	seen := map[string]BoardCellResult{}

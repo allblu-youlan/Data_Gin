@@ -1,0 +1,83 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { newBoard } from '../.test-dist/tableBoard/types.js'
+import { newMetric, withPeriod } from '../.test-dist/tableBoard/formula.js'
+import { parseBoardConfig, readBoardConfigFile, importedLayout, boardBindings, currentConnectionChoices, maxImportBytes } from '../.test-dist/tableBoard/importConfig.js'
+
+function example(id) {
+  const {layout}=newBoard()
+  const metric={...newMetric(),id:'sales',name:'销售额',owner:'SHOP',tableName:'ORDERS',datasourceId:id,timeField:'POSTED_AT',valueField:'AMOUNT'}
+  layout.metrics=[metric]
+  layout.sections[0].cells[1][1]={kind:'formula',metricId:metric.id,period:'YEAR_TO_DATE'}
+  layout.sections[0].cells[1][2]={kind:'expression',expression:'=B2+1',format:'percent_2'}
+  return layout
+}
+
+test('导入仅取名称和布局，按物理表匹配已有连接并保留表达式',()=>{
+  const source=example(0)
+  const {layout,name}=parseBoardConfig(JSON.stringify({name:' 示例 ',layout:source,id:999,revision:999}))
+  assert.equal(name,'示例')
+  assert.equal(layout.metrics[0].datasourceId,0)
+  assert.throws(()=>importedLayout(layout,new Map()),/请选择 SHOP.ORDERS/)
+  const mapped=importedLayout(layout,currentConnectionChoices(example(7)))
+  assert.equal(mapped.metrics[0].datasourceId,7)
+  assert.deepEqual(mapped.sections[0].cells[1][2],source.sections[0].cells[1][2])
+  assert.equal(layout.metrics[0].datasourceId,0)
+})
+test('同表多连接不自动选；不同物理表的格覆盖独立绑定',()=>{
+  const current=example(7)
+  current.metrics.push({...current.metrics[0],id:'other',datasourceId:9})
+  assert.equal(currentConnectionChoices(current).has('SHOP.ORDERS'),false)
+  const next=example(0)
+  next.sections[0].cells[1][1].overrides={owner:'ARCHIVE',tableName:'HISTORY',datasourceId:0}
+  assert.equal(boardBindings(next).length,2)
+  const mapped=importedLayout(next,new Map([['SHOP.ORDERS',7],['ARCHIVE.HISTORY',9]]))
+  assert.equal(mapped.metrics[0].datasourceId,7)
+  assert.equal(mapped.sections[0].cells[1][1].overrides.datasourceId,9)
+})
+test('拒绝超限或无法安全显示的配置',()=>{
+  assert.throws(()=>parseBoardConfig('界'.repeat(Math.ceil(maxImportBytes/3))),/2 MiB/)
+  assert.throws(()=>parseBoardConfig('null'),/layout/)
+  const config={layout:example(0)}
+  config.layout.sections[0].cells[1][2]={kind:'custom'}
+  assert.throws(()=>parseBoardConfig(JSON.stringify(config)),/单元格类型/)
+})
+
+
+test('按业务过滤条件统计时清除年度偏移并保留筛选；导入拒绝冲突配置',()=>{
+  const layout=example(0)
+  const previous={...layout.sections[0].cells[1][1],yearOffset:-1,filters:[{field:'STORE',op:'EQ',value:'0007'}]}
+  const next=withPeriod(previous,'FILTER_ONLY')
+  assert.equal(next.yearOffset,undefined)
+  assert.deepEqual(next.filters,previous.filters)
+  layout.sections[0].cells[1][1]=next
+  assert.equal(parseBoardConfig(JSON.stringify({layout})).layout.sections[0].cells[1][1].period,'FILTER_ONLY')
+  layout.sections[0].cells[1][1]={...next,yearOffset:-1}
+  assert.throws(()=>parseBoardConfig(JSON.stringify({layout})),/年度偏移/)
+})
+
+
+test('本地 JSON 文件和粘贴文本共用预览，超过上限时不读取内容', async()=>{
+  const content=JSON.stringify({layout:example(7)})
+  const text=await readBoardConfigFile(new Blob([content]))
+  assert.deepEqual(parseBoardConfig(text),parseBoardConfig(content))
+  let reads=0
+  await assert.rejects(readBoardConfigFile({size:maxImportBytes+1,text:async()=>{reads++;return ''}}),/2 MiB/)
+  assert.equal(reads,0)
+  await assert.rejects(readBoardConfigFile({size:100,text:async()=>{throw new Error('IO')}}),/无法读取配置文件/)
+})
+
+test('导入时按服务端白名单及类型校验单格覆盖',()=>{
+  const layout=example(7)
+  const cell=layout.sections[0].cells[1][1]
+  for (const [key,value,message] of [
+    ['name',{bad:'type'},/不支持覆盖/], ['id','other',/不支持覆盖/], ['format','integer',/不支持覆盖/],
+    ['aggregate',['SUM'],/汇总方式/], ['bojunTableId',-1,/目录表编号/],
+    ['bojunTableId','3',/目录表编号/], ['bojunTableId',2**53,/目录表编号/],
+  ]) {
+    cell.overrides={[key]:value}
+    assert.throws(()=>parseBoardConfig(JSON.stringify({layout})),message)
+  }
+  cell.overrides={timeField:'CREATED_AT',bojunTableId:0,aggregate:'SUM'}
+  assert.deepEqual(parseBoardConfig(JSON.stringify({layout})).layout.sections[0].cells[1][1].overrides,cell.overrides)
+})

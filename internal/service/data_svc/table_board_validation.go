@@ -12,12 +12,13 @@ import (
 
 type metricValidation struct {
 	metric  tableboard.Metric
+	period  string
 	filters [][]tableboard.Filter
 }
 
 func (v metricValidation) validate(ctx context.Context, actor uint) error {
 	m := v.metric
-	r := aggregateRequest{metric: m, filters: v.filters[0]}
+	r := aggregateRequest{metric: m, period: v.period, filters: v.filters[0]}
 	return withBoardConnection(ctx, m.DatasourceID, func(ctx context.Context, conn *reportoracle.Adapter) error {
 		rel, err := r.relation(ctx, conn, actor)
 		if err != nil {
@@ -30,6 +31,9 @@ func (v metricValidation) validate(ctx context.Context, actor uint) error {
 			p, err := boardFilters(rel, append(slices.Clone(m.Filters), conditions...))
 			if err != nil {
 				return err
+			}
+			if v.period == tableboard.PeriodFilterOnly {
+				continue
 			}
 			if err = checkBoardDaySamples(ctx, conn, m, rel, p); err != nil {
 				return err
@@ -53,23 +57,27 @@ func ValidateBoardMappings(ctx context.Context, actor uint, layout tableboard.La
 	// All stores with the same mapped fields share one live schema and policy lookup.
 	groups := map[string]*metricValidation{}
 	seen := map[string]bool{}
-	queue := func(m tableboard.Metric, filters []tableboard.Filter) {
-		key := reportdataset.Hash([]any{m, filters})
+	queue := func(m tableboard.Metric, filters []tableboard.Filter, period string) {
+		// All calendar periods impose a predicate on the same time field.
+		if period != tableboard.PeriodFilterOnly {
+			period = ""
+		}
+		key := reportdataset.Hash([]any{m, filters, period})
 		if seen[key] {
 			return
 		}
 		seen[key] = true
-		r := aggregateRequest{metric: m, filters: filters}
+		r := aggregateRequest{metric: m, filters: filters, period: period}
 		group := reportdataset.Hash([]any{m, r.restrictionFields()})
 		if groups[group] == nil {
-			groups[group] = &metricValidation{metric: m}
+			groups[group] = &metricValidation{metric: m, period: period}
 		}
 		groups[group].filters = append(groups[group].filters, filters)
 	}
 	metrics := map[string]tableboard.Metric{}
 	for _, m := range layout.Metrics {
 		metrics[m.ID] = m
-		queue(m, nil)
+		queue(m, nil, "")
 	}
 	for _, s := range layout.Sections {
 		for _, row := range s.Cells {
@@ -81,7 +89,7 @@ func ValidateBoardMappings(ctx context.Context, actor uint, layout tableboard.La
 				if err != nil {
 					return err
 				}
-				queue(m, c.Filters)
+				queue(m, c.Filters, c.Period)
 			}
 		}
 	}

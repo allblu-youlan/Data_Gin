@@ -4,7 +4,7 @@ import { useReportDatasources } from '../reportCenter/useReportDatasources'
 import { Button } from '../ui'
 import { MappingEditor } from './MappingEditor'
 import { DimensionPicker } from './DimensionPicker'
-import { aggregates, differences, formats, metricFormat, periods, validMapping } from './formula'
+import { aggregates, differences, formats, metricFormat, periods, validMapping, withPeriod } from './formula'
 import { boardRequest } from './api'
 import type { CellResult, Formula, Mapping, Metric, Period } from './types'
 import styles from './BoardCanvas.module.css'
@@ -62,15 +62,15 @@ export function FormulaEditor({client,reportDate,metrics,initial,address,onApply
       if(cell.overrides && !window.confirm('更换指标将清除本格已有的字段覆盖和门店选择，继续？')) return
       change({...cell, metricId:e.target.value,overrides:undefined,filters:undefined}); setMapping(false)
     }}>{metrics.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
-      <label>统计期间<select value={cell.period} onChange={e=>change({...cell,period:e.target.value as Period})}>
+      <label>统计期间<select value={cell.period} onChange={e=>change(withPeriod(cell,e.target.value as Period))}>
         {Object.entries(periods).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-      <label>统计年度<select value={cell.yearOffset ?? 0} onChange={e=>change({...cell,yearOffset:e.target.value==='-1' ? -1 : undefined})}>
-        <option value={0}>报告年度</option><option value={-1}>上一年度</option></select></label>
+      {cell.period !== 'FILTER_ONLY' && <label>统计年度<select value={cell.yearOffset ?? 0} onChange={e=>change({...cell,yearOffset:e.target.value==='-1' ? -1 : undefined})}>
+        <option value={0}>报告年度</option><option value={-1}>上一年度</option></select></label>}
       <label>展示格式<select value={cell.format ?? ''} onChange={e=>change({...cell,format:e.target.value || undefined})}>
         <option value="">继承指标 · {formats[metricFormat(base)]}</option>
         {Object.entries(formats).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label></div>
     <DimensionPicker client={client} metric={effective} field={field} values={cell.filters?.filter(f=>f.field===field).map(f=>f.value) ?? []}
-      onChange={v=>change({...cell,filters:v.length ? [{field,op:'EQ',value:v[0]}] : undefined})}/>
+      onChange={v=>change({...cell,filters:[...(cell.filters ?? []).filter(f=>f.field!==field),...v.map(value=>({field,op:'EQ' as const,value}))]})}/>
     <dl className={styles.mappingSummary}>
       {row('当前连接','datasourceId',connections.items.find(d=>d.id===effective.datasourceId)?.name ?? String(effective.datasourceId))}
       {row('来源表','tableName',effective.owner+'.'+effective.tableName)}{row('取值字段','valueField',effective.valueField ?? '全部记录')}
@@ -86,7 +86,7 @@ export function FormulaEditor({client,reportDate,metrics,initial,address,onApply
     }}/>}
     {result && <div className={styles.preview} aria-live="polite"><small>计算截至 {result.asOf}</small>
       {(['before','after'] as const).map(k=><div key={k}><strong>{k==='before'?'继承口径':'本格口径'} · {resultText(result[k])}</strong>
-        <div>{result[k].start} 至 {result[k].end}</div><small>匹配 {result[k].matched ?? '—'} 条</small></div>)}</div>}
+        <div>{cell.period === 'FILTER_ONLY' ? periods.FILTER_ONLY : [result[k].start,result[k].end].filter(Boolean).join(' 至 ')}</div><small>匹配 {result[k].matched ?? '—'} 条</small></div>)}</div>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     <div className={styles.actions}><Button disabled={!validMapping(effective)} onClick={()=>void calculate(false)}>{busy?'计算中…':'预览修改前后'}</Button>
       <Button variant="primary" disabled={!validMapping(effective)} onClick={()=>void calculate(true)}>仅应用到 {address}</Button></div>

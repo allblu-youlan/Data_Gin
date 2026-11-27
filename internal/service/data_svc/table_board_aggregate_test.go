@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -191,6 +192,14 @@ func TestMySQLBoardAggregateAcceptance(t *testing.T) {
 			t.Fatal(want, persisted[i])
 		}
 	}
+	c.Period = tableboard.PeriodFilterOnly
+	layout.Sections[0].Cells = [][]tableboard.Cell{{c}}
+	layout.ReportDate = "2026-11-15"
+	rows = evaluateBoard(ctx, 1, layout, asOf, run, nil)
+	if rows[0].Value == nil || *rows[0].Value != "12550" || rows[0].Start != "" || rows[0].End != "" {
+		t.Fatal("business-filter-only result", rows)
+	}
+	layout.ReportDate = ""
 	c.Period = "YEAR_TO_DATE"
 	layout.Sections[0].Cells = [][]tableboard.Cell{{c}}
 	rows = evaluateBoard(ctx, 1, layout, time.Date(2027, 1, 1, 2, 0, 0, 0, time.UTC), run, nil)
@@ -211,5 +220,36 @@ func TestBoardScopeValidationOnExplicitStore(t *testing.T) {
 		if (err == nil) != tc.ok {
 			t.Fatal(tc, err)
 		}
+	}
+}
+
+func TestBoardFilterOnlyHasNoImplicitTimePredicate(t *testing.T) {
+	m := boardTestMetric()
+	c := tableboard.Cell{Kind: "formula", MetricID: m.ID, Period: tableboard.PeriodFilterOnly}
+	if _, err := m.ForCell(c); err != nil {
+		t.Fatal(err)
+	}
+	c.YearOffset = -1
+	if _, err := m.ForCell(c); err == nil {
+		t.Fatal("year offset on filter-only cell accepted")
+	}
+	asOf := time.Date(2026, 11, 29, 11, 0, 0, 0, time.UTC)
+	start, end, err := m.ReportBounds(tableboard.PeriodFilterOnly, asOf, "2026-11-15", 0)
+	if err != nil || !start.IsZero() || !end.IsZero() {
+		t.Fatal(start, end, err)
+	}
+	rel := boardTestRelation()
+	rel.from = `(SELECT * FROM ORDERS WHERE "TENANT" = :b1)`
+	rel.args = []any{sql.Named("b1", "account-range")}
+	r := aggregateRequest{metric: m, period: tableboard.PeriodFilterOnly, groupField: "STORE", groupValues: []string{"0007"}, reportDate: "2026-11-15"}
+	query, args, err := compileBoardAggregate(r, rel, start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(query, "PAID_AT") || strings.Contains(query, "TIMESTAMP") || len(args) != 3 || !strings.Contains(query, `"TENANT" = :b1`) || !strings.Contains(query, `"STATUS" = :board2`) || !strings.Contains(query, `"STORE" IN (:board3) GROUP BY "STORE"`) {
+		t.Fatalf("%s %+v", query, args)
+	}
+	if got := r.restrictionFields(); slices.Contains(got, m.TimeField) || !slices.Contains(got, "STATUS") || !slices.Contains(got, "STORE") {
+		t.Fatal("required-filter policy received incorrect constraints", got)
 	}
 }

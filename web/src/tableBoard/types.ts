@@ -26,7 +26,7 @@ export type Mapping = {
   columnIds?: Record<string, number>
 }
 export type Metric = Mapping & { id: string; name: string; format?: string }
-export type Period = 'TODAY' | 'MONTH_TO_DATE' | 'YEAR_TO_DATE' | 'LAST_MONTH' | 'WEEK_TO_DATE' | 'QUARTER_TO_DATE' | 'YEAR_TO_WEEK' | 'REPORT_WEEK'
+export type Period = 'TODAY' | 'MONTH_TO_DATE' | 'YEAR_TO_DATE' | 'LAST_MONTH' | 'WEEK_TO_DATE' | 'QUARTER_TO_DATE' | 'YEAR_TO_WEEK' | 'REPORT_WEEK' | 'FILTER_ONLY'
 export type Formula = { kind: 'formula'; metricId: string; period: Period; yearOffset?: -1 | 0; format?: string; filters?: BoardFilter[]; overrides?: Partial<Mapping> }
 export type Expression = { kind: 'expression'; expression: string; format?: string }
 export type BoardCell = Expression | { kind: 'text'; text: string } | { kind: 'field'; sourceId: string; field: string; row: number } | Formula
