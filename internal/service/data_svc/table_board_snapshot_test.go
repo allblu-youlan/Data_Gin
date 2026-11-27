@@ -45,3 +45,18 @@ func TestBoardSnapshotScreenCSVAndWorkbookAgree(t *testing.T) {
 		t.Fatal(results[0])
 	}
 }
+
+func TestBoardSnapshotInheritsMetricFormatAndKeepsCellFormat(t *testing.T) {
+	value := "6120.49"
+	layout := tableboard.Layout{Foreground: "#000000", Background: "#ffffff", Metrics: []tableboard.Metric{{ID: "gmv", Aggregate: "SUM", Format: "integer"}}, Sections: []tableboard.Section{{ID: "s", Title: "继承", Cells: [][]tableboard.Cell{{{Kind: "formula", MetricID: "gmv"}, {Kind: "formula", MetricID: "gmv", Format: "money_2"}}}}}}
+	results := []BoardCellResult{{SectionID: "s", Address: "A1", Status: "ok", Value: &value}, {SectionID: "s", Address: "B1", Status: "ok", Value: &value}}
+	snapshot, err := BuildBoardSnapshot(layout, results)
+	if err != nil || snapshot.Sections[0].Rows[0][0] != "6,120" || snapshot.Sections[0].Rows[0][1] != "6,120.49" {
+		t.Fatal(snapshot, err)
+	}
+	layout.Metrics[0].Format = "number"
+	snapshot, err = BuildBoardSnapshot(layout, results)
+	if err != nil || snapshot.Sections[0].Rows[0][0] != "6120.49" || snapshot.Sections[0].Rows[0][1] != "6,120.49" {
+		t.Fatal(snapshot, err)
+	}
+}

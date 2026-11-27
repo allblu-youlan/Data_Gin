@@ -32,6 +32,7 @@ type Metric struct {
 	Timezone     string          `json:"timezone,omitempty"`
 	Filters      []Filter        `json:"filters,omitempty"`
 	Dimensions   []string        `json:"dimensions,omitempty"`
+	Format       string          `json:"format,omitempty"`
 	Currency     string          `json:"currency,omitempty"`
 }
 
@@ -54,6 +55,9 @@ func (m Metric) Validate() error {
 	}
 	if !slices.Contains([]string{"SUM", "AVG", "COUNT", "COUNT_DISTINCT"}, m.Aggregate) {
 		return errors.New("不支持的汇总方式")
+	}
+	if !validDisplayFormat(m.Format) {
+		return errors.New("指标展示格式无效")
 	}
 	if m.TimeFormat != "" && m.TimeFormat != "YYYYMMDD" {
 		return errors.New("不支持的营业日格式")
@@ -117,6 +121,9 @@ func (m Metric) Effective(overrides map[string]json.RawMessage) (Metric, error) 
 }
 
 func (m Metric) ForCell(cell Cell) (Metric, error) {
+	if !validDisplayFormat(cell.Format) {
+		return Metric{}, errors.New("单元格展示格式无效")
+	}
 	if cell.Kind != "formula" || m.ID == "" || cell.MetricID != m.ID {
 		return Metric{}, errors.New("指标引用无效")
 	}
@@ -176,4 +183,22 @@ func Address(row, column int) string {
 		letters = string(rune('A'+(n-1)%26)) + letters
 	}
 	return strings.ToUpper(letters) + strconv.Itoa(row+1)
+}
+
+func validDisplayFormat(format string) bool {
+	return slices.Contains([]string{"", "money_2", "integer", "number"}, format)
+}
+
+// DisplayFormat resolves explicit cell formatting before the shared default.
+func (m Metric) DisplayFormat(cell Cell) string {
+	if cell.Format != "" {
+		return cell.Format
+	}
+	if m.Format != "" {
+		return m.Format
+	}
+	if m.Aggregate == "SUM" || m.Aggregate == "AVG" {
+		return "money_2"
+	}
+	return "integer"
 }

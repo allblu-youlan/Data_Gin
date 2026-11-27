@@ -72,6 +72,10 @@ func boardDisplay(result BoardCellResult, format string) string {
 // Assemble the downloadable rows and the API display values together. Legacy
 // text and field cells retain their string type, including leading zeroes.
 func BuildBoardSnapshot(layout tableboard.Layout, results []BoardCellResult) (BoardExport, error) {
+	metrics := map[string]tableboard.Metric{}
+	for _, metric := range layout.Metrics {
+		metrics[metric.ID] = metric
+	}
 	indices := make(map[[2]string]int, len(results))
 	for i, r := range results {
 		indices[[2]string{r.SectionID, r.Address}] = i
@@ -92,7 +96,11 @@ func BuildBoardSnapshot(layout tableboard.Layout, results []BoardCellResult) (Bo
 					return BoardExport{}, errors.New("单元格计算结果缺失")
 				}
 				result := &results[i]
-				result.Display = boardDisplay(*result, cell.Format)
+				format := cell.Format
+				if cell.Kind == "formula" {
+					format = metrics[cell.MetricID].DisplayFormat(cell)
+				}
+				result.Display = boardDisplay(*result, format)
 				values[col] = result.Display
 				if cell.Kind == "formula" && result.Status == "ok" && result.Value != nil {
 					raw := *result.Value
@@ -101,7 +109,7 @@ func BuildBoardSnapshot(layout tableboard.Layout, results []BoardCellResult) (Bo
 					mantissa, _, _ := strings.Cut(strings.ToUpper(raw), "E")
 					significant := strings.Trim(strings.ReplaceAll(strings.TrimLeft(mantissa, "+-"), ".", ""), "0")
 					if _, err := strconv.ParseFloat(raw, 64); err == nil && len(significant) <= 15 {
-						sheet.Numbers[address] = boardNumber{Raw: raw, Format: cell.Format}
+						sheet.Numbers[address] = boardNumber{Raw: raw, Format: format}
 					}
 				}
 			}
