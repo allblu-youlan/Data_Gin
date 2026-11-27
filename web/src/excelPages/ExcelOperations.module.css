@@ -56,3 +56,7 @@
 .methodLink:hover { color: var(--color-text); text-decoration: underline; text-underline-offset: 4px; }
 .page :global([data-slot='field-description']) { color: var(--color-text-secondary); }
 .page :global([data-slot='field'][data-invalid='true'] [data-slot='field-description']) { color: var(--color-danger); }
+.oracleMapping { table-layout: fixed; }
+.oracleField { display: grid; gap: var(--space-1); min-width: 0; }
+.oracleSelect { width: 100%; min-width: 0; }
+.oracleComment { color: var(--color-text-secondary); font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
