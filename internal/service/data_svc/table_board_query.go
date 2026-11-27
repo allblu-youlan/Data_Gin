@@ -33,7 +33,7 @@ func QueryBoardSource(ctx context.Context, actor uint, source tableboard.Source)
 
 func detailPlan(ctx context.Context, conn *reportoracle.Adapter, actor uint, source tableboard.Source) (string, []any, error) {
 	m := tableboard.Metric{DatasourceID: source.DatasourceID, Owner: source.Owner, TableName: source.TableName}
-	rel, err := resolveBoardRelation(ctx, conn, actor, m, source.Fields, nil, true)
+	rel, err := NewReportBojunCatalogService().boardRelation(ctx, conn, actor, m, source.Fields, nil, true)
 	if err != nil {
 		return "", nil, err
 	}

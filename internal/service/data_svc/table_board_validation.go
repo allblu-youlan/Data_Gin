@@ -105,7 +105,7 @@ func BoardDimensionValues(ctx context.Context, actor uint, m tableboard.Metric, 
 		for _, f := range m.Filters {
 			restricted = append(restricted, f.Field)
 		}
-		rel, err := resolveBoardRelation(ctx, conn, actor, m, m.Fields(), restricted, false)
+		rel, err := NewReportBojunCatalogService().boardRelation(ctx, conn, actor, m, m.Fields(), restricted, false)
 		if err != nil {
 			return err
 		}

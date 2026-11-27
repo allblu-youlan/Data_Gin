@@ -190,7 +190,7 @@ func checkBoardDaySamples(ctx context.Context, conn *reportoracle.Adapter, m tab
 }
 
 func (r aggregateRequest) relation(ctx context.Context, conn *reportoracle.Adapter, actor uint) (boardRelation, error) {
-	return resolveBoardRelation(ctx, conn, actor, r.metric, r.metric.Fields(), r.restrictionFields(), false)
+	return NewReportBojunCatalogService().boardRelation(ctx, conn, actor, r.metric, r.metric.Fields(), r.restrictionFields(), false)
 }
 func boardGroupKey(value, typ string) string {
 	if numericBoardType(typ) {

@@ -66,9 +66,14 @@ func (r boardRelation) fieldType(name string) string {
 	return ""
 }
 
-func resolveBoardRelation(ctx context.Context, conn *reportoracle.Adapter, actor uint, m tableboard.Metric, fields, restricted []string, detail bool) (boardRelation, error) {
+type boardMetadata interface {
+	InspectResultTable(context.Context, reportoracle.ResultTableRef) ([]reportoracle.ResultColumn, error)
+	ValidateBojunMetadata(context.Context, reportdataset.Table) error
+}
+
+func (catalog *ReportBojunCatalogService) boardRelation(ctx context.Context, conn boardMetadata, actor uint, m tableboard.Metric, fields, restricted []string, detail bool) (boardRelation, error) {
 	var rel boardRelation
-	records, err := reportrepo.New().BoardManagedTables(ctx, m.DatasourceID, m.Owner, m.TableName)
+	records, err := catalog.repo.BoardManagedTables(ctx, m.DatasourceID, m.Owner, m.TableName)
 	if err != nil {
 		return rel, err
 	}
@@ -91,7 +96,7 @@ func resolveBoardRelation(ctx context.Context, conn *reportoracle.Adapter, actor
 		if !row.SourceActive || row.ValidationStatus != "VALID" || row.SourceFilter != "" {
 			break
 		}
-		dto, err := NewReportBojunCatalogService().dto(ctx, row)
+		dto, err := catalog.dto(ctx, row)
 		if err != nil {
 			return rel, err
 		}

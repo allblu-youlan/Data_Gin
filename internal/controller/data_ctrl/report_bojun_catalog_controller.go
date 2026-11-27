@@ -108,9 +108,7 @@ func (h *ReportBojunCatalogController) List(c *gin.Context) {
 			if !canSelectBojunTable(table, actor) {
 				continue
 			}
-			table.Columns = nil // load approved columns on demand
-			table.Config.DataScope.UserValues = nil
-			tables = append(tables, table)
+			tables = append(tables, selectableBojunSummary(table))
 		}
 		v.Items = tables
 	}
@@ -126,6 +124,13 @@ func (h *ReportBojunCatalogController) Get(c *gin.Context) {
 	if e != nil {
 		writeBojunError(c, e)
 		return
+	}
+	if c.Query("availableOnly") == "true" {
+		if !canSelectBojunTable(v, auth.CurrentUserID(c)) || v.ValidationStatus != "VALID" {
+			responses.New(c).ToSafeErrorResponse(errcode.Forbidden, "当前账号无法选择此表")
+			return
+		}
+		v = selectableBojunSummary(v)
 	}
 	responses.New(c).ToResponse(v)
 }
@@ -146,6 +151,11 @@ func (h *ReportBojunCatalogController) Reference(c *gin.Context) {
 		return
 	}
 	responses.New(c).ToResponse(v)
+}
+func selectableBojunSummary(t data_svc.BojunTableDTO) data_svc.BojunTableDTO {
+	t.Columns = nil // Fields are loaded on demand through the filtered column catalog.
+	t.Config.DataScope.UserValues = nil
+	return t
 }
 func canSelectBojunTable(t data_svc.BojunTableDTO, actor uint) bool {
 	scope := t.Config.DataScope
