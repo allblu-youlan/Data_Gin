@@ -17,7 +17,7 @@ type CellEditorProps = {
 
 export function CellEditor({ section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
   const cell = section.cells[row][column]
-  const [mode, setMode] = useState<'field' | 'text' | 'paste'>(cell.kind)
+  const [mode, setMode] = useState<'field' | 'text' | 'paste'>(cell.kind === 'formula' ? 'text' : cell.kind)
   const [text, setText] = useState(cell.kind === 'text' ? cell.text : '')
   const [paste, setPaste] = useState('')
   const [sourceId, setSourceId] = useState(cell.kind === 'field' ? cell.sourceId : sources[0]?.id ?? '')
