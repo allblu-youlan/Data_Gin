@@ -42,8 +42,21 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
     } catch(e) { if (!ac.signal.aborted) setError(e instanceof Error ? e.message : '预览失败') }
     finally { if (!ac.signal.aborted) setBusy(false) }
   }
+  function restore(k:keyof Mapping) {
+    const next={...effective,[k]:base[k]}
+    if (k==='timeField') next.timeFormat=base.timeFormat
+    if (base.bojunTableId && base.bojunTableId===effective.bojunTableId) {
+      const fields=[next.valueField,next.timeField,...(next.dimensions ?? []),...(next.filters ?? []).map(f=>f.field)]
+      const ids={...base.columnIds,...effective.columnIds}
+      next.columnIds=Object.fromEntries(fields.filter(f=>f && ids[f]).map(f=>[f,ids[f]]))
+    }
+    change({...cell,overrides:differences(base,next),filters:cell.filters?.filter(f=>next.dimensions?.includes(f.field))})
+  }
   function row(label:string,k:keyof Mapping,v:string) {
-    return <div key={k}><dt>{label}</dt><dd>{v || '—'} <small>{cell.overrides && k in cell.overrides ? '仅本格' : '继承 ' + base.name}</small></dd></div>
+    return <div key={k}><dt>{label}</dt><dd>{v || '—'} <small>{cell.overrides && k in cell.overrides ? '仅本格' : '继承 ' + base.name}</small>
+      {cell.overrides && k in cell.overrides && ['valueField','timeField','aggregate','filters','dimensions','timezone'].includes(k) &&
+        effective.datasourceId===base.datasourceId && effective.owner===base.owner && effective.tableName===base.tableName &&
+        <Button onClick={()=>restore(k)}>恢复{label}继承</Button>}</dd></div>
   }
   return <fieldset disabled={busy} className={styles.formula}>
     <div className={styles.inputs}><label>指标<select value={base.id} onChange={e=>{
@@ -60,6 +73,7 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
       {row('当前连接','datasourceId',connections.items.find(d=>d.id===effective.datasourceId)?.name ?? String(effective.datasourceId))}
       {row('来源表','tableName',effective.owner+'.'+effective.tableName)}{row('取值字段','valueField',effective.valueField ?? '全部记录')}
       {row('汇总方式','aggregate',aggregates[effective.aggregate])}{row('时间字段','timeField',effective.timeField)}
+      {row('业务时区','timezone',effective.timezone || 'Asia/Shanghai')}{row('门店维度','dimensions',effective.dimensions?.join('、') || '无')}
       {row('业务过滤','filters',effective.filters?.map(f=>f.field+' '+f.op+' '+f.value).join('，') || '无附加条件')}
     </dl>
     <div className={styles.actions}><Button onClick={()=>setMapping(!mapping)}>{mapping ? '收起字段映射' : '字段映射'}</Button>

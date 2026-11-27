@@ -1,18 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getReportResultTables, getReportResultTableSchema, type ReportCenterClient } from '../reportCenter/api'
-import { getBojunColumns, getBojunTables } from '../reportCenter/bojunApi'
+import { getBojunColumns, getBojunTable, getBojunTables } from '../reportCenter/bojunApi'
 import { useReportDatasources } from '../reportCenter/useReportDatasources'
 import { Button } from '../ui'
 import { aggregates, connectedMapping } from './formula'
 import type { Aggregate, Mapping, Metric } from './types'
 import styles from './BoardCanvas.module.css'
 
-type Table = { owner: string; name: string; id?: number; description?: string }
+type Table = { owner: string; name: string; id?: number; description?: string; pending?: boolean }
 type Column = { name: string; oracleType: string; id?: number; description?: string }
 const numeric = (c: Column) => /^(NUMBER|INTEGER|DECIMAL|NUMERIC|FLOAT|BINARY_FLOAT|BINARY_DOUBLE)(\b|\()/i.test(c.oracleType)
 const date = (c: Column) => /^(DATE|TIMESTAMP)(\b|\()/i.test(c.oracleType)
 const businessDay = (c: Column) => numeric(c) || /^(N?VARCHAR2?|N?CHAR)(\b|\()/i.test(c.oracleType)
-const keyOf = (table: Table) => table.owner + '.' + table.name
+const physicalName = (table: Table) => [table.owner,table.name].filter(Boolean).join('.')
+const keyOf = (table: Table) => table.id ? 'bojun-' + table.id : physicalName(table)
 const labelOf = (c: Column) => [c.description, c.name, c.oracleType].filter(Boolean).join(' · ')
 
 export function MappingEditor({ client, value, onChange }: {client: ReportCenterClient; value: Metric; onChange: (metric: Metric) => void}) {
@@ -27,6 +28,8 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
   const [columnError, setColumnError] = useState('')
   const [loading, setLoading] = useState(false)
   const [tableLoading, setTableLoading] = useState(false)
+  const resolving = useRef<AbortController | null>(null)
+  useEffect(() => () => resolving.current?.abort(), [])
   const { datasourceId, owner, tableName, bojunTableId } = value
   useEffect(() => {
     const controller = new AbortController()
@@ -40,7 +43,7 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
         if (managed) {
           const r = await getBojunTables(client, datasourceId, { availableOnly: true, search, after }, controller.signal)
           if (!r.ok) throw new Error(r.error)
-          items.push(...r.data.items.map(t => ({owner:t.owner ?? '',name:t.resolvedTable || t.logicalName,id:t.id,description:t.description})))
+          items.push(...r.data.items.map(t => ({owner:t.owner ?? '',name:t.resolvedTable || t.logicalName,id:t.id,description:t.description,pending:!t.owner || !t.resolvedTable || t.validationStatus === 'PENDING'})))
           after = r.data.hasMore ? r.data.nextAfter : ''
         } else {
           const r = await getReportResultTables(client, datasourceId, {search, after}, controller.signal)
@@ -88,6 +91,7 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
   }
   function source(patch: Pick<Mapping, 'owner'|'tableName'|'datasourceId'|'bojunTableId'>) {
     if (tableName && !window.confirm('更换来源将清空取值、时间、营业日格式、业务过滤及门店维度，请重新选择。')) return false
+    resolving.current?.abort()
     setColumns([]); setFieldSearch('')
     onChange(connectedMapping(value, patch))
     return true
@@ -99,7 +103,23 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
       {items.filter(c => c.name === selected || labelOf(c).toLowerCase().includes(fieldSearch.trim().toLowerCase())).map(c => <option key={c.name} value={c.name}>{labelOf(c)}</option>)}
     </>
   }
-  const current = owner && tableName ? owner + '.' + tableName : ''
+  async function selectTable(table:Table) {
+    resolving.current?.abort()
+    const controller=new AbortController()
+    resolving.current=controller
+    if (table.pending && table.id) {
+      const response=await getBojunTable(client,datasourceId,String(table.id),controller.signal,true)
+      if(controller.signal.aborted) return
+      if(!response.ok) {setTableError(response.error);return}
+      const detail=response.data
+      if(!detail.enabled || detail.validationStatus!=='VALID' || !detail.owner || !detail.resolvedTable) {
+        setTableError(detail.validationReason || '该目录项的物理表不可用，请重新选择。');return
+      }
+      table={...table,owner:detail.owner,name:detail.resolvedTable}
+    }
+    source({datasourceId,owner:table.owner,tableName:table.name,bojunTableId:table.id ?? 0})
+  }
+  const current = tableName ? keyOf({owner,name:tableName,id:bojunTableId}) : ''
   const coded = !!value.timeFormat
   return <div className={styles.editor}>
     <div className={styles.inputs}>
@@ -112,10 +132,10 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
     <label>搜索表<input value={search} onChange={e => setSearch(e.target.value)} placeholder="输入表名或说明"/></label>
     <label>来源表<select value={current} disabled={!datasourceId} onChange={e => {
       const table = tables.find(t => keyOf(t) === e.target.value)
-      if (table) source({datasourceId,owner:table.owner,tableName:table.name,bojunTableId:table.id ?? 0})
+      if (table) void selectTable(table)
     }}><option value="">{tableLoading ? '正在加载表目录…' : !tables.length && datasourceId ? '无匹配或无可用表' : '请选择表'}</option>
       {current && !tables.some(t => keyOf(t) === current) && <option value={current}>{current}</option>}
-      {tables.map(t => <option key={t.id ?? keyOf(t)} value={keyOf(t)}>{keyOf(t)} {t.description}</option>)}</select></label>
+      {tables.map(t => <option key={t.id ?? keyOf(t)} value={keyOf(t)}>{physicalName(t)} {t.description}</option>)}</select></label>
     {(connections.error || tableError || columnError) && <div role="alert" className={styles.error}>{connections.error || tableError || columnError} <Button onClick={() => { connections.reload(); setRetry(v => v+1) }}>重试目录</Button></div>}
     {tableName && <><label>搜索字段<input value={fieldSearch} onChange={e => setFieldSearch(e.target.value)} placeholder="物理名或中文说明"/></label>
       <small>{loading ? '正在加载字段…' : columns.length + ' 个可用字段'}</small></>}

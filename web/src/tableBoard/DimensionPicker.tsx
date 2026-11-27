@@ -24,7 +24,7 @@ export function DimensionPicker({ client, metric, field, values, onChange, multi
     },160)
     return () => { clearTimeout(timer); ac.abort() }
   }, [client,identity,field,search,retry])
-  if (!field) return <span>全部授权门店</span>
+  if (!field) return <label>门店范围<select defaultValue=""><option value="">全部门店</option></select></label>
   return <div className={styles.editor}><label>搜索门店<input value={search} onChange={e => setSearch(e.target.value)}/></label>
     {multiple ? <fieldset className={styles.choices}><legend>选择门店</legend>{Array.from(new Set([...values,...items])).map(item =>
       <label key={item}><input type="checkbox" checked={values.includes(item)} onChange={e => onChange(e.target.checked ? [...values,item] : values.filter(v=>v!==item))}/>{item}</label>)}</fieldset>
