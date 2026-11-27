@@ -6,12 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"gin-biz-web-api/constant"
+
 	"github.com/gin-gonic/gin"
 )
 
 func TestTableBoardPreviewReportDateValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set(constant.CurrentUserID, "17") })
 	router.POST("/preview", PreviewTableBoard)
 	for _, tc := range []struct {
 		name, body, message string
