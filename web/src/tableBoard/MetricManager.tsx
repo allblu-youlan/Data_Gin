@@ -2,14 +2,10 @@ import { useState } from 'react'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { Button, Drawer } from '../ui'
 import { MappingEditor } from './MappingEditor'
-import { metricReferences, newMetric } from './formula'
+import { metricReferences, newMetric, validMapping } from './formula'
 import type { BoardLayout, Metric } from './types'
 import styles from './BoardCanvas.module.css'
 
-export function validMapping(metric: Metric) {
-  return !!(metric.name.trim() && metric.datasourceId && metric.owner && metric.tableName && metric.timeField &&
-    (metric.aggregate === 'COUNT' || metric.valueField) && (metric.filters ?? []).every(f => f.field && f.value))
-}
 export function MetricManager({client,layout,onSave,onClose}: {client: ReportCenterClient;layout: BoardLayout;onSave:(m:Metric)=>void;onClose:()=>void}) {
   const items = layout.metrics ?? []
   const [value, setValue] = useState<Metric>(() => items[0] ?? newMetric())

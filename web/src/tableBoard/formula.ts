@@ -63,3 +63,8 @@ export function snapshotValues(saved: BoardLayout | undefined, draft: BoardLayou
   }
   return values
 }
+
+export function validMapping(metric: Metric) {
+  return !!(metric.name.trim() && metric.datasourceId && metric.owner && metric.tableName && metric.timeField &&
+    (metric.aggregate === 'COUNT' || metric.valueField) && (metric.filters ?? []).every(f => f.field && f.value))
+}

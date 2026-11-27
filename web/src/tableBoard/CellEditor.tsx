@@ -8,6 +8,7 @@ import type { DisplayCell, Metric, BoardCell, BoardSection, BoardSource, BoardVa
 import styles from './BoardCanvas.module.css'
 
 type CellEditorProps = {
+  startFormula?: boolean
   result?: DisplayCell
   asOf?: string
   client: ReportCenterClient
@@ -23,9 +24,9 @@ type CellEditorProps = {
   onClose: () => void
 }
 
-export function CellEditor({ client, result, asOf, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
+export function CellEditor({ client, startFormula, result, asOf, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
   const cell = section.cells[row][column]
-  const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'formula'>(cell.kind)
+  const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'formula'>(startFormula ? 'formula' : cell.kind)
   const [text, setText] = useState(cell.kind === 'text' ? cell.text : '')
   const [paste, setPaste] = useState('')
   const [sourceId, setSourceId] = useState(cell.kind === 'field' ? cell.sourceId : sources[0]?.id ?? '')
