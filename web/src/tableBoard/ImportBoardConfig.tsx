@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Button, Drawer } from '../ui'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { useReportDatasources } from '../reportCenter/useReportDatasources'
-import { boardBindings, currentConnectionChoices, importedLayout, parseBoardConfig, tableIdentity, type ImportedConfig } from './importConfig'
+import { boardBindings, currentConnectionChoices, importedLayout, parseBoardConfig, readBoardConfigFile, tableIdentity, type ImportedConfig } from './importConfig'
 import type { BoardLayout } from './types'
 import styles from './BoardCanvas.module.css'
 
@@ -21,6 +21,20 @@ export function ImportBoardConfig({client,current,onApply,onClose}:Props) {
   const available=new Set(enabled.map(c=>c.id))
   const currentIds=useMemo(()=>currentConnectionChoices(current),[current])
   const selected=new Map(Object.entries(choices).filter(([key,id])=>id>0 && (available.has(id) || currentIds.get(key)===id)))
+  const fileVersion=useRef(0)
+  const [reading,setReading]=useState(false)
+  async function loadFile(file:File) {
+    const version=++fileVersion.current
+    setReading(true);setPreview(null);setError('')
+    try {
+      const content=await readBoardConfigFile(file)
+      if (version===fileVersion.current) setText(content)
+    } catch (reason) {
+      if (version===fileVersion.current) setError(reason instanceof Error ? reason.message : '无法读取配置文件。')
+    } finally {
+      if (version===fileVersion.current) setReading(false)
+    }
+  }
   function inspect() {
     try {
       const next=parseBoardConfig(text)
@@ -41,11 +55,16 @@ export function ImportBoardConfig({client,current,onApply,onClose}:Props) {
     <Button variant="primary" disabled={!preview || missing.some(b=>!selected.has(tableIdentity(b)))} onClick={apply}>应用到当前草稿</Button>
   </>}>
     <div className={styles.editor}>
-      <label>配置 JSON<textarea rows={9} value={text} aria-describedby="board-import-format" onChange={e=>{
-        setText(e.target.value);setPreview(null);setError('')
+      <label>选择 JSON 文件<input type="file" accept=".json,application/json" onChange={event=>{
+        const file=event.currentTarget.files?.[0]
+        event.currentTarget.value=''
+        if (file) void loadFile(file)
       }}/></label>
-      <small id="board-import-format">粘贴包含 layout 和可选 name 的 JSON，最大 2 MiB。</small>
-      <Button disabled={!text.trim()} onClick={inspect}>预览配置</Button>
+      <label>配置 JSON<textarea rows={9} value={text} aria-describedby="board-import-format" onChange={e=>{
+        fileVersion.current++;setReading(false);setText(e.target.value);setPreview(null);setError('')
+      }}/></label>
+      <small id="board-import-format">选择本地文件，或粘贴包含 layout 和可选 name 的 JSON。最大 2 MiB。</small>
+      <Button disabled={reading || !text.trim()} onClick={inspect}>{reading ? '正在读取文件…' : '预览配置'}</Button>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       {preview && <div className={styles.preview}>
         <strong>{preview.layout.sections.length} 个区块 · {preview.layout.metrics?.length ?? 0} 个指标 · {bindings.length} 个数据来源</strong>

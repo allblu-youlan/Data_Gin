@@ -7,6 +7,12 @@ type Binding = Pick<Mapping,'owner'|'tableName'|'datasourceId'>
 export type ImportedConfig = {name?:string;layout:BoardLayout}
 export const maxImportBytes = 2 * 1024 * 1024
 
+export async function readBoardConfigFile(file: Pick<File,'size'|'text'>): Promise<string> {
+  if (file.size > maxImportBytes) throw new Error('配置文件超过 2 MiB。')
+  try { return await file.text() }
+  catch { throw new Error('无法读取配置文件，请重新选择或粘贴 JSON 文本。') }
+}
+
 function object(value:unknown): value is RecordValue {
   return typeof value==='object' && value!==null && !Array.isArray(value)
 }

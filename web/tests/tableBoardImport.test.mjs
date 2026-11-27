@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard } from '../.test-dist/tableBoard/types.js'
 import { newMetric, withPeriod } from '../.test-dist/tableBoard/formula.js'
-import { parseBoardConfig, importedLayout, boardBindings, currentConnectionChoices, maxImportBytes } from '../.test-dist/tableBoard/importConfig.js'
+import { parseBoardConfig, readBoardConfigFile, importedLayout, boardBindings, currentConnectionChoices, maxImportBytes } from '../.test-dist/tableBoard/importConfig.js'
 
 function example(id) {
   const {layout}=newBoard()
@@ -54,4 +54,15 @@ test('按业务过滤条件统计时清除年度偏移并保留筛选；导入�
   assert.equal(parseBoardConfig(JSON.stringify({layout})).layout.sections[0].cells[1][1].period,'FILTER_ONLY')
   layout.sections[0].cells[1][1]={...next,yearOffset:-1}
   assert.throws(()=>parseBoardConfig(JSON.stringify({layout})),/年度偏移/)
+})
+
+
+test('本地 JSON 文件和粘贴文本共用预览，超过上限时不读取内容', async()=>{
+  const content=JSON.stringify({layout:example(7)})
+  const text=await readBoardConfigFile(new Blob([content]))
+  assert.deepEqual(parseBoardConfig(text),parseBoardConfig(content))
+  let reads=0
+  await assert.rejects(readBoardConfigFile({size:maxImportBytes+1,text:async()=>{reads++;return ''}}),/2 MiB/)
+  assert.equal(reads,0)
+  await assert.rejects(readBoardConfigFile({size:100,text:async()=>{throw new Error('IO')}}),/无法读取配置文件/)
 })
