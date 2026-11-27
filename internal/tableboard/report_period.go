@@ -23,15 +23,18 @@ func validPeriod(period string) bool {
 	return false
 }
 
-// Excel WEEKNUM(date-1,1) moves the Sunday-based index to Monday.
-// Jan 1 belongs to the reporting year's first (possibly partial) week.
+// The November 2026 workbook's WEEKNUM(date-1,1) agrees with Monday
+// numbering. Use WEEKNUM(date,2) consistently across calendar years:
+// Jan 1 is in week one, and each subsequent Monday begins another week.
+func daysSinceMonday(day time.Time) int { return (int(day.Weekday()) + 6) % 7 }
+
 func reportWeekOne(yearStart time.Time) time.Time {
-	return yearStart.AddDate(0, 0, 1-int(yearStart.Weekday()))
+	return yearStart.AddDate(0, 0, -daysSinceMonday(yearStart))
 }
 func reportWeekNumber(day time.Time) int {
 	first := time.Date(day.Year(), 1, 1, 0, 0, 0, 0, day.Location())
-	days := day.YearDay() - 1 + int(first.Weekday()) - 1
-	return 1 + max(0, days)/7
+	days := day.YearDay() - 1 + daysSinceMonday(first)
+	return 1 + days/7
 }
 
 func (m Metric) ReportBounds(period string, asOf time.Time, reportDate string, yearOffset int) (time.Time, time.Time, error) {
@@ -78,7 +81,7 @@ func (m Metric) ReportBounds(period string, asOf time.Time, reportDate string, y
 	case "QUARTER_TO_DATE":
 		start = time.Date(year, 1+3*((month-1)/3), 1, 0, 0, 0, 0, loc)
 	case "WEEK_TO_DATE":
-		start = date.AddDate(0, 0, -(int(date.Weekday())+6)%7)
+		start = date.AddDate(0, 0, -daysSinceMonday(date))
 		if start.Before(jan) {
 			start = jan
 		}
