@@ -88,6 +88,9 @@ func (p *boardPredicate) where() string {
 func boardFilters(rel boardRelation, filters []tableboard.Filter) (boardPredicate, error) {
 	p := boardPredicate{args: slices.Clone(rel.args)}
 	for _, filter := range filters {
+		if filter.Op == "EQ" && rel.scopeField == filter.Field && !rel.scopeValues[boardGroupKey(filter.Value, rel.fieldType(filter.Field))] {
+			return p, boardInvalid("筛选值不在当前账号的数据范围内")
+		}
 		op := "="
 		if filter.Op == "NE" {
 			op = "<>"
@@ -211,6 +214,23 @@ func (r aggregateRequest) execute(ctx context.Context, actor uint, asOf time.Tim
 		if err != nil {
 			return err
 		}
+		// Keep permitted stores in this query even if a sibling cell lost access.
+		denied := map[string]BoardCellResult{}
+		if r.groupField != "" && r.groupField == rel.scopeField {
+			var allowed []string
+			for _, v := range r.groupValues {
+				if rel.scopeValues[boardGroupKey(v, rel.fieldType(r.groupField))] {
+					allowed = append(allowed, v)
+				} else {
+					denied[v] = BoardCellResult{Status: "error", Message: "门店不在当前账号的数据范围内"}
+				}
+			}
+			r.groupValues = allowed
+			if len(allowed) == 0 {
+				out = denied
+				return nil
+			}
+		}
 		statement, args, err := compileBoardAggregate(r, rel, start, end)
 		if err != nil {
 			return err
@@ -221,6 +241,11 @@ func (r aggregateRequest) execute(ctx context.Context, actor uint, asOf time.Tim
 		}
 		defer rows.Close()
 		out, err = readBoardAggregate(rows, r, rel, start, end)
+		if err == nil {
+			for k, v := range denied {
+				out[k] = v
+			}
+		}
 		return err
 	})
 	return out, err

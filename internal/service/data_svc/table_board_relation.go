@@ -50,9 +50,11 @@ func withBoardConnection(ctx context.Context, dsID uint, f func(context.Context,
 }
 
 type boardRelation struct {
-	from   string
-	args   []any
-	schema []reportoracle.ResultColumn
+	from        string
+	args        []any
+	schema      []reportoracle.ResultColumn
+	scopeField  string
+	scopeValues map[string]bool
 }
 
 func (r boardRelation) fieldType(name string) string {
@@ -116,6 +118,13 @@ func resolveBoardRelation(ctx context.Context, conn *reportoracle.Adapter, actor
 		}
 		for _, col := range t.Columns {
 			if col.IsPhysical && col.IsSelectable {
+				if t.Config.DataScope.Mode == "SCOPE_COLUMN" && col.ID == t.Config.DataScope.ColumnID {
+					rel.scopeField = col.DBName
+					rel.scopeValues = map[string]bool{}
+					for _, v := range t.Config.DataScope.UserValues[strconv.FormatUint(uint64(actor), 10)] {
+						rel.scopeValues[boardGroupKey(v, col.OracleType)] = true
+					}
+				}
 				rel.schema = append(rel.schema, reportoracle.ResultColumn{Name: col.DBName, DataType: col.OracleType})
 			}
 		}

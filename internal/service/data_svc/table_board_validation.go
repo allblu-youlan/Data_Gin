@@ -10,8 +10,14 @@ import (
 	"time"
 )
 
-func validateMetric(ctx context.Context, actor uint, m tableboard.Metric, filters []tableboard.Filter) error {
-	r := aggregateRequest{metric: m, filters: filters}
+type metricValidation struct {
+	metric  tableboard.Metric
+	filters [][]tableboard.Filter
+}
+
+func (v metricValidation) validate(ctx context.Context, actor uint) error {
+	m := v.metric
+	r := aggregateRequest{metric: m, filters: v.filters[0]}
 	return withBoardConnection(ctx, m.DatasourceID, func(ctx context.Context, conn *reportoracle.Adapter) error {
 		rel, err := r.relation(ctx, conn, actor)
 		if err != nil {
@@ -20,11 +26,16 @@ func validateMetric(ctx context.Context, actor uint, m tableboard.Metric, filter
 		if err = validateMetricFields(m, rel); err != nil {
 			return err
 		}
-		p, err := boardFilters(rel, append(slices.Clone(m.Filters), filters...))
-		if err != nil {
-			return err
+		for _, conditions := range v.filters {
+			p, err := boardFilters(rel, append(slices.Clone(m.Filters), conditions...))
+			if err != nil {
+				return err
+			}
+			if err = checkBoardDaySamples(ctx, conn, m, rel, p); err != nil {
+				return err
+			}
 		}
-		return checkBoardDaySamples(ctx, conn, m, rel, p)
+		return nil
 	})
 }
 
@@ -39,21 +50,26 @@ func ValidateBoardMappings(ctx context.Context, actor uint, layout tableboard.La
 			return err
 		}
 	}
+	// All stores with the same mapped fields share one live schema and policy lookup.
+	groups := map[string]*metricValidation{}
 	seen := map[string]bool{}
-	validate := func(m tableboard.Metric, filters []tableboard.Filter) error {
+	queue := func(m tableboard.Metric, filters []tableboard.Filter) {
 		key := reportdataset.Hash([]any{m, filters})
 		if seen[key] {
-			return nil
+			return
 		}
 		seen[key] = true
-		return validateMetric(ctx, actor, m, filters)
+		r := aggregateRequest{metric: m, filters: filters}
+		group := reportdataset.Hash([]any{m, r.restrictionFields()})
+		if groups[group] == nil {
+			groups[group] = &metricValidation{metric: m}
+		}
+		groups[group].filters = append(groups[group].filters, filters)
 	}
 	metrics := map[string]tableboard.Metric{}
 	for _, m := range layout.Metrics {
 		metrics[m.ID] = m
-		if err := validate(m, nil); err != nil {
-			return err
-		}
+		queue(m, nil)
 	}
 	for _, s := range layout.Sections {
 		for _, row := range s.Cells {
@@ -65,10 +81,13 @@ func ValidateBoardMappings(ctx context.Context, actor uint, layout tableboard.La
 				if err != nil {
 					return err
 				}
-				if err = validate(m, c.Filters); err != nil {
-					return err
-				}
+				queue(m, c.Filters)
 			}
+		}
+	}
+	for _, group := range groups {
+		if err := group.validate(ctx, actor); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -155,3 +155,18 @@ func TestMySQLBoardAggregateAcceptance(t *testing.T) {
 		t.Fatal(rows)
 	}
 }
+
+func TestBoardScopeValidationOnExplicitStore(t *testing.T) {
+	rel := boardTestRelation()
+	rel.scopeField = "STORE"
+	rel.scopeValues = map[string]bool{"0007": true}
+	for _, tc := range []struct {
+		value string
+		ok    bool
+	}{{"0007", true}, {"7", false}, {"0012", false}} {
+		_, err := boardFilters(rel, []tableboard.Filter{{Field: "STORE", Op: "EQ", Value: tc.value}})
+		if (err == nil) != tc.ok {
+			t.Fatal(tc, err)
+		}
+	}
+}
