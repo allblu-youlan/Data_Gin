@@ -7,13 +7,13 @@ import { SectionEditor } from './SectionEditor'
 import { SectionGrid } from './SectionGrid'
 import { parseClipboardTable } from './clipboard'
 import { gridWidth, maxSections, writeBlock } from './grid'
-import type { BoardCell, BoardLayout, BoardSection, BoardValues } from './types'
+import type { BoardCell, BoardLayout, BoardSection, BoardValues, DisplayCell } from './types'
 import styles from './BoardCanvas.module.css'
 
-type Props = { layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
+type Props = { display?: Map<string, DisplayCell>; layout: BoardLayout; onChange: (layout: BoardLayout) => void; values: BoardValues; editing: boolean }
 type Cursor = { id: string; row: number; column: number }
 
-export function BoardCanvas({ layout, onChange, values, editing }: Props) {
+export function BoardCanvas({ layout, onChange, values, display, editing }: Props) {
   const [single, setSingle] = useState(false)
   const [activeId, setActiveId] = useState('')
   const [cursor, setCursor] = useState<Cursor | null>(null)
@@ -82,7 +82,7 @@ export function BoardCanvas({ layout, onChange, values, editing }: Props) {
             <Button onClick={() => setSectionDraft({ id: section.id })}><Settings2 />区块设置</Button>
           </div>}
         </header>
-        <SectionGrid editing={editing} section={section} values={values}
+        <SectionGrid display={display} editing={editing} section={section} values={values}
           onPaste={(r, c, text) => paste(section, r, c, text)}
           onEdit={(row, column) => { setActiveId(section.id); setCursor({ id: section.id, row, column }) }} />
       </section>

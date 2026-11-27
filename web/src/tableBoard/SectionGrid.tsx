@@ -2,18 +2,19 @@ import { useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { Link2 } from 'lucide-react'
 import { columnName } from './clipboard'
 import { gridWidth } from './grid'
-import { resolveCell, type BoardSection, type BoardValues } from './types'
+import { resolveCell, type BoardSection, type BoardValues, type DisplayCell } from './types'
 import styles from './BoardCanvas.module.css'
 
 type Props = {
   section: BoardSection
+  display?: Map<string, DisplayCell>
   values: BoardValues
   editing: boolean
   onEdit: (row: number, column: number) => void
   onPaste: (row: number, column: number, text: string) => void
 }
 
-export function SectionGrid({ section, values, editing, onEdit, onPaste }: Props) {
+export function SectionGrid({ section, values, display, editing, onEdit, onPaste }: Props) {
   const width = gridWidth(section)
   const [focused, setFocused] = useState([0, 0])
   const activeRow = Math.min(focused[0], section.cells.length - 1)
@@ -49,9 +50,10 @@ export function SectionGrid({ section, values, editing, onEdit, onPaste }: Props
       <tbody>{section.cells.map((line, r) => <tr key={r}>
         {editing && <th scope="row">{r + 1}</th>}
         {line.map((cell, c) => {
-          const value = resolveCell(cell, values)
           const address = `${columnName(c)}${r + 1}`
-          return <td key={c}>
+          const result = display?.get(section.id + '/' + address)
+          const value = (cell.kind !== 'text' ? result?.display : undefined) ?? (cell.kind === 'formula' ? '待计算' : resolveCell(cell, values))
+          return <td key={c} title={result?.message}>
             {editing ? <button type="button" className={styles.cell}
               aria-label={`编辑 ${address}，${value || (cell.kind === 'field' ? cell.field : '空单元格')}`}
               tabIndex={r === activeRow && c === activeCol ? 0 : -1}

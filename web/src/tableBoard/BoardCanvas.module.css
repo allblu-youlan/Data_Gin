@@ -145,3 +145,11 @@
   .tools { align-items: flex-start; gap: var(--space-3); }
   .palette { gap: var(--space-2); }
 }
+.workspace, .largeScreen { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.largeScreen { position: fixed; inset: 0; z-index: 100; overflow: auto; padding: clamp(12px, 3vw, 44px); background: var(--color-canvas); }
+.pageHeader, .actions, .statusLine { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pageHeader, .statusLine { justify-content: space-between; }
+.pageHeader h2 { margin: 0; }
+.actions select, .actions input { max-width: 18em; }
+.statusLine { color: var(--color-text-secondary); font-size: 13px; }
+.boardFieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
