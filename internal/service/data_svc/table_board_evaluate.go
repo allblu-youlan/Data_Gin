@@ -45,6 +45,9 @@ func evaluateBoard(ctx context.Context, actor uint, layout tableboard.Layout, as
 				}
 				i := len(out)
 				out = append(out, BoardCellResult{SectionID: section.ID, Address: tableboard.Address(y, x), Status: "error", Message: "配置无效"})
+				if c.Kind == "expression" {
+					continue
+				}
 				if c.Kind == "field" {
 					details[c.SourceID] = append(details[c.SourceID], binding{i, c})
 					continue
@@ -142,6 +145,7 @@ func evaluateBoard(ctx context.Context, actor uint, layout tableboard.Layout, as
 		}()
 	}
 	wg.Wait()
+	resolveBoardExpressions(layout, out)
 	return out
 }
 

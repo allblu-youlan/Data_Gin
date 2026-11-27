@@ -40,6 +40,7 @@ type Section struct {
 }
 
 type Cell struct {
+	Expression string                     `json:"expression,omitempty"`
 	YearOffset int                        `json:"yearOffset,omitempty"`
 	MetricID   string                     `json:"metricId,omitempty"`
 	Period     string                     `json:"period,omitempty"`
@@ -154,6 +155,10 @@ func (s Section) validateGrid(sources map[string]Source, metrics map[string]Metr
 				if utf8.RuneCountInString(cell.Text) > 2000 {
 					return fmt.Errorf("第 %d 行第 %d 列的文本超过 2000 字", r+1, c+1)
 				}
+			case "expression":
+				if !validDisplayFormat(cell.Format) {
+					return fmt.Errorf("%s 的展示格式无效", Address(r, c))
+				}
 			case "formula":
 				if _, err := metrics[cell.MetricID].ForCell(cell); err != nil {
 					return fmt.Errorf("%s：%w", Address(r, c), err)
@@ -168,5 +173,6 @@ func (s Section) validateGrid(sources map[string]Source, metrics map[string]Metr
 			}
 		}
 	}
-	return nil
+	_, err := CompileExpressions(s)
+	return err
 }

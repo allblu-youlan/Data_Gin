@@ -164,7 +164,7 @@ func Address(row, column int) string {
 }
 
 func validDisplayFormat(format string) bool {
-	return slices.Contains([]string{"", "money_2", "integer", "number"}, format)
+	return slices.Contains([]string{"", "money_2", "integer", "number", "percent_2"}, format)
 }
 
 // DisplayFormat resolves explicit cell formatting before the shared default.
