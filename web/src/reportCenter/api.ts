@@ -337,7 +337,7 @@ export function parseReportResultTablePage(payload: unknown): ReportResultTableP
   if (!Array.isArray(data.items) || typeof data.hasMore !== 'boolean') throw new Error('invalid result table page')
   const items = data.items.map(parseReportResultTableSummary)
   const nextAfter = publicString(data.nextAfter, 1024)
-  if (data.hasMore && (!items.length || !nextAfter)) throw new Error('invalid result table cursor')
+  if (data.hasMore && !nextAfter) throw new Error('invalid result table cursor')
   return { items, hasMore: data.hasMore, nextAfter }
 }
 
