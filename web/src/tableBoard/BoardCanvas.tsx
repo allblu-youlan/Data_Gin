@@ -113,7 +113,7 @@ export function BoardCanvas({ client, asOf, layout, onChange, values, display, e
           onEdit={(row, column) => { setActiveId(section.id); setCursor({ id: section.id, row, column }) }} />
       </section>
     })}</div>
-    {editing && !manage && !batch && cursor && current && <CellEditor startFormula={cursor.formula} result={display?.get(cursor.id + '/' + addressOf(cursor.row,cursor.column))} asOf={asOf} client={client} metrics={layout.metrics ?? []} onManage={()=>{setCursor({...cursor,formula:true});setManage(true)}} onBatch={()=>setBatch(true)} key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
+    {editing && !manage && !batch && cursor && current && <CellEditor reportDate={layout.reportDate} startFormula={cursor.formula} result={display?.get(cursor.id + '/' + addressOf(cursor.row,cursor.column))} asOf={asOf} client={client} metrics={layout.metrics ?? []} onManage={()=>{setCursor({...cursor,formula:true});setManage(true)}} onBatch={()=>setBatch(true)} key={`${cursor.id}-${cursor.row}-${cursor.column}`} section={current}
       sources={layout.sources} values={values} row={cursor.row} column={cursor.column} onClose={() => setCursor(null)}
       onWrite={block => write(current, cursor.row, cursor.column, block)} />}
     {editing && manage && <MetricManager layout={layout} client={client} onClose={()=>setManage(false)} onSave={m=>{

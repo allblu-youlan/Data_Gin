@@ -81,7 +81,7 @@ export function SectionGrid({ section, values, display, editing, onEdit, onPaste
         {line.map((cell, c) => {
           const address = `${columnName(c)}${r + 1}`
           const result = display?.get(section.id + '/' + address)
-          const value = (cell.kind !== 'text' ? result?.display : undefined) ?? (cell.kind === 'formula' ? '待计算' : resolveCell(cell, values))
+          const value = (cell.kind !== 'text' ? result?.display : undefined) ?? ((cell.kind === 'formula' || cell.kind === 'expression') ? '待计算' : resolveCell(cell, values))
           return <td key={c} title={result?.message} data-range={editing && !!anchor && r>=top && r<=bottom && c>=left && c<=right || undefined}>
             {editing ? <button type="button" className={styles.cell}
               aria-label={`编辑 ${address}，${value || (cell.kind === 'field' ? cell.field : '空单元格')}`}

@@ -179,6 +179,7 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
       </div>
     </header>
     {!large && <div className={styles.actions}><label>看板名称 <input maxLength={100} value={draft.name} disabled={busy} onChange={e => edit({...draft, name:e.target.value})}/></label>
+      <label>报告日期 <input type="date" value={draft.layout.reportDate ?? ''} disabled={busy} onChange={e => edit({...draft,layout:{...draft.layout,reportDate:e.target.value || undefined}})} /></label>
       <Button variant="primary" disabled={busy || !draft.name.trim()} onClick={() => void save()}><Save/>保存看板</Button>
       {draft.id > 0 && <Button disabled={busy} onClick={() => void remove()}>删除看板</Button>}
     </div>}

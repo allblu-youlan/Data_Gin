@@ -9,10 +9,10 @@ import { boardRequest } from './api'
 import type { CellResult, Formula, Mapping, Metric, Period } from './types'
 import styles from './BoardCanvas.module.css'
 
-type Props = {client: ReportCenterClient; metrics: Metric[]; initial?:Formula; address:string; onApply:(cell:Formula)=>void; onManage:()=>void}
+type Props = {reportDate?:string; client: ReportCenterClient; metrics: Metric[]; initial?:Formula; address:string; onApply:(cell:Formula)=>void; onManage:()=>void}
 type Preview = {asOf:string;before:CellResult;after:CellResult}
 function resultText(r: CellResult) { return r.status === 'ok' ? r.display || r.value : r.status === 'null' ? '— / 数据缺失' : r.message || '读取失败' }
-export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:Props) {
+export function FormulaEditor({client,reportDate,metrics,initial,address,onApply,onManage}:Props) {
   const [cell,setCell] = useState<Formula>(initial ?? {kind:'formula',metricId:metrics[0]?.id ?? '',period:'MONTH_TO_DATE'})
   const [mapping,setMapping] = useState(false)
   const [preview,setPreview] = useState<{key:string;result:Preview} | null>(null)
@@ -26,7 +26,7 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
   const effective:Metric = {...base,...cell.overrides}
   const field = effective.dimensions?.[0] ?? ''
   const formula:Formula = {...cell,metricId:base.id}
-  const key = JSON.stringify([base,formula])
+  const key = JSON.stringify([base,formula,reportDate])
   const result = preview?.key === key ? preview.result : undefined
   function change(next: Formula) { setCell(next); setError(''); setPreview(null) }
   async function calculate(apply: boolean) {
@@ -34,7 +34,7 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
     pending.current=ac
     setBusy(true); setError('')
     try {
-      const response = result ?? await boardRequest<Preview>(client,'/preview','POST',{metric:base,cell:formula},ac.signal)
+      const response = result ?? await boardRequest<Preview>(client,'/preview','POST',{metric:base,cell:formula,reportDate},ac.signal)
       if(ac.signal.aborted) return
       setPreview({key,result:response})
       if (apply && response.after.status !== 'error') onApply(formula)
@@ -64,6 +64,8 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
     }}>{metrics.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
       <label>统计期间<select value={cell.period} onChange={e=>change({...cell,period:e.target.value as Period})}>
         {Object.entries(periods).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+      <label>统计年度<select value={cell.yearOffset ?? 0} onChange={e=>change({...cell,yearOffset:e.target.value==='-1' ? -1 : undefined})}>
+        <option value={0}>报告年度</option><option value={-1}>上一年度</option></select></label>
       <label>展示格式<select value={cell.format ?? ''} onChange={e=>change({...cell,format:e.target.value || undefined})}>
         <option value="">继承指标 · {formats[metricFormat(base)]}</option>
         {Object.entries(formats).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label></div>
