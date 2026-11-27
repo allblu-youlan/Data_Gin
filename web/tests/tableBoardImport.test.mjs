@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard } from '../.test-dist/tableBoard/types.js'
-import { newMetric } from '../.test-dist/tableBoard/formula.js'
+import { newMetric, withPeriod } from '../.test-dist/tableBoard/formula.js'
 import { parseBoardConfig, importedLayout, boardBindings, currentConnectionChoices, maxImportBytes } from '../.test-dist/tableBoard/importConfig.js'
 
 function example(id) {
@@ -41,4 +41,17 @@ test('拒绝超限或无法安全显示的配置',()=>{
   const config={layout:example(0)}
   config.layout.sections[0].cells[1][2]={kind:'custom'}
   assert.throws(()=>parseBoardConfig(JSON.stringify(config)),/单元格类型/)
+})
+
+
+test('按业务过滤条件统计时清除年度偏移并保留筛选；导入拒绝冲突配置',()=>{
+  const layout=example(0)
+  const previous={...layout.sections[0].cells[1][1],yearOffset:-1,filters:[{field:'STORE',op:'EQ',value:'0007'}]}
+  const next=withPeriod(previous,'FILTER_ONLY')
+  assert.equal(next.yearOffset,undefined)
+  assert.deepEqual(next.filters,previous.filters)
+  layout.sections[0].cells[1][1]=next
+  assert.equal(parseBoardConfig(JSON.stringify({layout})).layout.sections[0].cells[1][1].period,'FILTER_ONLY')
+  layout.sections[0].cells[1][1]={...next,yearOffset:-1}
+  assert.throws(()=>parseBoardConfig(JSON.stringify({layout})),/年度偏移/)
 })

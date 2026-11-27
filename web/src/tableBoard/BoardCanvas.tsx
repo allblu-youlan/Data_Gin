@@ -5,7 +5,7 @@ import controls from '../ui/Controls/Controls.module.css'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { MetricManager } from './MetricManager'
 import { MatrixEditor } from './MatrixEditor'
-import { addressOf } from './formula'
+import { addressOf, withPeriod } from './formula'
 import { CellEditor } from './CellEditor'
 import { SectionEditor } from './SectionEditor'
 import { SectionGrid } from './SectionGrid'
@@ -107,7 +107,7 @@ export function BoardCanvas({ client, asOf, layout, onChange, values, display, e
           }}
           onChangePeriods={(top,left,bottom,right,period)=>{
             const cells=section.cells.map((line,r)=>line.map((cell,c)=>
-              r>=top && r<=bottom && c>=left && c<=right && cell.kind==='formula' ? {...cell,period} : cell))
+              r>=top && r<=bottom && c>=left && c<=right && cell.kind==='formula' ? withPeriod(cell,period) : cell))
             const applied={...section,cells}
             setUndo({previous:section,applied});replace(applied)
           }}

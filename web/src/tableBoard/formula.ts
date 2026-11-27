@@ -2,7 +2,12 @@ import { columnName } from './clipboard.js'
 import { checkGridSize, gridWidth } from './grid.js'
 import type { BoardCell, BoardLayout, BoardSection, DisplayCell, Snapshot, Formula, Mapping, Metric, Period } from './types'
 
-export const periods: Record<Period, string> = { TODAY: '今日累计', MONTH_TO_DATE: '本月累计', YEAR_TO_DATE: '今年累计', LAST_MONTH: '上月全月', WEEK_TO_DATE: '本周累计', QUARTER_TO_DATE: '本季累计', YEAR_TO_WEEK: '年度截至报告周', REPORT_WEEK: '报告周' }
+export const periods: Record<Period, string> = { TODAY: '今日累计', MONTH_TO_DATE: '本月累计', YEAR_TO_DATE: '今年累计', LAST_MONTH: '上月全月', WEEK_TO_DATE: '本周累计', QUARTER_TO_DATE: '本季累计', YEAR_TO_WEEK: '年度截至报告周', REPORT_WEEK: '报告周', FILTER_ONLY: '按业务过滤条件' }
+export function withPeriod(cell: Formula, period: Period): Formula {
+  const next = { ...cell, period }
+  if (period === 'FILTER_ONLY') delete next.yearOffset
+  return next
+}
 export const aggregates = { SUM: '金额求和', AVG: '平均值', COUNT: '记录计数', COUNT_DISTINCT: '订单号去重计数' }
 export const formats: Record<string,string> = { money_2: '金额 · 两位小数', integer: '整数', number: '原始数值', percent_2: '百分比 · 两位小数' }
 export function metricFormat(metric: Metric) {

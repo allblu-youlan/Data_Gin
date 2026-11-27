@@ -75,6 +75,7 @@ export function parseBoardConfig(text:string):ImportedConfig {
           case 'expression': check(typeof c.expression==='string' && c.expression.trim(),'格间公式为空。');break
           case 'formula':
             check(metricIds.has(c.metricId) && typeof c.period==='string' && Object.prototype.hasOwnProperty.call(periods,c.period),'指标公式的指标引用或期间无效。')
+            check(c.period!=='FILTER_ONLY' || (c.yearOffset ?? 0)===0,'按业务过滤条件统计的单格不能同时设置年度偏移。')
             check(c.filters===undefined || filters(c.filters),'单格过滤条件格式无效。')
             if(c.overrides!==undefined) {check(object(c.overrides),'单格覆盖格式无效。');checkMapping(c.overrides)}
             break
