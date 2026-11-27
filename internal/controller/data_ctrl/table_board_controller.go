@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"gin-biz-web-api/internal/service/data_svc"
 	"gin-biz-web-api/internal/tableboard"
 	"gin-biz-web-api/pkg/auth"
 	"gin-biz-web-api/pkg/database"
@@ -64,6 +65,10 @@ func saveTableBoard(c *gin.Context, id uint, status int) {
 	}
 	if err := input.Validate(id == 0); err != nil {
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, err.Error())
+		return
+	}
+	if err := data_svc.ValidateBoardMappings(c.Request.Context(), auth.CurrentUserID(c), input.Layout); err != nil {
+		boardMappingError(c, err)
 		return
 	}
 	board, err := boardStore(c).Save(c.Request.Context(), id, input)
