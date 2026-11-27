@@ -2,6 +2,7 @@
 package tableboard
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 )
 
 type Layout struct {
+	Metrics    []Metric  `json:"metrics,omitempty"`
 	Sources    []Source  `json:"sources"`
 	Sections   []Section `json:"sections"`
 	Foreground string    `json:"foreground"`
@@ -37,11 +39,16 @@ type Section struct {
 }
 
 type Cell struct {
-	Kind     string `json:"kind"`
-	Text     string `json:"text"`
-	SourceID string `json:"sourceId,omitempty"`
-	Field    string `json:"field,omitempty"`
-	Row      int    `json:"row"`
+	MetricID  string                     `json:"metricId,omitempty"`
+	Period    string                     `json:"period,omitempty"`
+	Filters   []Filter                   `json:"filters,omitempty"`
+	Format    string                     `json:"format,omitempty"`
+	Overrides map[string]json.RawMessage `json:"overrides,omitempty"`
+	Kind      string                     `json:"kind"`
+	Text      string                     `json:"text"`
+	SourceID  string                     `json:"sourceId,omitempty"`
+	Field     string                     `json:"field,omitempty"`
+	Row       int                        `json:"row"`
 }
 
 var (
@@ -97,6 +104,19 @@ func (l Layout) Validate() error {
 		}
 		sources[source.ID] = source
 	}
+	metrics := make(map[string]Metric, len(l.Metrics))
+	if len(l.Metrics) > 128 {
+		return errors.New("每个看板最多支持128个指标")
+	}
+	for _, m := range l.Metrics {
+		if _, exists := metrics[m.ID]; exists {
+			return errors.New("指标标识重复")
+		}
+		if err := m.Validate(); err != nil {
+			return err
+		}
+		metrics[m.ID] = m
+	}
 	ids := make(map[string]bool, len(l.Sections))
 	total := 0
 	for _, section := range l.Sections {
@@ -104,7 +124,7 @@ func (l Layout) Validate() error {
 			return errors.New("区块标识重复或区块名称无效")
 		}
 		ids[section.ID] = true
-		if err := section.validateGrid(sources); err != nil {
+		if err := section.validateGrid(sources, metrics); err != nil {
 			return fmt.Errorf("%s：%w", section.Title, err)
 		}
 		total += len(section.Cells) * len(section.Cells[0])
@@ -115,7 +135,7 @@ func (l Layout) Validate() error {
 	return nil
 }
 
-func (s Section) validateGrid(sources map[string]Source) error {
+func (s Section) validateGrid(sources map[string]Source, metrics map[string]Metric) error {
 	if len(s.Cells) < 1 || len(s.Cells) > 100 || len(s.Cells[0]) < 1 || len(s.Cells[0]) > 32 {
 		return errors.New("区块需要 1 至 100 行、1 至 32 列")
 	}
@@ -128,6 +148,10 @@ func (s Section) validateGrid(sources map[string]Source) error {
 			case "text":
 				if utf8.RuneCountInString(cell.Text) > 2000 {
 					return fmt.Errorf("第 %d 行第 %d 列的文本超过 2000 字", r+1, c+1)
+				}
+			case "formula":
+				if _, err := metrics[cell.MetricID].ForCell(cell); err != nil {
+					return fmt.Errorf("%s：%w", Address(r, c), err)
 				}
 			case "field":
 				source, exists := sources[cell.SourceID]
