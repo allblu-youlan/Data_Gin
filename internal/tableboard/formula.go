@@ -127,7 +127,7 @@ func (m Metric) ForCell(cell Cell) (Metric, error) {
 	if cell.Kind != "formula" || m.ID == "" || cell.MetricID != m.ID {
 		return Metric{}, errors.New("指标引用无效")
 	}
-	if !validPeriod(cell.Period) || (cell.YearOffset != 0 && cell.YearOffset != -1) {
+	if !validPeriod(cell.Period, cell.YearOffset) {
 		return Metric{}, errors.New("统计期间无效")
 	}
 	effective, e := m.Effective(cell.Overrides)
