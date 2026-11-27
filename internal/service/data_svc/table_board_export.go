@@ -10,8 +10,9 @@ import (
 )
 
 type BoardExportSheet struct {
-	Title string     `json:"title"`
-	Rows  [][]string `json:"rows"`
+	Title   string                 `json:"title"`
+	Rows    [][]string             `json:"rows"`
+	Numbers map[string]boardNumber `json:"-"`
 }
 type BoardExport struct {
 	Foreground string             `json:"foreground"`
@@ -51,9 +52,20 @@ func RenderBoardXLSX(input BoardExport) ([]byte, error) {
 	}
 	book := excelize.NewFile()
 	defer book.Close()
-	style, err := book.NewStyle(&excelize.Style{Font: &excelize.Font{Color: input.Foreground[1:]}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{input.Background[1:]}}, Alignment: &excelize.Alignment{WrapText: true}})
+	baseStyle := excelize.Style{Font: &excelize.Font{Color: input.Foreground[1:]}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{input.Background[1:]}}, Alignment: &excelize.Alignment{WrapText: true}}
+	style, err := book.NewStyle(&baseStyle)
 	if err != nil {
 		return nil, err
+	}
+	styles := map[string]int{"": style}
+	for format, code := range map[string]string{"money_2": "#,##0.00", "integer": "#,##0"} {
+		numberStyle := baseStyle
+		numberStyle.CustomNumFmt = &code
+		numberID, err := book.NewStyle(&numberStyle)
+		if err != nil {
+			return nil, err
+		}
+		styles[format] = numberID
 	}
 	for i, section := range input.Sections {
 		// The numeric prefix disambiguates repeated titles even after sanitizing.
@@ -85,6 +97,16 @@ func RenderBoardXLSX(input BoardExport) ([]byte, error) {
 		}
 		if err := book.SetCellStyle(name, "A1", end, style); err != nil {
 			return nil, err
+		}
+		for pos, number := range section.Numbers {
+			if err := book.SetCellDefault(name, pos, number.Raw); err != nil {
+				return nil, err
+			}
+			if id := styles[number.Format]; id != 0 {
+				if err := book.SetCellStyle(name, pos, pos, id); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	buf, err := book.WriteToBuffer()
