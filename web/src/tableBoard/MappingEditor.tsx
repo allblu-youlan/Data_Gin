@@ -1,30 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getReportResultTables, getReportResultTableSchema, type ReportCenterClient } from '../reportCenter/api'
 import { getBojunColumns, getBojunTable, getBojunTables } from '../reportCenter/bojunApi'
 import { useReportDatasources } from '../reportCenter/useReportDatasources'
 import { Button } from '../ui'
+import { businessDay, date, numeric, type CatalogColumn } from './catalogColumn'
 import { aggregates, connectedMapping } from './formula'
 import type { Aggregate, Mapping, Metric } from './types'
 import styles from './BoardCanvas.module.css'
 
 type Table = { owner: string; name: string; id?: number; description?: string; pending?: boolean }
-type Column = { name: string; oracleType: string; id?: number; description?: string }
-const numeric = (c: Column) => /^(NUMBER|INTEGER|DECIMAL|NUMERIC|FLOAT|BINARY_FLOAT|BINARY_DOUBLE)(\b|\()/i.test(c.oracleType)
-const date = (c: Column) => /^(DATE|TIMESTAMP)(\b|\()/i.test(c.oracleType)
-const businessDay = (c: Column) => numeric(c) || /^(N?VARCHAR2?|N?CHAR)(\b|\()/i.test(c.oracleType)
 const physicalName = (table: Table) => [table.owner,table.name].filter(Boolean).join('.')
 const keyOf = (table: Table) => table.id ? 'bojun-' + table.id : physicalName(table)
-const labelOf = (c: Column) => [c.description, c.name, c.oracleType].filter(Boolean).join(' · ')
+const labelOf = (c: CatalogColumn) => [c.description, c.name, c.oracleType].filter(Boolean).join(' · ')
 
-export function MappingEditor({ client, value, onChange }: {client: ReportCenterClient; value: Metric; onChange: (metric: Metric) => void}) {
+export function MappingEditor({ client, value, onChange, initialSearch = '', children }: {
+  client: ReportCenterClient
+  value: Metric
+  onChange: (metric: Metric) => void
+  initialSearch?: string
+  children?: (columns: CatalogColumn[]) => ReactNode
+}) {
   const connections = useReportDatasources(client)
   const [managed, setManaged] = useState(!!value.bojunTableId)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
   const [fieldSearch, setFieldSearch] = useState('')
   const [retry, setRetry] = useState(0)
   const [tables, setTables] = useState<Table[]>([])
   const [tableError, setTableError] = useState('')
-  const [columns, setColumns] = useState<Column[]>([])
+  const [columns, setColumns] = useState<CatalogColumn[]>([])
   const [columnError, setColumnError] = useState('')
   const [loading, setLoading] = useState(false)
   const [tableLoading, setTableLoading] = useState(false)
@@ -62,7 +65,7 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
     setColumns([]); setColumnError(''); setLoading(!!tableName)
     if (!datasourceId || !tableName) return
     async function load() {
-      const columns: Column[] = []
+      const columns: CatalogColumn[] = []
       if (bojunTableId) {
         let after = ''
         do {
@@ -96,7 +99,7 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
     onChange(connectedMapping(value, patch))
     return true
   }
-  function options(items: Column[], selected?: string) {
+  function options(items: CatalogColumn[], selected?: string) {
     return <>
       <option value="">请选择字段</option>
       {selected && !items.some(c => c.name === selected) && <option value={selected} disabled>{selected} · {loading ? '加载中' : '字段失效，请重新选择'}</option>}
@@ -123,10 +126,10 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
   const coded = !!value.timeFormat
   return <div className={styles.editor}>
     <div className={styles.inputs}>
-      <label>已有连接<select value={datasourceId} onChange={e => { if (source({datasourceId:Number(e.target.value),owner:'',tableName:'',bojunTableId:0})) setSearch('') }}>
+      <label>已有连接<select value={datasourceId} onChange={e => { if (source({datasourceId:Number(e.target.value),owner:'',tableName:'',bojunTableId:0})) setSearch(initialSearch) }}>
         <option value={0}>请选择启用的连接</option>{connections.items.filter(item => item.enabled).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>字段目录<select value={managed ? 'managed' : 'oracle'} onChange={e => {
-        if (source({datasourceId,owner:'',tableName:'',bojunTableId:0})) { setManaged(e.target.value === 'managed'); setSearch('') }
+        if (source({datasourceId,owner:'',tableName:'',bojunTableId:0})) { setManaged(e.target.value === 'managed'); setSearch(initialSearch) }
       }}><option value="oracle">普通 Oracle</option><option value="managed">伯俊受管表</option></select></label>
     </div>
     <label>搜索表<input value={search} onChange={e => setSearch(e.target.value)} placeholder="输入表名或说明"/></label>
@@ -137,8 +140,9 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
       {current && !tables.some(t => keyOf(t) === current) && <option value={current}>{current}</option>}
       {tables.map(t => <option key={t.id ?? keyOf(t)} value={keyOf(t)}>{physicalName(t)} {t.description}</option>)}</select></label>
     {(connections.error || tableError || columnError) && <div role="alert" className={styles.error}>{connections.error || tableError || columnError} <Button onClick={() => { connections.reload(); setRetry(v => v+1) }}>重试目录</Button></div>}
-    {tableName && <><label>搜索字段<input value={fieldSearch} onChange={e => setFieldSearch(e.target.value)} placeholder="物理名或中文说明"/></label>
+    {tableName && !children && <><label>搜索字段<input value={fieldSearch} onChange={e => setFieldSearch(e.target.value)} placeholder="物理名或中文说明"/></label>
       <small>{loading ? '正在加载字段…' : columns.length + ' 个可用字段'}</small></>}
+    {children ? children(loading || columnError ? [] : columns) : <>
     <div className={styles.inputs}>
       <label>汇总方式<select value={value.aggregate} onChange={e => {
         const aggregate = e.target.value as Aggregate
@@ -160,5 +164,6 @@ export function MappingEditor({ client, value, onChange }: {client: ReportCenter
       </div>)}
       <Button onClick={() => update({filters:[...(value.filters ?? []),{field:'',op:'EQ',value:''}]})}>添加条件</Button>
     </fieldset>
+    </>}
   </div>
 }

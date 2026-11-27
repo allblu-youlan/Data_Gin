@@ -58,7 +58,7 @@ func RenderBoardXLSX(input BoardExport) ([]byte, error) {
 		return nil, err
 	}
 	styles := map[string]int{"": style}
-	for format, code := range map[string]string{"money_2": "#,##0.00", "integer": "#,##0"} {
+	for format, code := range map[string]string{"money_2": "#,##0.00", "integer": "#,##0", "percent_2": "0.00%"} {
 		numberStyle := baseStyle
 		numberStyle.CustomNumFmt = &code
 		numberID, err := book.NewStyle(&numberStyle)

@@ -3,11 +3,13 @@ import { Button, Drawer } from '../ui'
 import { columnName, parseClipboardTable } from './clipboard'
 import { maxColumns, maxRows, maxTextLength } from './grid'
 import type { ReportCenterClient } from "../reportCenter/api"
+import { formats } from './formula'
 import { FormulaEditor } from "./FormulaEditor"
 import type { DisplayCell, Metric, BoardCell, BoardSection, BoardSource, BoardValues } from './types'
 import styles from './BoardCanvas.module.css'
 
 type CellEditorProps = {
+  reportDate?: string
   startFormula?: boolean
   result?: DisplayCell
   asOf?: string
@@ -24,10 +26,12 @@ type CellEditorProps = {
   onClose: () => void
 }
 
-export function CellEditor({ client, startFormula, result, asOf, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
+export function CellEditor({ client, reportDate, startFormula, result, asOf, metrics, onBatch, onManage, section, row, column, sources, values, onWrite, onClose }: CellEditorProps) {
   const cell = section.cells[row][column]
-  const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'formula'>(startFormula ? 'formula' : cell.kind)
+  const [mode, setMode] = useState<'field' | 'text' | 'paste' | 'expression' | 'formula'>(startFormula ? 'formula' : cell.kind)
   const [text, setText] = useState(cell.kind === 'text' ? cell.text : '')
+  const [expression,setExpression] = useState(cell.kind === 'expression' ? cell.expression : '=')
+  const [expressionFormat,setExpressionFormat] = useState(cell.kind === 'expression' ? cell.format ?? 'number' : 'number')
   const [paste, setPaste] = useState('')
   const [sourceId, setSourceId] = useState(cell.kind === 'field' ? cell.sourceId : sources[0]?.id ?? '')
   const source = sources.find(item => item.id === sourceId)
@@ -49,7 +53,10 @@ export function CellEditor({ client, startFormula, result, asOf, metrics, onBatc
   function apply() {
     try {
       let block: BoardCell[][]
-      if (mode === 'text') {
+      if (mode === 'expression') {
+        if (!expression.trim().startsWith('=') || expression.trim().length < 2) throw new Error('请输入以等号开头的格间公式。')
+        block = [[{kind:'expression',expression:expression.trim(),format:expressionFormat}]]
+      } else if (mode === 'text') {
         block = [[{ kind: 'text', text }]]
       } else if (mode === 'paste') {
         if (!paste) throw new Error('请先粘贴表格。')
@@ -82,10 +89,17 @@ export function CellEditor({ client, startFormula, result, asOf, metrics, onBatc
         <small>计算截至 {asOf}{result.start && ' · 统计期间 ' + result.start + ' 至 ' + result.end}{cell.kind === 'formula' && result.matched !== undefined && ' · 匹配 ' + result.matched + ' 条'}</small>
       </div>}
       <div className={styles.segment} role="group" aria-label="单元格内容类型">
-        {(['text', 'formula', 'field', 'paste'] as const).map(key => <button type="button" key={key} aria-pressed={mode === key}
-          onClick={() => { setMode(key); setError('') }}>{{ text: '固定文本', formula:'指标公式', field: '数据字段', paste: '粘贴表格' }[key]}</button>)}
+        {(['text', 'formula', 'expression', 'field', 'paste'] as const).map(key => <button type="button" key={key} aria-pressed={mode === key}
+          onClick={() => { setMode(key); setError('') }}>{{ text: '固定文本', formula:'指标公式', expression:'格间公式', field: '数据字段', paste: '粘贴表格' }[key]}</button>)}
       </div>
-      {mode === 'formula' && <FormulaEditor client={client} metrics={metrics} initial={cell.kind === 'formula' ? cell : undefined} address={address} onApply={f=>{onWrite([[f]]);onClose()}} onManage={onManage}/>}
+      {mode === 'expression' && <>
+        <label>格间公式<textarea rows={3} value={expression} onChange={e=>setExpression(e.target.value)} placeholder="=IFERROR(B8/K8-1,&quot;-&quot;)"/></label>
+        <small>支持当前区块的 A1 引用、四则运算、SUM 和 IFERROR。</small>
+        <label>结果格式<select value={expressionFormat} onChange={e=>setExpressionFormat(e.target.value)}>
+          {Object.entries(formats).map(([id,label])=><option key={id} value={id}>{label}</option>)}
+        </select></label>
+      </>}
+      {mode === 'formula' && <FormulaEditor reportDate={reportDate} client={client} metrics={metrics} initial={cell.kind === 'formula' ? cell : undefined} address={address} onApply={f=>{onWrite([[f]]);onClose()}} onManage={onManage}/>}
       <Button onClick={onBatch}>批量配置 · 门店 × 期间</Button>
       {mode === 'text' && <label>单元格内容<textarea ref={textInput} rows={4} value={text} maxLength={maxTextLength}
         onPaste={event => {

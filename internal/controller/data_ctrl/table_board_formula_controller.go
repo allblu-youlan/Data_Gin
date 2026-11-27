@@ -21,8 +21,9 @@ func boardMappingError(c *gin.Context, err error) {
 }
 func PreviewTableBoard(c *gin.Context) {
 	var input struct {
-		Metric tableboard.Metric `json:"metric"`
-		Cell   tableboard.Cell   `json:"cell"`
+		Metric     tableboard.Metric `json:"metric"`
+		Cell       tableboard.Cell   `json:"cell"`
+		ReportDate string            `json:"reportDate"`
 	}
 	if err := decodeLimitedJSON(c, &input, 128<<10); err != nil {
 		responses.New(c).ToSafeErrorResponse(errcode.BadRequest, "预览配置无效")
@@ -34,7 +35,7 @@ func PreviewTableBoard(c *gin.Context) {
 		return
 	}
 	asOf := time.Now().In(location)
-	before, after, err := data_svc.PreviewBoard(c.Request.Context(), auth.CurrentUserID(c), input.Metric, input.Cell, asOf)
+	before, after, err := data_svc.PreviewBoardForDate(c.Request.Context(), auth.CurrentUserID(c), input.Metric, input.Cell, asOf, input.ReportDate)
 	if err != nil {
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, err.Error())
 		return

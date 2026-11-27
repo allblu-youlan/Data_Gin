@@ -127,7 +127,7 @@ func (m Metric) ForCell(cell Cell) (Metric, error) {
 	if cell.Kind != "formula" || m.ID == "" || cell.MetricID != m.ID {
 		return Metric{}, errors.New("指标引用无效")
 	}
-	if !slices.Contains([]string{"TODAY", "MONTH_TO_DATE", "YEAR_TO_DATE", "LAST_MONTH"}, cell.Period) {
+	if !validPeriod(cell.Period) || (cell.YearOffset != 0 && cell.YearOffset != -1) {
 		return Metric{}, errors.New("统计期间无效")
 	}
 	effective, e := m.Effective(cell.Overrides)
@@ -152,29 +152,7 @@ func (m Metric) ForCell(cell Cell) (Metric, error) {
 }
 
 func (m Metric) Bounds(period string, asOf time.Time) (time.Time, time.Time, error) {
-	zone := m.Timezone
-	if zone == "" {
-		zone = "Asia/Shanghai"
-	}
-	loc, e := time.LoadLocation(zone)
-	if e != nil {
-		return time.Time{}, time.Time{}, e
-	}
-	end := asOf.In(loc)
-	y, month, d := end.Date()
-	switch period {
-	case "YEAR_TO_DATE":
-		month, d = time.January, 1
-	case "MONTH_TO_DATE":
-		d = 1
-	case "TODAY":
-	case "LAST_MONTH":
-		end = time.Date(y, month, 1, 0, 0, 0, 0, loc)
-		return end.AddDate(0, -1, 0), end, nil
-	default:
-		return time.Time{}, time.Time{}, errors.New("统计期间无效")
-	}
-	return time.Date(y, month, d, 0, 0, 0, 0, loc), end, nil
+	return m.ReportBounds(period, asOf, "", 0)
 }
 
 func Address(row, column int) string {
@@ -186,7 +164,7 @@ func Address(row, column int) string {
 }
 
 func validDisplayFormat(format string) bool {
-	return slices.Contains([]string{"", "money_2", "integer", "number"}, format)
+	return slices.Contains([]string{"", "money_2", "integer", "number", "percent_2"}, format)
 }
 
 // DisplayFormat resolves explicit cell formatting before the shared default.

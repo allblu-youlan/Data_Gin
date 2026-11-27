@@ -45,6 +45,9 @@ func evaluateBoard(ctx context.Context, actor uint, layout tableboard.Layout, as
 				}
 				i := len(out)
 				out = append(out, BoardCellResult{SectionID: section.ID, Address: tableboard.Address(y, x), Status: "error", Message: "配置无效"})
+				if c.Kind == "expression" {
+					continue
+				}
 				if c.Kind == "field" {
 					details[c.SourceID] = append(details[c.SourceID], binding{i, c})
 					continue
@@ -54,14 +57,14 @@ func evaluateBoard(ctx context.Context, actor uint, layout tableboard.Layout, as
 					out[i].Message = err.Error()
 					continue
 				}
-				r := aggregateRequest{metric: m, period: c.Period, filters: c.Filters}
+				r := aggregateRequest{metric: m, period: c.Period, reportDate: layout.ReportDate, yearOffset: c.YearOffset, filters: c.Filters}
 				group := ""
 				if len(c.Filters) == 1 && c.Filters[0].Op == "EQ" {
 					r.groupField = c.Filters[0].Field
 					group = c.Filters[0].Value
 					r.filters = nil
 				}
-				key := reportdataset.Hash([]any{m, r.period, r.filters, r.groupField})
+				key := reportdataset.Hash([]any{m, r.period, r.yearOffset, r.filters, r.groupField})
 				job := jobs[key]
 				if job == nil {
 					job = &boardJob{r, map[string][]int{}}
@@ -142,10 +145,17 @@ func evaluateBoard(ctx context.Context, actor uint, layout tableboard.Layout, as
 		}()
 	}
 	wg.Wait()
+	resolveBoardExpressions(layout, out)
 	return out
 }
 
 func PreviewBoard(ctx context.Context, actor uint, metric tableboard.Metric, cell tableboard.Cell, asOf time.Time) (BoardCellResult, BoardCellResult, error) {
+	return PreviewBoardForDate(ctx, actor, metric, cell, asOf, "")
+}
+func PreviewBoardForDate(ctx context.Context, actor uint, metric tableboard.Metric, cell tableboard.Cell, asOf time.Time, reportDate string) (BoardCellResult, BoardCellResult, error) {
+	if err := tableboard.ValidateReportDate(reportDate); err != nil {
+		return BoardCellResult{}, BoardCellResult{}, err
+	}
 	if err := metric.Validate(); err != nil {
 		return BoardCellResult{}, BoardCellResult{}, err
 	}
@@ -154,7 +164,7 @@ func PreviewBoard(ctx context.Context, actor uint, metric tableboard.Metric, cel
 	}
 	before := cell
 	before.Overrides = nil
-	layout := tableboard.Layout{Metrics: []tableboard.Metric{metric}, Sections: []tableboard.Section{{ID: "preview", Cells: [][]tableboard.Cell{{before, cell}}}}}
+	layout := tableboard.Layout{ReportDate: reportDate, Metrics: []tableboard.Metric{metric}, Sections: []tableboard.Section{{ID: "preview", Cells: [][]tableboard.Cell{{before, cell}}}}}
 	results := EvaluateBoard(ctx, actor, layout, asOf)
 	if len(results) != 2 {
 		return BoardCellResult{}, BoardCellResult{}, fmt.Errorf("预览配置无效")

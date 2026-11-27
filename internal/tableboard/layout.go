@@ -14,6 +14,7 @@ import (
 )
 
 type Layout struct {
+	ReportDate string    `json:"reportDate,omitempty"`
 	Metrics    []Metric  `json:"metrics,omitempty"`
 	Sources    []Source  `json:"sources"`
 	Sections   []Section `json:"sections"`
@@ -39,16 +40,18 @@ type Section struct {
 }
 
 type Cell struct {
-	MetricID  string                     `json:"metricId,omitempty"`
-	Period    string                     `json:"period,omitempty"`
-	Filters   []Filter                   `json:"filters,omitempty"`
-	Format    string                     `json:"format,omitempty"`
-	Overrides map[string]json.RawMessage `json:"overrides,omitempty"`
-	Kind      string                     `json:"kind"`
-	Text      string                     `json:"text"`
-	SourceID  string                     `json:"sourceId,omitempty"`
-	Field     string                     `json:"field,omitempty"`
-	Row       int                        `json:"row"`
+	Expression string                     `json:"expression,omitempty"`
+	YearOffset int                        `json:"yearOffset,omitempty"`
+	MetricID   string                     `json:"metricId,omitempty"`
+	Period     string                     `json:"period,omitempty"`
+	Filters    []Filter                   `json:"filters,omitempty"`
+	Format     string                     `json:"format,omitempty"`
+	Overrides  map[string]json.RawMessage `json:"overrides,omitempty"`
+	Kind       string                     `json:"kind"`
+	Text       string                     `json:"text"`
+	SourceID   string                     `json:"sourceId,omitempty"`
+	Field      string                     `json:"field,omitempty"`
+	Row        int                        `json:"row"`
 }
 
 var (
@@ -88,6 +91,9 @@ func (s Source) Validate() error {
 }
 
 func (l Layout) Validate() error {
+	if err := ValidateReportDate(l.ReportDate); err != nil {
+		return err
+	}
 	if !color.MatchString(l.Foreground) || !color.MatchString(l.Background) {
 		return errors.New("颜色需要使用六位十六进制色值")
 	}
@@ -149,6 +155,10 @@ func (s Section) validateGrid(sources map[string]Source, metrics map[string]Metr
 				if utf8.RuneCountInString(cell.Text) > 2000 {
 					return fmt.Errorf("第 %d 行第 %d 列的文本超过 2000 字", r+1, c+1)
 				}
+			case "expression":
+				if !validDisplayFormat(cell.Format) {
+					return fmt.Errorf("%s 的展示格式无效", Address(r, c))
+				}
 			case "formula":
 				if _, err := metrics[cell.MetricID].ForCell(cell); err != nil {
 					return fmt.Errorf("%s：%w", Address(r, c), err)
@@ -163,5 +173,6 @@ func (s Section) validateGrid(sources map[string]Source, metrics map[string]Metr
 			}
 		}
 	}
-	return nil
+	_, err := CompileExpressions(s)
+	return err
 }

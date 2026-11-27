@@ -1,3 +1,4 @@
+import { pasteRange } from '../.test-dist/tableBoard/grid.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBoard } from '../.test-dist/tableBoard/types.js'
@@ -47,4 +48,21 @@ test('矩阵公式继承指标格式，金额默认两位，计数默认整数',
   const [entry] = matrix(board.layout,board.layout.sections[0],1,1,shared,'STORE',['0007'],['TODAY'],false,false)
   assert.equal(entry.cell.format, undefined)
   assert.equal(metricFormat(shared), 'number')
+})
+
+test('粘贴格间公式时同时处理绝对、相对、混合和区间引用',()=>{
+  const {layout}=newBoard(), section=layout.sections[0]
+  const source={row:0,column:0,cells:[[
+    {kind:'expression',expression:'=B1+$C$1+C$2+$D3'},
+    {kind:'expression',expression:'=SUM(B1:B2)'}]]}
+  const result=pasteRange(layout,section,1,1,source)
+  assert.equal(result.cells[1][1].expression,'=C2+$C$1+D$2+$D4')
+  assert.equal(result.cells[1][2].expression,'=SUM(C2:C3)')
+  assert.equal(source.cells[0][0].expression,'=B1+$C$1+C$2+$D3')
+})
+test('引用偏移越界时整块保持原状',()=>{
+  const {layout}=newBoard(), section=layout.sections[0]
+  const source={row:1,column:1,cells:[[{kind:'text',text:'不应写入'},{kind:'expression',expression:'=A1'}]]}
+  assert.throws(()=>pasteRange(layout,section,0,0,source),/引用 A1 超出目标区块/)
+  assert.deepEqual(section.cells[0][0],{kind:'text',text:''})
 })

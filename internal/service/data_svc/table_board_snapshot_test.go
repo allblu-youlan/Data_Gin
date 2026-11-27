@@ -5,6 +5,7 @@ import (
 	"gin-biz-web-api/internal/tableboard"
 	"github.com/xuri/excelize/v2"
 	"testing"
+	"time"
 )
 
 func TestBoardSnapshotScreenCSVAndWorkbookAgree(t *testing.T) {
@@ -58,5 +59,51 @@ func TestBoardSnapshotInheritsMetricFormatAndKeepsCellFormat(t *testing.T) {
 	snapshot, err = BuildBoardSnapshot(layout, results)
 	if err != nil || snapshot.Sections[0].Rows[0][0] != "6120.49" || snapshot.Sections[0].Rows[0][1] != "6,120.49" {
 		t.Fatal(snapshot, err)
+	}
+}
+
+func TestGMVPercentSnapshotUsesEvaluatedRatio(t *testing.T) {
+	layout := tableboard.Layout{Foreground: "#000000", Background: "#ffffff", Sections: []tableboard.Section{{ID: "gmv", Title: "总GMV", Cells: [][]tableboard.Cell{{
+		{Kind: "text", Text: "1"}, {Kind: "text", Text: "3"},
+		{Kind: "expression", Expression: "=A1/B1", Format: "percent_2"},
+		{Kind: "expression", Expression: `=IFERROR(A1/0,"-")`, Format: "percent_2"},
+	}}}}}
+	results := EvaluateBoard(t.Context(), 1, layout, time.Now())
+	snapshot, err := BuildBoardSnapshot(layout, results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].Display != "33.33%" || results[1].Display != "-" {
+		t.Fatal(results)
+	}
+	csv, err := RenderBoardCSV(snapshot)
+	if err != nil || string(csv) != "\ufeff总GMV\n1,3,33.33%,-\n" {
+		t.Fatal(string(csv), err)
+	}
+	data, err := RenderBoardXLSX(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	name := book.GetSheetList()[0]
+	raw, err := book.GetCellValue(name, "C1", excelize.Options{RawCellValue: true})
+	if err != nil || raw != "0.333333333333333" {
+		t.Fatal(raw, err)
+	}
+	display, err := book.GetCellValue(name, "C1")
+	if err != nil || display != "33.33%" {
+		t.Fatal(display, err)
+	}
+	formula, err := book.GetCellFormula(name, "C1")
+	if err != nil || formula != "" {
+		t.Fatal(formula, err)
+	}
+	raw, err = book.GetCellValue(name, "D1")
+	if err != nil || raw != "-" {
+		t.Fatal(raw, err)
 	}
 }

@@ -10,6 +10,7 @@ import styles from './BoardCanvas.module.css'
 function summary(cell:BoardCell | undefined) {
   if (!cell) return ''
   if (cell.kind==='text') return cell.text
+  if (cell.kind==='expression') return cell.expression
   if (cell.kind==='field') return cell.field
   return periods[cell.period]+' '+(cell.filters?.map(f=>f.value).join(', ') ?? '')
 }
