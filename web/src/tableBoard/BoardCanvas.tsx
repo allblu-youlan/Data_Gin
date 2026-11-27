@@ -25,6 +25,7 @@ export function BoardCanvas({ client, layout, onChange, values, display, editing
   const [batch,setBatch] = useState(false)
   const [undo,setUndo] = useState<{previous:BoardSection;applied:BoardSection} | null>(null)
   const [error, setError] = useState('')
+  const copiedBlock = useRef<{token:string;cells:BoardCell[][]} | null>(null)
   const nodes = useRef(new Map<string, HTMLElement>())
   const active = layout.sections.find(section => section.id === activeId) ?? layout.sections[0]
   const current = layout.sections.find(section => section.id === cursor?.id)
@@ -47,8 +48,13 @@ export function BoardCanvas({ client, layout, onChange, values, display, editing
     replace(writeBlock(layout, section, row, column, block))
     setError('')
   }
-  function paste(section: BoardSection, row: number, column: number, text: string) {
+  function paste(section: BoardSection, row: number, column: number, text: string, token?: string) {
     try {
+      if (token && copiedBlock.current?.token === token) {
+        write(section,row,column,copiedBlock.current.cells)
+        return
+      }
+      if (!text) return
       const block: BoardCell[][] = parseClipboardTable(text).map(line => line.map(value => ({ kind: 'text', text: value })))
       write(section, row, column, block)
     } catch (cause) {
@@ -65,7 +71,7 @@ export function BoardCanvas({ client, layout, onChange, values, display, editing
       </div>
       {editing && <div className={styles.palette}>
         <Button onClick={()=>setManage(true)}>指标管理</Button>
-        {undo && layout.sections.includes(undo.applied) && <Button onClick={()=>{replace(undo.previous);setUndo(null)}}>撤销批量填充</Button>}
+        {undo && layout.sections.includes(undo.applied) && <Button onClick={()=>{replace(undo.previous);setUndo(null)}}>撤销批量操作</Button>}
         <label>文字<input type="color" value={layout.foreground} onChange={event => onChange({ ...layout, foreground: event.target.value })} /></label>
         <label>底色<input type="color" value={layout.background} onChange={event => onChange({ ...layout, background: event.target.value })} /></label>
         <Button onClick={() => onChange({ ...layout, foreground: '#171717', background: '#ffffff' })}>恢复黑白</Button>
@@ -91,7 +97,18 @@ export function BoardCanvas({ client, layout, onChange, values, display, editing
           </div>}
         </header>
         <SectionGrid display={display} editing={editing} section={section} values={values}
-          onPaste={(r, c, text) => paste(section, r, c, text)}
+          onPaste={(r, c, text, token) => paste(section, r, c, text, token)}
+          onCopy={cells=>{
+            const token=globalThis.crypto?.randomUUID?.() ?? String(Date.now())
+            copiedBlock.current={token,cells}
+            return token
+          }}
+          onChangePeriods={(top,left,bottom,right,period)=>{
+            const cells=section.cells.map((line,r)=>line.map((cell,c)=>
+              r>=top && r<=bottom && c>=left && c<=right && cell.kind==='formula' ? {...cell,period} : cell))
+            const applied={...section,cells}
+            setUndo({previous:section,applied});replace(applied)
+          }}
           onEdit={(row, column) => { setActiveId(section.id); setCursor({ id: section.id, row, column }) }} />
       </section>
     })}</div>
