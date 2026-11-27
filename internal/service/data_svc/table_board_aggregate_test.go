@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"gin-biz-web-api/internal/reportoracle"
 	"gin-biz-web-api/internal/tableboard"
+	"gin-biz-web-api/model"
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"os"
 	"regexp"
 	"strings"
@@ -147,6 +150,46 @@ func TestMySQLBoardAggregateAcceptance(t *testing.T) {
 	}
 	if rows[0].End != rows[1].End || rows[7].Status != "null" || rows[8].Status != "error" || calls.Load() != 5 {
 		t.Fatal(rows, calls.Load())
+	}
+	// Persist a real C2 override and reopen through the production layout store.
+	savedLayout := tableboard.Layout{Foreground: "#000000", Background: "#ffffff", Sources: []tableboard.Source{}, Metrics: []tableboard.Metric{m},
+		Sections: []tableboard.Section{{ID: "sales", Title: "销售", Cells: [][]tableboard.Cell{
+			{{Kind: "text"}, {Kind: "text", Text: "默认"}, {Kind: "text", Text: "本格"}},
+			{{Kind: "text", Text: "所有门店"}, c, changed}, {{Kind: "text"}, {Kind: "text"}, count},
+		}}}}
+	input := tableboard.Input{Name: "验收看板", Layout: savedLayout}
+	if err = input.Validate(true); err != nil {
+		t.Fatal(err)
+	}
+	configDB, err := gorm.Open(mysql.New(mysql.Config{Conn: db}), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = configDB.AutoMigrate(&model.TableBoard{}); err != nil {
+		t.Fatal(err)
+	}
+	store := tableboard.NewStore(configDB, uint(time.Now().UnixNano()))
+	board, err := store.Save(ctx, 0, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Delete(ctx, board.ID, board.Revision)
+	reopened, err := store.Get(ctx, board.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed tableboard.Layout
+	if err = json.Unmarshal([]byte(reopened.Layout), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Sections[0].Cells[1][2].Overrides) != 1 || len(parsed.Sections[0].Cells[1][1].Overrides) != 0 {
+		t.Fatal(reopened.Layout)
+	}
+	persisted := evaluateBoard(ctx, 1, parsed, asOf, run, nil)
+	for i, want := range []struct{ address, value string }{{"B2", "12400"}, {"C2", "6120"}, {"C3", "3"}} {
+		if persisted[i].Address != want.address || persisted[i].Value == nil || *persisted[i].Value != want.value {
+			t.Fatal(want, persisted[i])
+		}
 	}
 	c.Period = "YEAR_TO_DATE"
 	layout.Sections[0].Cells = [][]tableboard.Cell{{c}}

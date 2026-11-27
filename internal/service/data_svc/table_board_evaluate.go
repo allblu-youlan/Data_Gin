@@ -159,5 +159,8 @@ func PreviewBoard(ctx context.Context, actor uint, metric tableboard.Metric, cel
 	if len(results) != 2 {
 		return BoardCellResult{}, BoardCellResult{}, fmt.Errorf("预览配置无效")
 	}
+	for i := range results {
+		results[i].Display = boardDisplay(results[i], cell.Format)
+	}
 	return results[0], results[1], nil
 }
