@@ -42,11 +42,21 @@ type storedBoardCalculation struct {
 // Export rechecks this stamp without reading business rows again.
 func BoardAccessStamp(ctx context.Context, db *gorm.DB, layout tableboard.Layout) (string, error) {
 	ids := map[uint]bool{}
+	owners, names := []string{}, []string{}
+	tableIDs := []uint{}
+	add := func(ds uint, owner, name string, table uint) {
+		ids[ds] = true
+		owners = append(owners, owner)
+		names = append(names, name)
+		if table != 0 {
+			tableIDs = append(tableIDs, table)
+		}
+	}
 	for _, s := range layout.Sources {
-		ids[s.DatasourceID] = true
+		add(s.DatasourceID, s.Owner, s.TableName, 0)
 	}
 	for _, m := range layout.Metrics {
-		ids[m.DatasourceID] = true
+		add(m.DatasourceID, m.Owner, m.TableName, m.BojunTableID)
 	}
 	for _, section := range layout.Sections {
 		for _, row := range section.Cells {
@@ -62,7 +72,7 @@ func BoardAccessStamp(ctx context.Context, db *gorm.DB, layout tableboard.Layout
 					if err != nil {
 						return "", err
 					}
-					ids[effective.DatasourceID] = true
+					add(effective.DatasourceID, effective.Owner, effective.TableName, effective.BojunTableID)
 				}
 			}
 		}
@@ -79,10 +89,12 @@ func BoardAccessStamp(ctx context.Context, db *gorm.DB, layout tableboard.Layout
 		return "", err
 	}
 	var tables []model.ReportBojunTable
-	if err := db.WithContext(ctx).Where("datasource_id IN ?", dsIDs).Order("id").Find(&tables).Error; err != nil {
+	if err := db.WithContext(ctx).Where("datasource_id IN ?", dsIDs).
+		Where("(resolved_owner IN ? AND (resolved_table IN ? OR logical_name IN ?)) OR id IN ?", owners, names, names, tableIDs).
+		Order("id").Find(&tables).Error; err != nil {
 		return "", err
 	}
-	tableIDs := make([]uint, 0, len(tables))
+	tableIDs = make([]uint, 0, len(tables))
 	for _, t := range tables {
 		tableIDs = append(tableIDs, t.ID)
 	}
@@ -92,11 +104,23 @@ func BoardAccessStamp(ctx context.Context, db *gorm.DB, layout tableboard.Layout
 			return "", err
 		}
 	}
+	type policyTable struct {
+		ID                              uint
+		DatasourceID                    uint
+		Active                          bool
+		Validation                      string
+		Owner, Name, Link, SourceFilter string
+		Metadata                        model.JSONText
+	}
+	policies := make([]policyTable, 0, len(tables))
+	for _, table := range tables {
+		policies = append(policies, policyTable{table.ID, table.DatasourceID, table.SourceActive, table.ValidationStatus, table.ResolvedOwner, table.ResolvedTable, table.DBLink, table.SourceFilter, table.MetadataJSON})
+	}
 	return reportdataset.Hash(struct {
 		Sources []model.ReportDatasource
-		Tables  []model.ReportBojunTable
+		Tables  []policyTable
 		Configs []model.ReportBojunTableConfig
-	}{sources, tables, configs}), nil
+	}{sources, policies, configs}), nil
 }
 
 func boardCalculationKey(owner, board uint, id string) string {

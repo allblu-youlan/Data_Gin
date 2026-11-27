@@ -71,7 +71,7 @@ func TestMySQLBoardSnapshotStampDetectsPolicyAndConnectionChanges(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer db.Delete(&config)
-	layout := tableboard.Layout{Metrics: []tableboard.Metric{{DatasourceID: ds.ID}}}
+	layout := tableboard.Layout{Metrics: []tableboard.Metric{{DatasourceID: ds.ID, Owner: "OPS", TableName: "ORDERS"}}}
 	stamp, err := BoardAccessStamp(t.Context(), db, layout)
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +79,20 @@ func TestMySQLBoardSnapshotStampDetectsPolicyAndConnectionChanges(t *testing.T) 
 	same, err := BoardAccessStamp(t.Context(), db, layout)
 	if err != nil || stamp != same {
 		t.Fatal("unstable stamp", err)
+	}
+	if err = db.Model(&table).UpdateColumn("source_active", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	inactive, err := BoardAccessStamp(t.Context(), db, layout)
+	if err != nil || inactive == stamp {
+		t.Fatal("missed source revocation", err)
+	}
+	if err = db.Model(&table).UpdateColumn("metadata_json", model.JSONText(`{"columns":[]}`)).Error; err != nil {
+		t.Fatal(err)
+	}
+	changed, err := BoardAccessStamp(t.Context(), db, layout)
+	if err != nil || changed == inactive {
+		t.Fatal("missed column metadata change", err)
 	}
 	if err = db.Model(&config).Update("config_json", model.JSONText(`{"enabled":false}`)).Error; err != nil {
 		t.Fatal(err)
