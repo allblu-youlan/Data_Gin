@@ -38,6 +38,7 @@ const OfficeMentionPage = lazy(() => import('../officeMention/OfficeMentionPage'
 const MessageManagementPage = lazy(() => import('../officeMessage/MessageManagementPage').then((module) => ({ default: module.MessageManagementPage })))
 const PushManagementPage = lazy(() => import('../officeMessage/PushManagementPage').then((module) => ({ default: module.PushManagementPage })))
 const TableEmailNotificationsPage = lazy(() => import('../tableEmailNotifications/TableEmailNotificationsPage').then((module) => ({ default: module.TableEmailNotificationsPage })))
+const TableBoardPage = lazy(() => import('../tableBoard/TableBoardPage').then((module) => ({ default: module.TableBoardPage })))
 const ReportCenter = lazy(() => import('../reportCenter/ReportCenter').then((module) => ({ default: module.ReportCenter })))
 
 export type WorkspaceApiClientOptions = Omit<ApiRequestOptions, 'method'> & {
@@ -132,6 +133,7 @@ function WorkspacePage(props: WorkspaceRouterProps) {
   const mentionSections: Partial<Record<NavKey, MentionSection>> = { mention_chats: 'chats', mention_recipients: 'recipients', mention_reports: 'reports', mention_jobs: 'jobs', mention_status: 'status' }
   const mentionSection = mentionSections[activeNav]
   if (mentionSection) return <OfficeMentionPage key={mentionSection} client={client} permissions={permissions} section={mentionSection} />
+  if (activeNav === 'table_board') return <TableBoardPage client={client} />
   if (reportSection) return <ReportCenter client={client} permissions={permissions} section={reportSection} onNavigate={(section) => navigate(reportCenterNavKey(section))} />
   if (activeNav === 'access_management') return <AccessManagementPage client={client} permissions={permissions} />
   if (activeNav === 'sources') return <SourcesPage client={client} onFetchSource={onFetchSource} onTestSource={onTestSource} refreshVersion={refreshVersion} />
