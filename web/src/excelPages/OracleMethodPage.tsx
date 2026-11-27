@@ -48,6 +48,12 @@ export function OracleMethodPage({ operation, client, token, permissions, refres
  function reset() { setSelected(0); setName(''); setConfig(operation === 'oracle_import' ? emptyImportConfig() : emptyProcedureConfig()); setError(''); setMessage('') }
  async function save(event: FormEvent) {
   event.preventDefault()
+  if (config.operation === 'oracle_import') {
+   if (!config.owner.trim() || !config.tableName.trim()) { setError('请选择 Oracle 目标表。'); return }
+   const missing = config.mappings.findIndex(item => !item.field.trim())
+   if (missing >= 0) { setError(`请选择第 ${missing + 1} 项映射的 Oracle 字段。`); return }
+   if (config.fixedIdentifier?.enabled && !config.fixedIdentifier.field.trim()) { setError('请选择导入标号写入的 Oracle 字段。'); return }
+  }
   const existing = schemes.find(item => item.name === name.trim())
   if (existing && !window.confirm(`覆盖已保存的方法「${existing.name}」？`)) return
   setBusy(true); setError(''); setMessage('')
