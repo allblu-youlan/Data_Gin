@@ -44,6 +44,10 @@ func ExportTableBoardXLSX(c *gin.Context) {
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, "导出内容格式无效或超过 16 MiB")
 		return
 	}
+	// Numeric metadata is attached only to trusted calculation snapshots.
+	for i := range input.Sections {
+		input.Sections[i].Numbers = nil
+	}
 	if err := input.Validate(); err != nil {
 		responses.New(c).ToSafeErrorResponse(errcode.UnprocessableEntity, err.Error())
 		return

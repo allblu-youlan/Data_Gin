@@ -22,7 +22,7 @@ func TestTableBoardRoutesRequireConsoleLogin(t *testing.T) {
 	registerTableBoardRoutes(router.Group("/api"))
 	for _, route := range []struct{ method, suffix string }{
 		{"GET", ""}, {"POST", ""}, {"GET", "/1"}, {"PUT", "/1"}, {"DELETE", "/1"},
-		{"POST", "/query"}, {"POST", "/xlsx"},
+		{"POST", "/query"}, {"POST", "/xlsx"}, {"POST", "/preview"}, {"POST", "/dimension-values"}, {"POST", "/1/evaluate"}, {"POST", "/1/export"},
 	} {
 		res := httptest.NewRecorder()
 		req := httptest.NewRequest(route.method, "/api/v1/table-boards"+route.suffix, nil)

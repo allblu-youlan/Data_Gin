@@ -2,9 +2,16 @@ package data_svc
 
 import (
 	"encoding/json"
+	"gin-biz-web-api/pkg/config"
+	projectredis "gin-biz-web-api/pkg/redis"
+	"github.com/google/uuid"
+	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"gin-biz-web-api/internal/tableboard"
 	"gin-biz-web-api/model"
@@ -86,5 +93,49 @@ func TestMySQLBoardSnapshotStampDetectsPolicyAndConnectionChanges(t *testing.T) 
 	disabled, err := BoardAccessStamp(t.Context(), db, layout)
 	if err != nil || disabled == revoked {
 		t.Fatal("missed disabled connection", err)
+	}
+}
+
+func TestRedisBoardSnapshotScopeAndExpiration(t *testing.T) {
+	address := os.Getenv("TABLE_BOARD_TEST_REDIS_ADDR")
+	if address == "" {
+		t.Skip("set TABLE_BOARD_TEST_REDIS_ADDR to run Redis snapshot integration")
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || host != "127.0.0.1" {
+		t.Fatal("Redis integration requires a loopback address")
+	}
+	if n, _ := strconv.Atoi(port); n == 6379 {
+		t.Fatal("use a dedicated test Redis port")
+	}
+	cfgdir := t.TempDir()
+	if err = os.WriteFile(filepath.Join(cfgdir, "config.yaml"), []byte("cfg:\n  app:\n    name: table-board-integration-test\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	config.NewConfig("", cfgdir+string(os.PathSeparator))
+	projectredis.ConnectRedis(projectredis.RdsConfigs{"default": {Addr: address}})
+	ctx := t.Context()
+	id := uuid.NewString()
+	snapshot := BoardCalculation{CalculationID: id, Revision: 3, AsOf: time.Now(), Cells: []BoardCellResult{}, Export: BoardExport{Foreground: "#000000", Background: "#ffffff", Sections: []BoardExportSheet{{Title: "GMV", Rows: [][]string{{"6,120.00"}}, Numbers: map[string]boardNumber{"A1": {Raw: "6120", Format: "money_2"}}}}}}
+	if err = StoreBoardCalculation(ctx, 41, 7, "policy-v1", snapshot); err != nil {
+		t.Fatal(err)
+	}
+	key := boardCalculationKey(41, 7, id)
+	defer projectredis.Instance().Client.Del(ctx, key)
+	got, stamp, err := LoadBoardCalculation(ctx, 41, 7, id)
+	if err != nil || stamp != "policy-v1" || got.Revision != 3 || got.Export.Sections[0].Numbers["A1"].Raw != "6120" {
+		t.Fatal(got, stamp, err)
+	}
+	if _, _, err = LoadBoardCalculation(ctx, 42, 7, id); err != ErrBoardSnapshotExpired {
+		t.Fatal("foreign account read accepted", err)
+	}
+	if _, _, err = LoadBoardCalculation(ctx, 41, 8, id); err != ErrBoardSnapshotExpired {
+		t.Fatal("foreign board read accepted", err)
+	}
+	if err = projectredis.Instance().Client.Expire(ctx, key, -time.Second).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = LoadBoardCalculation(ctx, 41, 7, id); err != ErrBoardSnapshotExpired {
+		t.Fatal("expired snapshot accepted", err)
 	}
 }
