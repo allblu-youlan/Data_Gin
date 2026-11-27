@@ -66,3 +66,18 @@ test('本地 JSON 文件和粘贴文本共用预览，超过上限时不读取�
   assert.equal(reads,0)
   await assert.rejects(readBoardConfigFile({size:100,text:async()=>{throw new Error('IO')}}),/无法读取配置文件/)
 })
+
+test('导入时按服务端白名单及类型校验单格覆盖',()=>{
+  const layout=example(7)
+  const cell=layout.sections[0].cells[1][1]
+  for (const [key,value,message] of [
+    ['name',{bad:'type'},/不支持覆盖/], ['id','other',/不支持覆盖/], ['format','integer',/不支持覆盖/],
+    ['aggregate',['SUM'],/汇总方式/], ['bojunTableId',-1,/目录表编号/],
+    ['bojunTableId','3',/目录表编号/], ['bojunTableId',2**53,/目录表编号/],
+  ]) {
+    cell.overrides={[key]:value}
+    assert.throws(()=>parseBoardConfig(JSON.stringify({layout})),message)
+  }
+  cell.overrides={timeField:'CREATED_AT',bojunTableId:0,aggregate:'SUM'}
+  assert.deepEqual(parseBoardConfig(JSON.stringify({layout})).layout.sections[0].cells[1][1].overrides,cell.overrides)
+})

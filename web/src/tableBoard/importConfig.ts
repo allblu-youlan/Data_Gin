@@ -23,12 +23,17 @@ const strings = (v:unknown):v is string[] => Array.isArray(v) && v.every(x=>type
 const connection = (v:unknown) => typeof v==='number' && Number.isSafeInteger(v) && v>=0
 const filters = (v:unknown):v is BoardFilter[] => Array.isArray(v) && v.every(f=>object(f) &&
   typeof f.field==='string' && (f.op==='EQ' || f.op==='NE') && typeof f.value==='string')
+const overrideFields = new Set([
+  'datasourceId', 'owner', 'tableName', 'bojunTableId', 'columnIds', 'aggregate',
+  'valueField', 'timeField', 'timeFormat', 'timezone', 'filters', 'dimensions',
+])
 function checkMapping(m:RecordValue) {
   for(const key of ['owner','tableName','timeField','valueField','timeFormat','timezone','format','currency']) {
     check(m[key]===undefined || typeof m[key]==='string', '指标字段 '+key+' 必须是文本。')
   }
   check(m.datasourceId===undefined || connection(m.datasourceId),'连接编号应为非负整数。')
-  check(m.aggregate===undefined || ['SUM','AVG','COUNT','COUNT_DISTINCT'].includes(String(m.aggregate)),'汇总方式无效。')
+  check(m.bojunTableId===undefined || connection(m.bojunTableId),'目录表编号应为非负安全整数。')
+  check(m.aggregate===undefined || (typeof m.aggregate==='string' && ['SUM','AVG','COUNT','COUNT_DISTINCT'].includes(m.aggregate)),'汇总方式无效。')
   check(m.filters===undefined || filters(m.filters),'指标过滤条件格式无效。')
   check(m.dimensions===undefined || strings(m.dimensions),'指标维度格式无效。')
   check(m.columnIds===undefined || (object(m.columnIds) && Object.values(m.columnIds).every(connection)),'目录字段编号无效。')
@@ -83,7 +88,11 @@ export function parseBoardConfig(text:string):ImportedConfig {
             check(metricIds.has(c.metricId) && typeof c.period==='string' && Object.prototype.hasOwnProperty.call(periods,c.period),'指标公式的指标引用或期间无效。')
             check(c.period!=='FILTER_ONLY' || (c.yearOffset ?? 0)===0,'按业务过滤条件统计的单格不能同时设置年度偏移。')
             check(c.filters===undefined || filters(c.filters),'单格过滤条件格式无效。')
-            if(c.overrides!==undefined) {check(object(c.overrides),'单格覆盖格式无效。');checkMapping(c.overrides)}
+            if (c.overrides!==undefined) {
+              check(object(c.overrides),'单格覆盖格式无效。')
+              for (const key of Object.keys(c.overrides)) check(overrideFields.has(key),'不支持覆盖指标字段 '+key+'。')
+              checkMapping(c.overrides)
+            }
             break
           default: throw new Error('未知的单元格类型。')
         }
