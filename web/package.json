@@ -44,7 +44,7 @@
     "test:sales-summary": "tsc src/salesSummary/contracts.ts src/appShell/navigationPermissions.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && perl -0pi -e \"s|'./overviewWorkspacePolicy'|'./overviewWorkspacePolicy.js'|\" .test-dist/appShell/navigationPermissions.js && node --test tests/salesSummary.test.mjs tests/salesSummaryNavigation.test.mjs",
     "test:etl-monitor": "tsc src/monitoringPages/ETLMonitorPage/contracts.ts src/appShell/navigationPermissions.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && perl -0pi -e \"s|'./overviewWorkspacePolicy'|'./overviewWorkspacePolicy.js'|\" .test-dist/appShell/navigationPermissions.js && node --test tests/etlMonitor.test.mjs",
     "test:api-docs": "tsc src/apiDocs.ts --target ES2020 --module ES2020 --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/apiDocs.test.mjs",
-    "test:table-board": "tsc src/tableBoard/formula.ts src/tableBoard/types.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && node --test tests/tableBoard.test.mjs"
+    "test:table-board": "tsc src/tableBoard/formula.ts src/tableBoard/types.ts src/appShell/navigationPermissions.ts --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --outDir .test-dist --skipLibCheck && perl -0pi -e \"s|'./overviewWorkspacePolicy'|'./overviewWorkspacePolicy.js'|\" .test-dist/appShell/navigationPermissions.js && node --test tests/tableBoard.test.mjs tests/tableBoardNavigation.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/ibm-plex-sans": "^5.3.0",

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { useReportDatasources } from '../reportCenter/useReportDatasources'
 import { Button } from '../ui'
@@ -19,6 +19,8 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
   const [preview,setPreview] = useState<{key:string;result:Preview} | null>(null)
   const [error,setError] = useState('')
   const [busy,setBusy] = useState(false)
+  const pending = useRef<AbortController | null>(null)
+  useEffect(()=>()=>pending.current?.abort(),[])
   const connections = useReportDatasources(client)
   const base = metrics.find(m => m.id === cell.metricId) ?? metrics[0]
   if (!base) return <div className={styles.editor}><p>先从已有连接定义共享指标，再选择期间和门店。</p><Button onClick={onManage}>创建共享指标 GMV</Button></div>
@@ -29,13 +31,16 @@ export function FormulaEditor({client,metrics,initial,address,onApply,onManage}:
   const result = preview?.key === key ? preview.result : undefined
   function change(next: Formula) { setCell(next); setError(''); setPreview(null) }
   async function calculate(apply: boolean) {
+    const ac=new AbortController()
+    pending.current=ac
     setBusy(true); setError('')
     try {
-      const response = result ?? await boardRequest<Preview>(client,'/preview','POST',{metric:base,cell:formula})
+      const response = result ?? await boardRequest<Preview>(client,'/preview','POST',{metric:base,cell:formula},ac.signal)
+      if(ac.signal.aborted) return
       setPreview({key,result:response})
       if (apply && response.after.status !== 'error') onApply(formula)
-    } catch(e) { setError(e instanceof Error ? e.message : '预览失败') }
-    finally { setBusy(false) }
+    } catch(e) { if (!ac.signal.aborted) setError(e instanceof Error ? e.message : '预览失败') }
+    finally { if (!ac.signal.aborted) setBusy(false) }
   }
   function row(label:string,k:keyof Mapping,v:string) {
     return <div key={k}><dt>{label}</dt><dd>{v || '—'} <small>{cell.overrides && k in cell.overrides ? '仅本格' : '继承 ' + base.name}</small></dd></div>

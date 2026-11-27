@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Maximize2, Minimize2, Plus, RefreshCw, Save } from 'lucide-react'
-import { Button } from '../ui'
+import { Button, Dialog } from '../ui'
 import type { ReportCenterClient } from '../reportCenter/api'
 import { BoardCanvas } from './BoardCanvas'
 import { BoardRequestError, boardRequest, saveDownload } from './api'
@@ -23,6 +23,8 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
   const [error, setError] = useState('')
   const [edited, setEdited] = useState(false)
   const [listRevision, setListRevision] = useState(0)
+  const [leave,setLeave] = useState<{enter:()=>void; discard:()=>void} | null>(null)
+  const [remoteRevision,setRemoteRevision] = useState<number | null>(null)
   const dirty = edited
   const generation = useRef(0)
   const calculation = useRef<AbortController | null>(null)
@@ -51,7 +53,16 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     if (!dirty) return
     function beforeUnload(e: BeforeUnloadEvent) { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', beforeUnload)
-    return () => window.removeEventListener('beforeunload', beforeUnload)
+    function beforeNavigate(e: Event) {
+      e.preventDefault()
+      const enter = (e as CustomEvent<{enter:()=>void}>).detail.enter
+      setLeave({enter,discard:enter})
+    }
+    window.addEventListener('console-before-navigate',beforeNavigate)
+    return () => {
+      window.removeEventListener('beforeunload',beforeUnload)
+      window.removeEventListener('console-before-navigate',beforeNavigate)
+    }
   }, [dirty])
   const refresh = useCallback(async (board: TableBoard) => {
     if (calculation.current || !board.id) return
@@ -77,13 +88,25 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
     const timer = window.setInterval(() => void refresh(saved), 60000)
     return () => clearInterval(timer)
   }, [large, timed, saved, dirty, refresh])
+  useEffect(() => {
+    if (!conflict || !draft.id) { setRemoteRevision(null); return }
+    const ac=new AbortController()
+    void boardRequest<TableBoard>(client,'/'+draft.id,'GET',undefined,ac.signal).then(b=>{
+      if (!ac.signal.aborted) setRemoteRevision(b.revision)
+    }).catch(()=>{})
+    return ()=>ac.abort()
+  },[client,conflict,draft.id])
   function accept(board: TableBoard) {
     cancelCalculation()
     setSaved(board); setDraft(board); setEdited(false); setError(''); setConflict(false); setSnapshot(null)
     void refresh(board)
   }
-  async function open(id: number) {
-    if (dirty && !window.confirm('放弃当前草稿并切换看板？')) return
+  function open(id: number) {
+    const next = () => void loadBoard(id)
+    if (dirty) setLeave({enter:next,discard:next})
+    else next()
+  }
+  async function loadBoard(id: number) {
     const sequence = ++generation.current
     cancelCalculation()
     setBusy(true); setError('')
@@ -145,8 +168,12 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
         <Button disabled={!saved || busy || dirty || refreshing} onClick={() => saved && void refresh(saved)}><RefreshCw/>{refreshing ? '刷新中' : '刷新'}</Button>
         {(['xlsx','csv'] as const).map(format => <Button key={format} disabled={!snapshot || dirty || busy} onClick={() => void download(format)}><Download/>{format.toUpperCase()}</Button>)}
         <Button disabled={busy} onClick={async () => {
-          if (!large && (dirty || !saved) && (!window.confirm('保存看板并进入大屏？') || !await save())) return
-          setLarge(!large); setTimed(false)
+          const enter=()=>{setLarge(!large);setTimed(false)}
+          if(!large && dirty) {
+            setLeave({enter,discard:()=>{
+              if(saved) {accept(saved);enter()} else {setDraft(newBoard());setEdited(false);enter()}
+            }})
+          } else if(large || saved || await save()) enter()
         }}>{large ? <Minimize2/> : <Maximize2/>}{large ? '退出大屏' : '进入大屏'}</Button>
       </div>
     </header>
@@ -155,9 +182,13 @@ export function TableBoardPage({ client }: { client: ReportCenterClient }) {
       {draft.id > 0 && <Button disabled={busy} onClick={() => void remove()}>删除看板</Button>}
     </div>}
     {error && <div role="alert" className={styles.error}>{error} <Button onClick={() => { setError(''); setListRevision(v => v + 1); if (saved && !dirty) void refresh(saved) }}>重试</Button></div>}
-    {conflict && <div role="alert">打开时为版本 {draft.revision}，服务器版本已变化。<Button disabled={busy} onClick={() => void save(true)}>复制为新看板</Button><Button disabled={busy} onClick={() => void open(draft.id)}>重新载入</Button></div>}
+    {conflict && <div role="alert">打开时为版本 {draft.revision}，服务器版本{remoteRevision ?? '已变化'}。<Button disabled={busy} onClick={() => void save(true)}>复制为新看板</Button><Button disabled={busy} onClick={() => void open(draft.id)}>重新载入</Button></div>}
     <div className={styles.statusLine}><span>{dirty ? '草稿待保存并计算' : snapshot ? '计算截至 ' + snapshot.asOf : refreshing ? '正在计算…' : '尚未计算'}</span>
       {large && <label><input type="checkbox" checked={timed} onChange={e => setTimed(e.target.checked)}/>每 60 秒刷新</label>}</div>
     <fieldset className={styles.boardFieldset} disabled={busy}><BoardCanvas client={client} key={draft.id} layout={draft.layout} onChange={(layout: BoardLayout) => edit({...draft, layout})} editing={!large} values={{}} display={dirty ? undefined : display} /></fieldset>
+    {leave && <Dialog open title="有未保存更改" onClose={()=>setLeave(null)}
+      footer={<><Button disabled={busy} onClick={()=>setLeave(null)}>留在编辑页</Button><Button disabled={busy} onClick={()=>{setLeave(null);leave.discard()}}>放弃这次修改</Button><Button variant="primary" disabled={busy || !draft.name.trim()} onClick={async()=>{if(await save()){setLeave(null);leave.enter()}else setLeave(null)}}>保存并继续</Button></>}>
+      <p>看板「{draft.name}」的草稿尚未保存。</p>
+    </Dialog>}
   </main>
 }
