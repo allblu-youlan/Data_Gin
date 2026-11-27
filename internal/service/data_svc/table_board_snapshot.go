@@ -37,12 +37,15 @@ func boardDisplay(result BoardCellResult, format string) string {
 		return "—"
 	}
 	value := *result.Value
-	if format != "money_2" && format != "integer" {
+	if format != "money_2" && format != "integer" && format != "percent_2" {
 		return value
 	}
 	number, ok := new(big.Rat).SetString(value)
 	if !ok {
 		return value
+	}
+	if format == "percent_2" {
+		return number.Mul(number, big.NewRat(100, 1)).FloatString(2) + "%"
 	}
 	digits := 0
 	if format == "money_2" {
@@ -102,15 +105,30 @@ func BuildBoardSnapshot(layout tableboard.Layout, results []BoardCellResult) (Bo
 				}
 				result.Display = boardDisplay(*result, format)
 				values[col] = result.Display
-				if cell.Kind == "formula" && result.Status == "ok" && result.Value != nil {
+				if (cell.Kind == "formula" || cell.Kind == "expression") && result.Status == "ok" && result.Value != nil {
 					raw := *result.Value
 					// Excel numbers have at most 15 significant decimal digits. Use the
 					// displayed text for larger values so reopening the workbook stays exact.
 					mantissa, _, _ := strings.Cut(strings.ToUpper(raw), "E")
 					significant := strings.Trim(strings.ReplaceAll(strings.TrimLeft(mantissa, "+-"), ".", ""), "0")
-					if _, err := strconv.ParseFloat(raw, 64); err == nil && len(significant) <= 15 {
-						sheet.Numbers[address] = boardNumber{Raw: raw, Format: format}
+					value, err := strconv.ParseFloat(raw, 64)
+					if err != nil {
+						continue
 					}
+					if len(significant) > 15 {
+						if format != "percent_2" {
+							continue
+						}
+						// Keep recurring ratios numeric when Excel's 15 digits reproduce the
+						// exact displayed percentage, including its rounding at the boundary.
+						raw = strconv.FormatFloat(value, 'g', 15, 64)
+						rounded := *result
+						rounded.Value = &raw
+						if boardDisplay(rounded, format) != result.Display {
+							continue
+						}
+					}
+					sheet.Numbers[address] = boardNumber{Raw: raw, Format: format}
 				}
 			}
 			sheet.Rows = append(sheet.Rows, values)
