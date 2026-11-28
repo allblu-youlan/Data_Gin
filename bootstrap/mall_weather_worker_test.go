@@ -33,6 +33,9 @@ func TestMallWeatherRetryResultPreservesRealFailureBudget(t *testing.T) {
 		{name: "third failure stops despite reserved queue slot", err: failure, retryCount: 2, maxAttempts: 3, wantSkip: true},
 		{name: "first cooldown", err: weatherCooldownError{}, maxAttempts: 3, wantDeferred: true},
 		{name: "cooldown after two failures preserves final attempt", err: weatherCooldownError{}, retryCount: 2, maxAttempts: 3, wantDeferred: true},
+		{name: "lock wait after two failures preserves final attempt", err: &data_svc.MallWeatherProcessError{Retryable: true, Code: "LOCK_BUSY"}, retryCount: 2, maxAttempts: 3, wantDeferred: true},
+		{name: "expired lock wait stops", err: &data_svc.MallWeatherProcessError{Code: "LOCK_WAIT_EXPIRED"}, retryCount: 2, maxAttempts: 3, wantSkip: true},
+		{name: "Redis lock failure still consumes budget", err: &data_svc.MallWeatherProcessError{Retryable: true, Code: "LOCK_ACQUIRE_FAILED"}, retryCount: 2, maxAttempts: 3, wantSkip: true},
 		{name: "database outage after two failures remains paused", err: errors.Join(errors.New("start failed"), database.ErrUnavailable), retryCount: 2, maxAttempts: 3},
 		{name: "expired cooldown stops", err: &data_svc.MallWeatherProcessError{Code: "CIRCUIT_WAIT_EXPIRED"}, retryCount: 2, maxAttempts: 3, wantSkip: true},
 		{name: "single attempt stops on real failure", err: failure, maxAttempts: 1, wantSkip: true},
@@ -123,6 +126,7 @@ func TestMallWeatherHandlerUsesConfiguredFailureBudget(t *testing.T) {
 	}{
 		{name: "failure uses only configured attempt", err: &data_svc.MallWeatherProcessError{Retryable: true, Code: "PROVIDER_REQUEST_FAILED"}, wantSkip: true},
 		{name: "cooldown preserves configured attempt", err: weatherCooldownError{}, wantDeferred: true},
+		{name: "lock wait preserves configured attempt", err: &data_svc.MallWeatherProcessError{Retryable: true, Code: "LOCK_BUSY"}, wantDeferred: true},
 		{name: "expired cooldown stops immediately", err: &data_svc.MallWeatherProcessError{Code: "CIRCUIT_WAIT_EXPIRED"}, wantSkip: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -27,6 +27,8 @@ const (
 	weatherParserVersionV26          = "caiyun-v26-v1"
 	weatherParserVersionLifeV3       = "caiyun-v3-lifeindex-v1"
 	mallWeatherCircuitWaitLimit      = 10 * time.Minute
+	mallWeatherLockQueueAllowance    = 2 * time.Minute
+	mallWeatherLockRetryDelay        = 30 * time.Second
 )
 
 var ErrMallWeatherAttemptSuperseded = errors.New("mall weather: fetch attempt superseded")
@@ -68,7 +70,8 @@ func (processError *MallWeatherProcessError) RetryDelay() time.Duration {
 }
 
 func (processError *MallWeatherProcessError) TaskDeferred() bool {
-	return processError != nil && processError.Retryable && processError.Code == "CIRCUIT_OPEN"
+	return processError != nil && processError.Retryable &&
+		(processError.Code == "CIRCUIT_OPEN" || processError.Code == "LOCK_BUSY")
 }
 
 func (processError *MallWeatherProcessError) Unwrap() error {
@@ -83,10 +86,16 @@ type mallWeatherProvider interface {
 }
 
 type mallWeatherTaskStore interface {
+	LockWaitState(ctx context.Context, input mallWeatherTaskStart) (mallWeatherLockWaitState, error)
 	Start(ctx context.Context, input mallWeatherTaskStart, startedAt time.Time) (*mallWeatherExecution, error)
 	RecordResponse(ctx context.Context, execution *mallWeatherExecution, response *caiyun.ProviderResponse, snapshot *model.ProviderRawSnapshot) error
 	Fail(ctx context.Context, execution *mallWeatherExecution, failure mallWeatherFailure) error
 	Persist(ctx context.Context, execution *mallWeatherExecution, batch *mallWeatherModelBatch) error
+}
+
+type mallWeatherLockWaitState struct {
+	CreatedAt time.Time
+	Terminal  bool
 }
 
 type mallWeatherTaskStart struct {
@@ -142,6 +151,7 @@ type MallWeatherProcessorConfig struct {
 	AttemptStaleAfter      time.Duration
 	FailureFinalizeTimeout time.Duration
 	LockReleaseTimeout     time.Duration
+	TaskLockTTL            time.Duration
 	CircuitOpenTimeout     time.Duration
 }
 
@@ -176,7 +186,7 @@ func newMallWeatherProcessor(
 		config.FullHourlySteps < 1 || config.FullHourlySteps > 360 || config.FullDailySteps < 1 || config.FullDailySteps > 15 ||
 		config.LifeIndexDays < 1 || config.LifeIndexDays > 15 || config.Unit != "metric:v2" ||
 		config.AttemptStaleAfter <= 0 || config.FailureFinalizeTimeout <= 0 || config.LockReleaseTimeout <= 0 ||
-		config.CircuitOpenTimeout <= 0 {
+		config.CircuitOpenTimeout <= 0 || config.TaskLockTTL <= 0 {
 		return nil, fmt.Errorf("mall weather: invalid processor configuration")
 	}
 	return &MallWeatherProcessor{
@@ -199,7 +209,7 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 		return &MallWeatherProcessError{Retryable: true, Code: "LOCK_ACQUIRE_FAILED", cause: err}
 	}
 	if !acquired {
-		return &MallWeatherProcessError{Retryable: true, Code: "LOCK_BUSY"}
+		return processor.deferBusyTaskLock(ctx, start)
 	}
 	if lock == nil {
 		return &MallWeatherProcessError{Retryable: true, Code: "INVALID_TASK_LOCK"}
@@ -207,8 +217,14 @@ func (processor *MallWeatherProcessor) Process(ctx context.Context, taskType str
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), processor.config.LockReleaseTimeout)
 		defer cancel()
-		if err := lock.Release(releaseCtx); err != nil && resultErr == nil {
-			resultErr = &MallWeatherProcessError{Retryable: true, Code: "LOCK_RELEASE_FAILED", cause: err}
+		if err := lock.Release(releaseCtx); err != nil {
+			if resultErr == nil {
+				resultErr = &MallWeatherProcessError{Retryable: true, Code: "LOCK_RELEASE_FAILED", cause: err}
+			} else {
+				logger.Warn("Mall weather task lock release failed after processing failure",
+					zap.Uint("mall_id", start.Payload.MallID), zap.String("task_kind", start.TaskKind),
+					zap.String("error", providerhttp.RedactText(err.Error())))
+			}
 		}
 	}()
 	startedAt := processor.now().UTC()
@@ -341,6 +357,25 @@ func (processor *MallWeatherProcessor) reportProviderCircuitSuccess(ctx context.
 		logger.Warn("Mall weather provider circuit success report failed", zap.Error(err))
 		return
 	}
+}
+
+func (processor *MallWeatherProcessor) deferBusyTaskLock(ctx context.Context, start mallWeatherTaskStart) error {
+	state, err := processor.store.LockWaitState(ctx, start)
+	if err != nil {
+		return &MallWeatherProcessError{Retryable: true, Code: "LOCK_WAIT_STATE_FAILED", cause: err}
+	}
+	if state.Terminal {
+		return nil
+	}
+	if state.CreatedAt.IsZero() {
+		return &MallWeatherProcessError{Code: "LOCK_WAIT_STATE_MISSING"}
+	}
+	// A persisted timestamp keeps repeated deferrals from extending the wait.
+	remaining := state.CreatedAt.Add(processor.config.TaskLockTTL + mallWeatherLockQueueAllowance).Sub(processor.now())
+	if remaining <= 0 {
+		return &MallWeatherProcessError{Code: "LOCK_WAIT_EXPIRED"}
+	}
+	return &MallWeatherProcessError{Retryable: true, Code: "LOCK_BUSY", retryDelay: min(mallWeatherLockRetryDelay, remaining)}
 }
 
 func (processor *MallWeatherProcessor) reportProviderCircuitFailure(ctx context.Context, cause error) {

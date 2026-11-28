@@ -11,6 +11,7 @@ import (
 	"gin-biz-web-api/global"
 	"gin-biz-web-api/internal/dao/data_dao"
 	weatherdomain "gin-biz-web-api/internal/weather"
+	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/database"
@@ -79,10 +80,11 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 	if redisInstance == nil || redisInstance.Client == nil {
 		return nil, fmt.Errorf("mall weather: redis task lock is unavailable")
 	}
+	lockTTL := time.Duration(config.GetInt("cfg.mall_weather.lock_ttl_seconds")) * time.Second
 	locker, err := weatherdomain.NewRedisTaskLocker(
 		redisInstance.Client,
 		projectredis.GenNamespace("lock:mall_weather:"),
-		time.Duration(config.GetInt("cfg.mall_weather.lock_ttl_seconds"))*time.Second,
+		lockTTL,
 	)
 	if err != nil {
 		return nil, err
@@ -117,6 +119,7 @@ func NewMallWeatherProcessor() (*MallWeatherProcessor, error) {
 		Unit:            config.GetString("cfg.mall_weather.unit"), AlertEnabled: config.GetBool("cfg.mall_weather.alert_enabled"),
 		AttemptStaleAfter: staleAfter, FailureFinalizeTimeout: 3 * time.Second,
 		LockReleaseTimeout: time.Duration(config.GetInt("cfg.mall_weather.lock_release_timeout_seconds")) * time.Second,
+		TaskLockTTL:        lockTTL,
 		CircuitOpenTimeout: circuitOpenTimeout,
 	}, time.Now, mallWeatherRuntimeMetrics)
 }
@@ -141,6 +144,38 @@ func newWeatherSnapshotObjectStore() (weatherdomain.SnapshotObjectStore, error) 
 		return nil, fmt.Errorf("mall weather: create OSS snapshot store: %w", err)
 	}
 	return store, nil
+}
+
+func (store *gormMallWeatherTaskStore) LockWaitState(ctx context.Context, input mallWeatherTaskStart) (mallWeatherLockWaitState, error) {
+	if store == nil || store.db == nil || ctx == nil {
+		return mallWeatherLockWaitState{}, fmt.Errorf("mall weather: lock wait store is unavailable")
+	}
+	var run model.MallWeatherFetchRun
+	err := store.db.WithContext(ctx).Select("status", "created_at").Where(
+		"mall_id = ? AND endpoint_kind = ? AND task_kind = ? AND task_window = ?",
+		input.Payload.MallID, input.Payload.EndpointKind, input.TaskKind, input.Payload.TaskWindow,
+	).Take(&run).Error
+	if err == nil {
+		return mallWeatherLockWaitState{CreatedAt: run.CreatedAt, Terminal: run.Status == "success" || run.Status == "partial_success"}, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return mallWeatherLockWaitState{}, fmt.Errorf("mall weather: read lock wait run: %w", err)
+	}
+	// A process can stop after acquiring Redis's lease but before creating its run.
+	// AvailableAt and PublishedAt can change on dispatch retries; only CreatedAt is fixed.
+	taskKey := "mall:weather:" + input.Payload.TaskWindow
+	if input.TaskType == job.TypeMallWeatherManual {
+		taskKey += ":" + input.Payload.EndpointKind
+	}
+	var outbox model.AsyncJobOutbox
+	err = store.db.WithContext(ctx).Select("created_at").Where("task_key = ?", taskKey).Take(&outbox).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return mallWeatherLockWaitState{}, nil
+	}
+	if err != nil {
+		return mallWeatherLockWaitState{}, fmt.Errorf("mall weather: read lock wait outbox: %w", err)
+	}
+	return mallWeatherLockWaitState{CreatedAt: outbox.CreatedAt}, nil
 }
 
 func (store *gormMallWeatherTaskStore) Start(ctx context.Context, input mallWeatherTaskStart, startedAt time.Time) (*mallWeatherExecution, error) {

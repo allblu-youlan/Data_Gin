@@ -721,6 +721,13 @@ func newFakeMallWeatherTaskStore(disposition data_dao.FetchAttemptDisposition) *
 	}}
 }
 
+func (store *fakeMallWeatherTaskStore) LockWaitState(context.Context, mallWeatherTaskStart) (mallWeatherLockWaitState, error) {
+	return mallWeatherLockWaitState{
+		CreatedAt: store.execution.Run.CreatedAt,
+		Terminal:  store.execution.Run.Status == "success" || store.execution.Run.Status == "partial_success",
+	}, nil
+}
+
 func (store *fakeMallWeatherTaskStore) Start(_ context.Context, input mallWeatherTaskStart, _ time.Time) (*mallWeatherExecution, error) {
 	store.events = append(store.events, "start")
 	store.start = input
@@ -826,6 +833,7 @@ func newTestMallWeatherProcessorWithGuardMetricsAndBreaker(
 		FastHourlySteps: 24, FastDailySteps: 1, FullHourlySteps: 360, FullDailySteps: 15,
 		LifeIndexDays: 15, Unit: "metric:v2", AlertEnabled: true,
 		AttemptStaleAfter: 2 * time.Minute, FailureFinalizeTimeout: time.Second, LockReleaseTimeout: time.Second,
+		TaskLockTTL:        10 * time.Minute,
 		CircuitOpenTimeout: time.Minute,
 	}, func() time.Time {
 		result := current
