@@ -3,6 +3,7 @@ package data_svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -58,7 +59,7 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 			zap.L().Error("Excel workflow failed", zap.Uint("job_id", record.ID), zap.Error(processErr))
 			stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
-			_ = s.jobDAO.MarkFailed(stateCtx, record.ID, "组合操作失败，后续步骤已停止，请检查步骤日志", time.Now().Add(excelMatchRetention))
+			_ = s.jobDAO.MarkFailed(stateCtx, record.ID, safeExcelWorkflowFailureMessage(processErr), time.Now().Add(excelMatchRetention))
 		}
 	}()
 	var config ExcelWorkflowConfig
@@ -77,7 +78,7 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d/%d 步：%s，开始执行", index+1, len(config.Steps), step.Name), nil)
 		output, err := s.executeExcelWorkflowFilesStep(ctx, record, index, step, sources, cancel)
 		if err != nil {
-			s.logJob(context.WithoutCancel(ctx), record.ID, "error", fmt.Sprintf("第 %d 步：%s 失败，后续步骤已停止；请检查方法配置、源文件及 Oracle 返回标志", index+1, step.Name), nil)
+			s.logJob(context.WithoutCancel(ctx), record.ID, "error", fmt.Sprintf("第 %d 步：%s 失败；%s", index+1, step.Name, safeExcelWorkflowFailureMessage(err)), nil)
 			return nil, err
 		}
 		s.logJob(ctx, record.ID, "info", fmt.Sprintf("第 %d 步：%s，执行成功", index+1, step.Name), nil)
@@ -117,6 +118,17 @@ func (s *ExcelMatchJobService) processExcelWorkflowJob(ctx context.Context, reco
 	}
 	s.logJob(ctx, record.ID, "info", "组合操作全部完成，结果保留 24 小时", nil)
 	return nil
+}
+
+func safeExcelWorkflowFailureMessage(err error) string {
+	var oracleError interface{ Code() int }
+	if errors.As(err, &oracleError) {
+		switch code := oracleError.Code(); code {
+		case 1653, 1654, 1658, 1692:
+			return fmt.Sprintf("Oracle 表空间不足（ORA-%05d），后续步骤已停止，请联系数据库管理员处理", code)
+		}
+	}
+	return "组合操作失败，后续步骤已停止，请检查步骤日志"
 }
 
 // The watcher can cancel a blocked Oracle call. Its owner stops and joins it

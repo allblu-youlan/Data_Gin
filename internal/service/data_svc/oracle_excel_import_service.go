@@ -118,6 +118,16 @@ func buildOracleExcelImport(input OracleExcelImportConfig, schema []reportoracle
 			}
 		}
 	}
+	missing := make([]string, 0)
+	for _, column := range schema {
+		field := strings.ToUpper(column.Name)
+		if !seen[field] && !column.Nullable && !column.HasDefault && !column.Identity && !column.HasInsertTrigger {
+			missing = append(missing, field)
+		}
+	}
+	if len(missing) > 0 {
+		return input, "", nil, fmt.Errorf("缺少 Oracle 必填字段映射（无数据库生成来源）: %s", strings.Join(missing, ", "))
+	}
 	statement := `INSERT INTO "` + table.Owner + `"."` + table.Name + `" (` + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(binds, ", ") + ")"
 	return input, statement, columns, nil
 }
@@ -398,6 +408,12 @@ func readOracleExcelImportSheet(ctx context.Context, file *excelize.File, sheet 
 				return 0, fmt.Errorf("导入标号无效: %w", err)
 			}
 			values[len(values)-1] = value
+		}
+		for index, value := range values {
+			column := columns[index]
+			if value == nil && !column.Nullable && !column.DefaultOnNull && !column.HasInsertTrigger {
+				return 0, fmt.Errorf("Excel 第 %d 行，Oracle 必填字段 %s 不能为空", rowNumber, column.Name)
+			}
 		}
 		if err := write(values, rowNumber); err != nil {
 			return 0, fmt.Errorf("写入 Excel 第 %d 行失败: %w", rowNumber, err)

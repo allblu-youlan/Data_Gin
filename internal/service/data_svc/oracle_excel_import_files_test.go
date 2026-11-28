@@ -120,6 +120,7 @@ func TestOracleExcelImportFilesRollsBackEarlierBatchesWhenLaterFileFails(t *test
 		errorAt      int
 	}{
 		{name: "invalid later workbook row", amount: "invalid number"},
+		{name: "missing required later workbook value", amount: ""},
 		{name: "database rejects later batch", amount: "20", writeError: errors.New("constraint rejected"), errorAt: 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {

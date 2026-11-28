@@ -16,10 +16,10 @@ func TestInspectResultTableIncludesCommentsAndKeepsUncommentedColumns(t *testing
 			t.Fatalf("metadata reference was not bound: %+v", arguments)
 		}
 		return &bojunQueryTestRows{
-			columns: []string{"COLUMN_NAME", "COLUMN_ID", "DATA_TYPE", "DATA_LENGTH", "DATA_PRECISION", "DATA_SCALE", "NULLABLE", "COMMENTS"},
+			columns: []string{"COLUMN_NAME", "COLUMN_ID", "DATA_TYPE", "DATA_LENGTH", "DATA_PRECISION", "DATA_SCALE", "NULLABLE", "COMMENTS", "DATA_DEFAULT", "IDENTITY_COLUMN", "DEFAULT_ON_NULL", "HAS_INSERT_TRIGGER"},
 			values: [][]driver.Value{
-				{"CODE", int64(1), "VARCHAR2", int64(128), nil, nil, "N", "订单编号"},
-				{"AMOUNT", int64(2), "NUMBER", int64(22), int64(18), int64(2), "Y", nil},
+				{"CODE", int64(1), "VARCHAR2", int64(128), nil, nil, "N", "订单编号", nil, "NO", "NO", "NO"},
+				{"AMOUNT", int64(2), "NUMBER", int64(22), int64(18), int64(2), "Y", nil, nil, "NO", "NO", "NO"},
 			},
 		}, nil
 	})

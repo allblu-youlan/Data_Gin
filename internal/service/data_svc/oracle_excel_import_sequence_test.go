@@ -16,7 +16,7 @@ func TestOracleExcelImportArrayBatchesLeaveGeneratedIDsToOracle(t *testing.T) {
 	// ID is deliberately omitted so Oracle evaluates its default per row.
 	const width, rows = 28, 1001
 	config := OracleExcelImportConfig{Owner: "DEMO", TableName: "ORDERS", SheetName: "Sheet1", HeaderRow: 1}
-	columns := []reportoracle.ResultColumn{{Name: "ID", DataType: "NUMBER"}}
+	columns := []reportoracle.ResultColumn{{Name: "ID", DataType: "NUMBER", HasDefault: true}}
 	header := make([]interface{}, width)
 	for column := range header {
 		field := fmt.Sprintf("FIELD_%d", column+1)

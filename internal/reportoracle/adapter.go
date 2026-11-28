@@ -107,6 +107,12 @@ type ResultColumn struct {
 	DataPrecision *int64
 	DataScale     *int64
 	Nullable      bool
+	HasDefault    bool `json:"hasDefault"`
+	Identity      bool `json:"identity"`
+	DefaultOnNull bool `json:"defaultOnNull"`
+	// HasInsertTrigger is table-level compatibility metadata, not proof that
+	// a trigger supplies a value for this particular column.
+	HasInsertTrigger bool `json:"hasInsertTrigger"`
 }
 
 type InputOption struct {
@@ -515,11 +521,12 @@ func (adapter *Adapter) InspectResultTable(ctx context.Context, ref ResultTableR
 	for rows.Next() {
 		var column ResultColumn
 		var precision, scale sql.NullInt64
-		var comment sql.NullString
+		var comment, defaultValue, identity, defaultOnNull, insertTrigger sql.NullString
 		var nullable string
 		if err := rows.Scan(
 			&column.Name, &column.Position, &column.DataType, &column.DataLength,
 			&precision, &scale, &nullable, &comment,
+			&defaultValue, &identity, &defaultOnNull, &insertTrigger,
 		); err != nil {
 			return nil, fmt.Errorf("scan oracle result column: %w", err)
 		}
@@ -527,6 +534,10 @@ func (adapter *Adapter) InspectResultTable(ctx context.Context, ref ResultTableR
 		column.DataScale = nullableInt64(scale)
 		column.Nullable = nullable == "Y"
 		column.Comment = comment.String
+		column.HasDefault = hasNonNullColumnDefault(defaultValue.String)
+		column.Identity = identity.String == "YES"
+		column.DefaultOnNull = defaultOnNull.String == "YES"
+		column.HasInsertTrigger = insertTrigger.String == "YES"
 		columns = append(columns, column)
 	}
 	if err := rows.Err(); err != nil {
@@ -967,7 +978,14 @@ ORDER BY page_catalog.cursor_key`
 
 const resultColumnsSQL = `
 SELECT c.column_name, c.column_id, c.data_type, c.data_length,
-       c.data_precision, c.data_scale, c.nullable, cc.comments
+       c.data_precision, c.data_scale, c.nullable, cc.comments,
+       c.data_default, c.identity_column, c.default_on_null,
+       CASE WHEN EXISTS (
+           SELECT 1 FROM all_triggers triggers
+           WHERE triggers.table_owner = c.owner AND triggers.table_name = c.table_name
+             AND triggers.status = 'ENABLED'
+             AND INSTR(triggers.triggering_event, 'INSERT') > 0
+       ) THEN 'YES' ELSE 'NO' END AS has_insert_trigger
 FROM all_tab_columns c
 LEFT JOIN all_col_comments cc
   ON cc.owner = c.owner AND cc.table_name = c.table_name AND cc.column_name = c.column_name
