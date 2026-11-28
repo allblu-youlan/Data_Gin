@@ -12,6 +12,7 @@ import (
 	appConfig "gin-biz-web-api/config"
 	"gin-biz-web-api/internal/dao/data_dao"
 	"gin-biz-web-api/model"
+	"gin-biz-web-api/pkg/database"
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -69,18 +70,30 @@ func (s *FeishuMentionService) Initialize(ctx context.Context) error {
 	now := s.now()
 	settings, err := loadMentionDigestSettings(ctx, s.db, s.appID, s.cfg.DigestTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("feishu mention: initialize digest settings: %w", err)
 	}
 	cutoff, err := nextMentionCutoff(now, settings.DigestTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("feishu mention: calculate initial cutoff: %w", err)
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		schedule := model.FeishuDigestSchedule{AppID: s.appID, Enabled: true, NextWindowStartAt: now, NextCutoffAt: cutoff}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&schedule).Error; err != nil {
-			return err
+	return database.TransactionWithBeginRetry(s.db.WithContext(ctx), func(tx *gorm.DB) error {
+		var existing model.FeishuDigestSchedule
+		err := tx.Select("id").Where("app_id = ?", s.appID).Take(&existing).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("feishu mention: read digest schedule: %w", err)
 		}
-		return s.cancelDisabled(tx)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The unique app ID still protects concurrent first initialization.
+			// Existing schedules need no write or lock on every planner run.
+			schedule := model.FeishuDigestSchedule{AppID: s.appID, Enabled: true, NextWindowStartAt: now, NextCutoffAt: cutoff}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&schedule).Error; err != nil {
+				return fmt.Errorf("feishu mention: create digest schedule: %w", err)
+			}
+		}
+		if err := s.cancelDisabled(tx); err != nil {
+			return fmt.Errorf("feishu mention: cancel disabled reminders: %w", err)
+		}
+		return nil
 	})
 }
 func (s *FeishuMentionService) cancelDisabled(tx *gorm.DB) error {

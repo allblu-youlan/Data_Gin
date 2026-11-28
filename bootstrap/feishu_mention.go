@@ -48,7 +48,7 @@ func setupFeishuMention() error {
 		err = s.Initialize(ctx)
 		cancel()
 		if err != nil {
-			return fmt.Errorf("initialize Feishu mention schema/state; run migrate schema first: %w", err)
+			return fmt.Errorf("initialize Feishu mention state: %w", err)
 		}
 	}
 	queueRedis := redis.NewClient(&redis.Options{Addr: redisAddrFromConfig(), Username: config.GetString("cfg.queue_job.redis.username"), Password: config.GetString("cfg.queue_job.redis.password"), DB: config.GetInt("cfg.queue_job.redis.db")})

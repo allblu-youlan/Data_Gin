@@ -1,7 +1,10 @@
 package bootstrap
 
 import (
+	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,11 +12,51 @@ import (
 	"gin-biz-web-api/job"
 	"gin-biz-web-api/model"
 	"gin-biz-web-api/pkg/config"
+	"gin-biz-web-api/pkg/credential"
+	"gin-biz-web-api/pkg/database"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
+
+func TestFeishuMentionInitializationTimeoutDoesNotRecommendMigration(t *testing.T) {
+	loadReportCenterConfig(t, "")
+	v := config.Instance()
+	oldEnabled := v.Get("cfg.feishu_mention.enabled")
+	v.Set("cfg.feishu_mention.enabled", true)
+	t.Cleanup(func() { v.Set("cfg.feishu_mention.enabled", oldEnabled) })
+	db, err := gorm.Open(mysql.New(mysql.Config{DSN: "test@tcp(127.0.0.1:1)/test", SkipInitializeWithVersion: true}), &gorm.Config{DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	// Fail the settings read before Redis or the Feishu receiver is initialized.
+	if err := db.Callback().Query().Replace("gorm:query", func(tx *gorm.DB) { tx.AddError(context.DeadlineExceeded) }); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(credential.EnvFeishuAppID, "mention-initialize-test")
+	credentials, err := credential.Load(credential.Requirements{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldDB, oldService, oldCredentials := database.DB, mentionRuntime.service, global.Credentials
+	database.DB = db
+	global.Credentials = credentials
+	t.Cleanup(func() { database.DB, mentionRuntime.service, global.Credentials = oldDB, oldService, oldCredentials })
+	err = setupFeishuMention()
+	if !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "run migrate") {
+		t.Fatalf("timeout was misdiagnosed as missing schema: %v", err)
+	}
+}
 
 func TestFeishuMentionMigrationRetainsUpgradeBaseline(t *testing.T) {
 	latest, found := preferredSchemaMigrationBaseline(schemaIncrementalMigrationBaselines(), []string{feishuMentionMigrationVersion})
-	if !found || latest != feishuMentionMigrationVersion { t.Fatal("missing v23 upgrade baseline") }
+	if !found || latest != feishuMentionMigrationVersion {
+		t.Fatal("missing v23 upgrade baseline")
+	}
 	baseline, ok := preferredSchemaMigrationBaseline(schemaIncrementalMigrationBaselines(), []string{"2026-09-08-office-webdav-v22"})
 	if !ok || baseline != officeWebDAVMigrationVersion {
 		t.Fatalf("missing last deployed baseline: %q", baseline)
