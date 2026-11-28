@@ -200,7 +200,8 @@ func (dao *BojunOracleSyncStateDAO) ReleaseLease(ctx context.Context, sourceCode
 	if dao == nil || dao.db == nil || ctx == nil || sourceCode == "" || token == "" || now.IsZero() {
 		return gorm.ErrInvalidData
 	}
-	result := dao.db.WithContext(ctx).
+	// This single owner-guarded UPDATE is atomic without extra BEGIN/COMMIT round trips.
+	result := dao.db.WithContext(ctx).Session(&gorm.Session{SkipDefaultTransaction: true}).
 		Model(&model.BojunOracleSyncState{}).
 		Where("source_code = ? AND lease_token = ?", sourceCode, token).
 		Updates(map[string]interface{}{

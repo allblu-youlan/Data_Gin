@@ -73,6 +73,10 @@ func TestClaimDAOsRetryOnlyFailedBegin(t *testing.T) {
 type claimConnectionTestState struct {
 	failure                        string
 	begins, writes, commits, reads int
+	autocommit                     bool
+	affected                       int64
+	updateQuery                    string
+	updateArguments                []driver.NamedValue
 }
 
 func newClaimConnectionTestDB(t *testing.T, state *claimConnectionTestState) *gorm.DB {
@@ -116,16 +120,25 @@ func (c *claimConnectionTestConn) Begin() (driver.Tx, error) {
 	c.inTx = true
 	return claimConnectionTestTx{c}, nil
 }
-func (c *claimConnectionTestConn) ExecContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
+func (c *claimConnectionTestConn) ExecContext(ctx context.Context, query string, arguments []driver.NamedValue) (driver.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !c.inTx || !strings.HasPrefix(query, "UPDATE ") {
-		return nil, errors.New("claim must update within its transaction")
+	if c.inTx == c.state.autocommit || !strings.HasPrefix(query, "UPDATE ") {
+		return nil, errors.New("unexpected transaction mode for claim UPDATE")
 	}
 	c.state.writes++
+	c.state.updateQuery = query
+	c.state.updateArguments = append([]driver.NamedValue(nil), arguments...)
 	if c.state.failure == "update" {
 		return nil, mysqlDriver.ErrInvalidConn
+	}
+	if c.state.failure == "timeout" {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if c.state.autocommit {
+		return driver.RowsAffected(c.state.affected), nil
 	}
 	return driver.RowsAffected(1), nil
 }
