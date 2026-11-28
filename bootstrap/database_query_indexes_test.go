@@ -13,8 +13,8 @@ import (
 
 func TestQueryIndexSpecsCoverOpenQueryPaths(t *testing.T) {
 	specs := queryIndexSpecs()
-	if len(specs) != 13 {
-		t.Fatalf("queryIndexSpecs() count=%d want=13", len(specs))
+	if len(specs) != 14 {
+		t.Fatalf("queryIndexSpecs() count=%d want=14", len(specs))
 	}
 	want := map[string]bool{
 		"mall_weather_realtime.idx_weather_realtime_query":               false,
@@ -30,6 +30,7 @@ func TestQueryIndexSpecsCoverOpenQueryPaths(t *testing.T) {
 		"bojun_retail_orders.idx_bojun_open_completed_query":             false,
 		"bojun_retail_orders.idx_bojun_open_completed_mall_query":        false,
 		"malls.idx_malls_open_weather_query":                             false,
+		"qimai_order_data.idx_qimai_sales_sync":                          false,
 	}
 	for _, spec := range specs {
 		key := spec.TableName + "." + spec.IndexName

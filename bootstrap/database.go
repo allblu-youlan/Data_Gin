@@ -160,6 +160,9 @@ func ApplySchemaMigrations() (resultErr error) {
 // The caller holds the schema migration lock. Later additions can upgrade
 // installations already on the baseline without altering unrelated tables.
 func applySupplementalSchemaMigrations(db *gorm.DB) error {
+	if err := applyQimaiSalesSyncIndexMigration(db); err != nil {
+		return err
+	}
 	if err := applyOpenMonitoringPermissionMigration(db); err != nil {
 		return err
 	}

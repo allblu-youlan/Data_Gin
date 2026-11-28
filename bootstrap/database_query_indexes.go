@@ -98,6 +98,7 @@ func queryIndexSpecs() []queryIndexSpec {
 			TableName: "malls", IndexName: "idx_malls_open_weather_query",
 			Columns: []queryIndexColumn{{Name: "status"}, {Name: "weather_enabled"}, {Name: "geocode_status"}},
 		},
+		qimaiSalesSyncQueryIndex(),
 	}
 }
 

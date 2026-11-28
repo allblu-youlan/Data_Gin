@@ -92,11 +92,18 @@ func (dao *QimaiDataDAO) Delete(ctx context.Context, id uint) error {
 	return dao.db.WithContext(ctx).Delete(&model.QIMAI_ORDER_DATA{}, id).Error
 }
 
-// FindByShopCodeAndStatus 根据门店编码和状态查询订单
+// FindByShopCodeAndStatus returns the fields needed by sales delivery in ID order.
+// Stable order keeps position-based skip rules independent of the chosen index.
 func (dao *QimaiDataDAO) FindByShopCodeAndStatus(ctx context.Context, shopCode, status string) ([]model.QIMAI_ORDER_DATA, error) {
 	var qimaiDataList []model.QIMAI_ORDER_DATA
-	err := dao.db.WithContext(ctx).Where("shop_code = ? AND status = ? AND synced = 0", shopCode, status).Find(&qimaiDataList).Error
-	return qimaiDataList, err
+	err := dao.db.WithContext(ctx).
+		Select("id", "order_no", "actual_amount", "completed_at").
+		Where("shop_code = ? AND status = ? AND synced = 0", shopCode, status).
+		Order("id ASC").Find(&qimaiDataList).Error
+	if err != nil {
+		return nil, err
+	}
+	return qimaiDataList, nil
 }
 
 // MarkAsSynced 标记订单已同步
