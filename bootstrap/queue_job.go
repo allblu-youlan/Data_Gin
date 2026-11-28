@@ -208,18 +208,16 @@ func queueJobServerSpecs(
 }
 
 func startQueueJobServer(worker queueJobServer, mux *asynq.ServeMux) {
-	go func() {
-		logger.Info(
-			"Queue Job Server Starting",
-			zap.String("worker", worker.name),
-			zap.Int("concurrency", worker.concurrency),
-			zap.Any("queues", worker.queues),
-		)
-		if err := worker.server.Run(mux); err != nil {
-			logger.Error("Queue Job Server Failed", zap.String("worker", worker.name), zap.Error(err))
-			console.Exit("Queue Job Server %s Failed %v", worker.name, err)
-		}
-	}()
+	logger.Info(
+		"Queue Job Server Starting",
+		zap.String("worker", worker.name),
+		zap.Int("concurrency", worker.concurrency),
+		zap.Any("queues", worker.queues),
+	)
+	if err := queueRuntime.startWorker(worker.server, mux); err != nil {
+		logger.Error("Queue Job Server Failed", zap.String("worker", worker.name), zap.Error(err))
+		console.Exit("Queue Job Server %s Failed %v", worker.name, err)
+	}
 }
 
 type mallGeocodeProcessor interface {

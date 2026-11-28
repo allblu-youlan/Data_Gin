@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"gin-biz-web-api/pkg/config"
 	"gin-biz-web-api/pkg/console"
@@ -23,7 +25,6 @@ const mallWeatherExportDownloadWriteTimeout = 16 * time.Minute
 
 // RunServer 启动服务
 func RunServer() {
-	defer stopOutboxDispatcher()
 	defer closeFeishuMentionResources()
 
 	console.Info("run server ...")
@@ -132,15 +133,27 @@ type gracefulHTTPServer interface {
 }
 
 func shutdownServerAndCrontab(ctx context.Context, srv gracefulHTTPServer) error {
-	stopFeishuMentionReceiver(ctx)
-	cronStopped := make(chan struct{})
+	queueRuntime.beginShutdown()
+	var producersStopped sync.WaitGroup
+	producersStopped.Add(3)
 	go func() {
-		defer close(cronStopped)
+		defer producersStopped.Done()
 		stopCrontab(ctx)
+	}()
+	go func() {
+		defer producersStopped.Done()
+		stopFeishuMentionReceiver(ctx)
+	}()
+	go func() {
+		defer producersStopped.Done()
+		stopOutboxDispatcher()
 	}()
 
 	err := srv.Shutdown(ctx)
-	<-cronStopped
+	producersStopped.Wait()
+	if queueErr := queueRuntime.waitShutdown(queueServerShutdownWait, queueHandlerCleanupWait); queueErr != nil {
+		logger.Warn("Queue shutdown incomplete; unfinished tasks may be recovered by the next process", zap.Error(queueErr))
+	}
 	return err
 }
 

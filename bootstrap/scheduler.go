@@ -59,12 +59,10 @@ func setupScheduler() {
 	registerFeishuMentionScheduledTasks(scheduler)
 	registerTableEmailScheduledTasks(scheduler)
 
-	go func(scheduler *asynq.Scheduler) {
-		if err := scheduler.Run(); err != nil {
-			console.Warning("Scheduler Failed: %v", err)
-			console.Exit("Scheduler Failed %v", err)
-		}
-	}(scheduler)
+	if err := queueRuntime.startScheduler(scheduler); err != nil {
+		console.Warning("Scheduler Failed: %v", err)
+		console.Exit("Scheduler Failed %v", err)
+	}
 
 	global.QueueJobScheduler = scheduler
 
