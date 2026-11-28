@@ -240,14 +240,14 @@ func (service *TableEmailService) Scan(ctx context.Context) error {
 			return err
 		}
 		found := false
-		err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := database.TransactionWithBeginRetry(service.db.WithContext(ctx), func(tx *gorm.DB) error {
 			var rule model.TableEmailRule
 			err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Where("enabled = ? AND next_check_at <= ?", true, service.now()).Order("next_check_at ASC, id ASC").First(&rule).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
 			}
 			if err != nil {
-				return err
+				return fmt.Errorf("table email: claim due rule: %w", err)
 			}
 			found = true
 			now := service.now()
@@ -258,35 +258,44 @@ func (service *TableEmailService) Scan(ctx context.Context) error {
 			connection, err := service.open(queryCtx, rule.DatasourceID)
 			if err != nil {
 				rule.LastError = "Oracle 连接失败，请检查数据源配置"
-				return tx.Save(&rule).Error
+				if err := tx.Save(&rule).Error; err != nil {
+					return fmt.Errorf("table email: save Oracle connection failure: %w", err)
+				}
+				return nil
 			}
 			defer connection.Close()
 			records, err := tableEmailReadRows(queryCtx, connection, tableEmailInput(rule), rule.CursorValue)
 			if err != nil {
 				rule.LastError = "Oracle 新增记录查询失败，请检查表、增量字段及权限"
-				return tx.Save(&rule).Error
+				if err := tx.Save(&rule).Error; err != nil {
+					return fmt.Errorf("table email: save Oracle query failure: %w", err)
+				}
+				return nil
 			}
 			for _, record := range records {
 				delivery, err := newTableEmailDelivery(rule, record)
 				if err != nil {
-					return err
+					return fmt.Errorf("table email: prepare delivery snapshot: %w", err)
 				}
 				if err := tx.Create(&delivery).Error; err != nil {
-					return err
+					return fmt.Errorf("table email: create delivery snapshot: %w", err)
 				}
 				if delivery.Status == "queued" {
 					outbox, err := tableEmailOutbox(delivery, now)
 					if err != nil {
-						return err
+						return fmt.Errorf("table email: prepare delivery outbox: %w", err)
 					}
 					if err := tx.Create(&outbox).Error; err != nil {
-						return err
+						return fmt.Errorf("table email: create delivery outbox: %w", err)
 					}
 				}
 				rule.CursorValue = delivery.SourceValue
 			}
 			rule.LastError = ""
-			return tx.Save(&rule).Error
+			if err := tx.Save(&rule).Error; err != nil {
+				return fmt.Errorf("table email: save scan cursor: %w", err)
+			}
+			return nil
 		})
 		if err != nil {
 			return fmt.Errorf("table email: scan: %w", err)
