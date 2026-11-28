@@ -69,7 +69,7 @@ func (dao *AsyncJobOutboxDAO) ClaimBatch(ctx context.Context, workerID string, t
 	lockExpiredAt := now.Add(-lockTimeout)
 	var claimed []model.AsyncJobOutbox
 
-	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := database.TransactionWithBeginRetry(dao.db.WithContext(ctx), func(tx *gorm.DB) error {
 		if err := buildOutboxClaimQuery(tx, taskTypes, now, lockExpiredAt, limit).Find(&claimed).Error; err != nil {
 			return fmt.Errorf("outbox: select claim batch: %w", err)
 		}

@@ -101,19 +101,23 @@ func (dao *BojunOracleSyncStateDAO) AcquireLease(
 		return nil, false, gorm.ErrInvalidData
 	}
 	expiresAt := now.Add(ttl)
-	result := dao.db.WithContext(ctx).
-		Model(&model.BojunOracleSyncState{}).
-		Where("source_code = ? AND initialized = ?", sourceCode, true).
-		Where("lease_token = '' OR lease_token = ? OR lease_expires_at IS NULL OR lease_expires_at <= ?", token, now).
-		Updates(map[string]interface{}{
-			"lease_token":      token,
-			"lease_expires_at": expiresAt,
-			"updated_at":       now.Unix(),
-		})
-	if result.Error != nil {
-		return nil, false, fmt.Errorf("acquire bojun Oracle sync lease: %w", result.Error)
+	var affected int64
+	err := database.TransactionWithBeginRetry(dao.db.WithContext(ctx), func(tx *gorm.DB) error {
+		result := tx.Model(&model.BojunOracleSyncState{}).
+			Where("source_code = ? AND initialized = ?", sourceCode, true).
+			Where("lease_token = '' OR lease_token = ? OR lease_expires_at IS NULL OR lease_expires_at <= ?", token, now).
+			Updates(map[string]interface{}{
+				"lease_token":      token,
+				"lease_expires_at": expiresAt,
+				"updated_at":       now.Unix(),
+			})
+		affected = result.RowsAffected
+		return result.Error
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("acquire bojun Oracle sync lease: %w", err)
 	}
-	if result.RowsAffected != 1 {
+	if affected != 1 {
 		if _, err := dao.Get(ctx, sourceCode); err != nil {
 			return nil, false, err
 		}
