@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -653,7 +652,7 @@ func addQueueJob(mux *asynq.ServeMux) {
 
 func handleDeliveryTaskRun(ctx context.Context, task *asynq.Task) error {
 	var payload job.DeliveryTaskRunPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+	if err := job.DecodeTaskPayload(task, &payload); err != nil {
 		return err
 	}
 
@@ -663,7 +662,7 @@ func handleDeliveryTaskRun(ctx context.Context, task *asynq.Task) error {
 
 func handleExcelMatchExport(ctx context.Context, task *asynq.Task) error {
 	var payload job.ExcelMatchExportPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+	if err := job.DecodeTaskPayload(task, &payload); err != nil {
 		return err
 	}
 
@@ -672,7 +671,7 @@ func handleExcelMatchExport(ctx context.Context, task *asynq.Task) error {
 
 func handleBojunOrderFetch(ctx context.Context, task *asynq.Task) error {
 	var payload job.BojunOrderFetchPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+	if err := job.DecodeTaskPayload(task, &payload); err != nil {
 		return err
 	}
 
@@ -682,7 +681,7 @@ func handleBojunOrderFetch(ctx context.Context, task *asynq.Task) error {
 
 func handleYouzanDistributionOrderSync(ctx context.Context, task *asynq.Task) error {
 	var payload job.YouzanDistributionOrderSyncPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+	if err := job.DecodeTaskPayload(task, &payload); err != nil {
 		return err
 	}
 
@@ -720,10 +719,14 @@ func handleYouzanDistributionOrderSync(ctx context.Context, task *asynq.Task) er
 func jobLoggingMiddleware(h asynq.Handler) asynq.Handler {
 	return asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
 		start := time.Now()
+		taskID, _ := asynq.GetTaskID(ctx)
+		retryCount, _ := asynq.GetRetryCount(ctx)
 		logger.Info(
 			"Start processing",
 			zap.String("Type", task.Type()),
-			zap.ByteString("Payload", task.Payload()),
+			zap.String("task_id", taskID),
+			zap.Int("retry_count", retryCount),
+			zap.Int("payload_bytes", len(task.Payload())),
 		)
 		err := h.ProcessTask(ctx, task)
 		if err != nil {
@@ -732,6 +735,8 @@ func jobLoggingMiddleware(h asynq.Handler) asynq.Handler {
 		logger.Info(
 			"Finished processing",
 			zap.String("Type", task.Type()),
+			zap.String("task_id", taskID),
+			zap.Int("retry_count", retryCount),
 			zap.Duration("Elapsed Time", time.Since(start)),
 		)
 		return nil

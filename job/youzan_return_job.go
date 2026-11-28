@@ -47,8 +47,8 @@ func NewYouzanReturnTask(params YouzanReturnPayload) (*asynq.Task, error) {
 
 func HandleYouzanReturnTask(ctx context.Context, t *asynq.Task) error {
 	var payload YouzanReturnPayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		return errors.Errorf("json.Unmarshal failed: %v: %v", err, asynq.SkipRetry)
+	if err := DecodeTaskPayload(t, &payload); err != nil {
+		return err
 	}
 
 	logger.Info(
@@ -63,12 +63,7 @@ func HandleYouzanReturnTask(ctx context.Context, t *asynq.Task) error {
 
 	err := SyncYouzanReturnOrders(ctx, nodeKdtID)
 	if err != nil {
-		logger.Error(
-			"有赞退款订单同步任务执行失败",
-			zap.Error(err),
-			zap.Int64("NodeKdtID", nodeKdtID),
-		)
-		return err
+		return fmt.Errorf("sync youzan refunds node_kdt_id=%d: %w", nodeKdtID, err)
 	}
 
 	logger.Info(

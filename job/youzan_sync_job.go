@@ -14,7 +14,6 @@ import (
 	"gin-biz-web-api/pkg/logger"
 
 	"github.com/hibiken/asynq"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -42,8 +41,8 @@ func NewYouzanSyncTask(params YouzanSyncPayload) (*asynq.Task, error) {
 
 func HandleYouzanSyncTask(ctx context.Context, t *asynq.Task) error {
 	var payload YouzanSyncPayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		return errors.Errorf("json.Unmarshal failed: %v: %v", err, asynq.SkipRetry)
+	if err := DecodeTaskPayload(t, &payload); err != nil {
+		return err
 	}
 
 	logger.Info(
@@ -64,13 +63,7 @@ func HandleYouzanSyncTask(ctx context.Context, t *asynq.Task) error {
 
 	err := SyncYouzanOrders(ctx, startTime, endTime)
 	if err != nil {
-		logger.Error(
-			"有赞订单同步任务执行失败",
-			zap.Error(err),
-			zap.String("StartTime", startTime),
-			zap.String("EndTime", endTime),
-		)
-		return err
+		return fmt.Errorf("sync youzan orders start_time=%q end_time=%q: %w", startTime, endTime, err)
 	}
 
 	logger.Info(

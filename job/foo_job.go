@@ -7,7 +7,6 @@ import (
 	"gin-biz-web-api/pkg/logger"
 
 	"github.com/hibiken/asynq"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -37,8 +36,8 @@ func NewFooTask(params FooPayload) (*asynq.Task, error) {
 
 func HandFooTask(ctx context.Context, t *asynq.Task) error {
 	var payload FooPayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		return errors.Errorf("json.Unmarshal failed: %v: %v", err, asynq.SkipRetry)
+	if err := DecodeTaskPayload(t, &payload); err != nil {
+		return err
 	}
 
 	logger.Info(

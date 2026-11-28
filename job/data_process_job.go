@@ -36,11 +36,10 @@ func NewDataProcessTask(rawDataID uint) *asynq.Task {
 
 // HandleDataProcessTask 处理数据处理任务
 func HandleDataProcessTask(ctx context.Context, t *asynq.Task) error {
-	logger.Info("收到数据处理任务", zap.String("task_type", t.Type()), zap.ByteString("payload", t.Payload()))
+	logger.Info("收到数据处理任务", zap.String("task_type", t.Type()), zap.Int("payload_bytes", len(t.Payload())))
 
 	var payload DataProcessPayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		logger.Error("解析任务payload失败", zap.Error(err))
+	if err := DecodeTaskPayload(t, &payload); err != nil {
 		return err
 	}
 
@@ -50,15 +49,13 @@ func HandleDataProcessTask(ctx context.Context, t *asynq.Task) error {
 	rawDataDAO := data_dao.NewRawDataDAO()
 	rawData, err := rawDataDAO.FindByID(ctx, payload.RawDataID)
 	if err != nil {
-		logger.Error("获取原始数据失败", zap.Uint("raw_data_id", payload.RawDataID), zap.Error(err))
-		return err
+		return fmt.Errorf("load raw data raw_data_id=%d: %w", payload.RawDataID, err)
 	}
 
 	// 2. 解析元数据，检查是否为企迈订单
 	var metadata map[string]interface{}
 	if err := json.Unmarshal([]byte(rawData.Metadata), &metadata); err != nil {
-		logger.Error("解析元数据失败", zap.Uint("raw_data_id", payload.RawDataID), zap.Error(err))
-		return err
+		return fmt.Errorf("decode raw data metadata raw_data_id=%d: %w", payload.RawDataID, err)
 	}
 
 	// 3. 调用企迈订单触发器

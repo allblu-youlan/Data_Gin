@@ -3,12 +3,12 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"gin-biz-web-api/Trigger"
 	"gin-biz-web-api/pkg/logger"
 
 	"github.com/hibiken/asynq"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -36,8 +36,8 @@ func NewXianOrderSyncTask(params XianOrderSyncPayload) (*asynq.Task, error) {
 
 func HandleXianOrderSyncTask(ctx context.Context, t *asynq.Task) error {
 	var payload XianOrderSyncPayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		return errors.Errorf("json.Unmarshal failed: %v: %v", err, asynq.SkipRetry)
+	if err := DecodeTaskPayload(t, &payload); err != nil {
+		return err
 	}
 
 	logger.Info(
@@ -49,12 +49,7 @@ func HandleXianOrderSyncTask(ctx context.Context, t *asynq.Task) error {
 	trigger := Trigger.NewXianOrderTrigger()
 	err := trigger.Trigger(ctx)
 	if err != nil {
-		logger.Error(
-			"西岸野选订单同步任务执行失败",
-			zap.Error(err),
-			zap.String("ShopCode", payload.ShopCode),
-		)
-		return err
+		return fmt.Errorf("sync xian orders shop_code=%q status=%q: %w", payload.ShopCode, payload.Status, err)
 	}
 
 	logger.Info(

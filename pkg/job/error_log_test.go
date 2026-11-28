@@ -8,12 +8,57 @@ import (
 	"testing"
 	"time"
 
+	businessjob "gin-biz-web-api/job"
 	"gin-biz-web-api/pkg/logger"
 
 	"github.com/hibiken/asynq"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestRegisteredTaskInvalidPayloadKeepsFinalAlert(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	previous := logger.Logger
+	logger.Logger = zap.New(core)
+	t.Cleanup(func() { logger.Logger = previous })
+	task := asynq.NewTask(businessjob.TypeSalesSync, []byte(`{"secret":"payload-secret"`))
+	err := businessjob.HandleSalesSyncTask(t.Context(), task)
+	if !errors.Is(err, asynq.SkipRetry) || logs.FilterLevelExact(zap.ErrorLevel).Len() != 0 {
+		t.Fatalf("handler classified or logged malformed payload incorrectly: %v", err)
+	}
+	logTaskError(t.Context(), task, err)
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Level != zap.ErrorLevel || entries[0].Message != "Asynq task failed" {
+		t.Fatalf("terminal task lost its final alert: %+v", entries)
+	}
+	fields := entries[0].ContextMap()
+	if fields["retry_skipped"] != true || fields["task_type"] != businessjob.TypeSalesSync || strings.Contains(fmt.Sprint(fields), "payload-secret") {
+		t.Fatalf("terminal alert lost classification or exposed payload: %v", fields)
+	}
+}
+
+func TestRetryableTaskLoggingKeepsBusinessContextAtWarning(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	previous := logger.Logger
+	logger.Logger = zap.New(core)
+	t.Cleanup(func() { logger.Logger = previous })
+	cause := errors.New("temporary database read failure")
+	err := fmt.Errorf("sync sales shop_code=%q status=%q: %w", "YXHZR001", "70", cause)
+	logTaskError(t.Context(), asynq.NewTask(businessjob.TypeSalesSync, nil), err)
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Level != zap.WarnLevel || entries[0].Message != "Asynq task will retry" {
+		t.Fatalf("retryable task severity changed: %+v", entries)
+	}
+	fields := entries[0].ContextMap()
+	for _, want := range []string{"YXHZR001", "70", cause.Error()} {
+		if !strings.Contains(fmt.Sprint(fields["error"]), want) {
+			t.Fatalf("retry log lost business context %q: %v", want, fields)
+		}
+	}
+	if fields["retry_exhausted"] != false || fields["retry_skipped"] != false {
+		t.Fatalf("retryable task became terminal: %v", fields)
+	}
+}
 
 func TestDeferredTaskLoggingPreservesCooldown(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
