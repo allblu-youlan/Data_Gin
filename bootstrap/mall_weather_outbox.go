@@ -98,9 +98,7 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 					data_svc.RecordMallWeatherOutboxQueueLag(row, publishedAt)
 				}
 			},
-			OnCycleError: func(err error) {
-				logger.Error("Outbox dispatch cycle failed", zap.Error(err))
-			},
+			OnCycleError:      logOutboxCycleError,
 			DatabaseAvailable: database.CanServe,
 		},
 	)
@@ -135,6 +133,14 @@ func startOutboxDispatcher(reportWorkerEnabled bool) {
 		startReportRunReconciler(data_svc.NewReportRunReconciler())
 	}
 	console.Success("Outbox dispatcher started successfully")
+}
+
+func logOutboxCycleError(err error) {
+	if errors.Is(err, database.ErrUnavailable) {
+		logger.Warn("Outbox dispatch paused by database availability guard", zap.Error(err))
+		return
+	}
+	logger.Error("Outbox dispatch cycle failed", zap.Error(err))
 }
 
 func redisAddrFromConfig() string {
